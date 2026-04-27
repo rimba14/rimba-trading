@@ -1,0 +1,7 @@
+{
+  "symbol": "NAS100",
+  "pulse": 0.3,
+  "count": 10,
+  "timestamp": "2026-04-20T13:53:37.301467",
+  "rationale": "Analyzed 10 headlines for ^IXIC. Net signal: 0.3"
+}

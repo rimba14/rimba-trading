@@ -1,0 +1,44 @@
+{
+  "symbol": "EURAUD",
+  "prediction": 1,
+  "conviction": 0.24930492043495178,
+  "reasoning": "Reasoning Engine skipped.",
+  "timestamp": 1777315283.018878,
+  "weights": {
+    "W_rsi": -0.6272432208061218,
+    "W_macd": 0.19944210350513458,
+    "Wy_trend": -0.0821608453989029,
+    "B_bbpos": 0.07184654474258423,
+    "S_struct": 0.0,
+    "WHL_vol": -0.019307268783450127
+  },
+  "top_pos": [
+    [
+      "W_macd",
+      0.19944210350513458
+    ],
+    [
+      "B_bbpos",
+      0.07184654474258423
+    ],
+    [
+      "S_struct",
+      0.0
+    ]
+  ],
+  "top_neg": [
+    [
+      "WHL_vol",
+      -0.019307268783450127
+    ],
+    [
+      "Wy_trend",
+      -0.0821608453989029
+    ],
+    [
+      "W_rsi",
+      -0.6272432208061218
+    ]
+  ],
+  "concept_drift": false
+}

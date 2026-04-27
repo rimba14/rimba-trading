@@ -1,0 +1,36 @@
+.env
+__pycache__/
+*.pyc
+data/
+*.log
+simulated_ledger.csv
+pending_signals/
+
+# Heavy application data and environments
+Obsidian/
+SentinelHub/
+venv/
+node_modules/
+.ollama/
+.lmstudio/
+.claude/
+.gitnexus/
+system_archive/
+admin old/
+Superwhisper/
+arctic_db/
+
+# Databases and heavy binary types
+*.mdb
+*.psd
+*.zip
+*.gguf
+*.exe
+*.dll
+*.crdownload
+*.onnx
+*.onnx.data
+
+# Large ledgers
+trades_ledger.csv
+orders_ledger.csv

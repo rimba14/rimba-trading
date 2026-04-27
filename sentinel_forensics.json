@@ -1,0 +1,3502 @@
+[
+  {
+    "timestamp": "2026-04-09T12:22:20.990353+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:22:51.505499+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:21.530499+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:51.898788+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:24:22.077603+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:24:52.434016+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:25:22.576666+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:25:54.628795+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "**FINANCIAL POST-MORT"
+  },
+  {
+    "timestamp": "2026-04-09T12:26:23.506273+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:26:53.773995+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:27:23.431834+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:27:53.846327+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:28:23.743474+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:28:54.099859+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:29:24.152138+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:29:54.541711+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:30:24.758230+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:30:55.125683+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:31:25.279940+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:31:55.541867+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:32:25.563131+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:32:55.963621+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:33:26.083016+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:33:56.418041+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:34:26.580512+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:34:56.946515+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:35:27.123129+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:35:57.491448+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:36:27.906151+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:36:58.640207+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:37:28.420494+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:37:59.144418+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:38:28.947594+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:38:59.342732+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:39:29.459493+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:39:59.828695+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:40:29.984702+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:41:00.346659+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:41:30.803100+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:42:01.013750+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:42:31.013300+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:43:01.414210+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:43:31.579300+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:44:01.946005+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:44:32.095695+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:45:02.482811+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:45:32.676626+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:46:03.029392+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:46:33.536075+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:47:03.181759+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:47:33.199835+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:48:03.345821+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:48:33.472906+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:49:03.914456+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:49:34.076939+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:50:04.383456+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:50:34.539077+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:51:04.937629+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:51:35.354458+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:52:05.598960+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:52:35.635743+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:53:06.100786+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:53:36.208727+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:54:06.616508+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:54:36.747228+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:55:07.395135+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:55:37.291308+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:56:07.632289+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:56:38.070455+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:57:08.280887+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:57:38.349929+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:58:08.795768+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:58:38.879092+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:59:08.975160+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T12:59:39.135377+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:00:09.761468+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:00:40.100947+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:01:09.899924+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:01:40.598141+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:02:10.353786+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:02:40.893015+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:03:10.737075+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:03:41.140540+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:04:11.174177+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:04:41.439441+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:05:11.556661+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:05:41.977318+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:06:12.082505+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:06:42.751783+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:07:12.597071+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:07:43.048793+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:08:12.904784+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:08:43.308632+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:09:13.415930+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:09:43.808247+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:10:13.899292+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:10:44.360974+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:11:14.224281+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:11:45.022550+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:12:14.937440+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:12:45.231723+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:13:15.345550+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:13:45.802140+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:14:15.947075+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:14:46.326635+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:15:16.430767+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:15:46.911082+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:16:16.991004+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:16:47.677296+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:17:17.674228+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:17:48.255900+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:18:18.075193+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:18:48.528167+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:19:18.596752+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:19:48.984294+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:20:19.137743+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:20:49.522565+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:21:19.616976+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:21:50.278381+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:22:20.296861+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:22:50.580379+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:23:20.713374+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:23:51.082657+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:24:21.205534+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:24:51.972361+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:25:21.764125+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:25:52.145042+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:26:22.071398+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:26:52.822270+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:27:22.707535+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:27:52.986754+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:28:23.122725+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:28:53.515643+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:29:23.627376+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:29:54.064767+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:30:24.160684+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:30:54.574882+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:31:24.889512+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:31:55.676693+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:32:55.417077+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:32:58.392911+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:33:27.813040+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:33:58.219699+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:34:28.400969+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:34:58.871367+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:35:28.991918+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:35:59.286648+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:36:29.558400+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:36:59.638382+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:37:29.485219+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:38:00.375778+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:38:30.246718+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:39:00.685502+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:39:30.801634+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:40:01.221439+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:40:31.350120+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:41:01.767913+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:41:31.848821+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:42:02.523656+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:42:32.333112+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:43:02.715203+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:43:32.680999+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:44:03.525494+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:44:33.627102+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:45:03.795624+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:45:33.939339+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:46:04.501774+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:46:33.846571+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:47:04.824580+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 503 Server Error: Service Unavailable for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:47:44.774180+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:48:13.522620+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:48:43.813675+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:49:13.863308+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:49:43.208033+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:50:13.104269+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:50:43.478447+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:51:13.717477+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:51:44.150484+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:52:14.322435+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:52:44.470429+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:53:14.837316+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:53:44.865195+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:54:15.300263+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:54:45.122578+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:55:15.279097+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:55:46.950855+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:56:16.073593+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:56:46.361198+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:57:16.597276+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:57:46.748378+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:58:16.738812+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:58:46.947681+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:59:16.952704+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T13:59:47.332098+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:00:17.434907+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:00:47.981313+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:01:17.973789+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:01:48.678792+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:02:19.026018+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:02:48.993889+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:03:19.300283+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:03:49.831577+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:04:19.739035+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:04:49.911502+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:05:20.037672+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:05:50.411088+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:06:20.410816+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:06:50.760482+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:07:21.166355+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:07:51.549541+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:08:21.658452+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:08:51.881637+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:09:22.042554+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:09:52.381858+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:10:22.570228+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:10:53.193502+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:11:23.179871+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:11:53.561005+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:12:24.038956+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:12:54.093968+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:13:24.507697+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:13:54.656510+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:14:24.717678+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:14:54.999646+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:15:25.162593+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:15:55.734476+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:16:25.675620+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:16:56.325531+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:17:27.038266+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:18:23.319982+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:18:28.745655+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:18:57.388536+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:19:27.464922+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:19:57.984987+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:20:28.311102+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:20:58.425316+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:21:28.547659+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:21:58.934831+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:22:29.505142+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:22:59.664760+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:23:29.574460+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:23:59.824554+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:24:29.959963+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:25:00.419997+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:25:30.608984+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:26:01.124859+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:26:30.941010+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:27:01.236925+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:27:31.774642+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:28:01.779324+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:28:32.072469+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:29:02.310773+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:29:32.436717+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:30:03.477011+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:30:33.008623+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:31:03.713938+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:31:33.614596+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:32:03.991917+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:32:34.398693+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:33:04.617788+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:33:34.608822+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:34:04.880098+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:34:35.247769+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:05.172672+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:35.534200+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:36:06.002107+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:36:36.176449+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:37:06.508695+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:37:36.839715+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:07.005597+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:37.524696+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:39:07.697246+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:39:37.365319+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:40:07.684402+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:40:37.985047+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:41:08.243461+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:41:38.351109+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:42:08.724980+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:42:39.368384+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:43:09.294837+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:43:40.248288+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:44:09.973147+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:44:40.543253+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:45:10.331808+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:45:40.686813+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:46:11.459587+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:46:41.200654+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:47:11.364529+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:47:42.588097+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:48:12.488464+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:48:43.017203+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:49:12.402832+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:49:42.904469+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:50:12.920765+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:50:43.675875+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:51:13.487983+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:51:44.055936+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:52:14.029824+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:52:44.763540+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:53:14.787476+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:53:45.158795+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:54:15.696079+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:54:46.019367+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:55:16.010951+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:55:46.732826+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:56:16.590873+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:56:47.228798+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:57:17.208706+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:57:48.201022+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:58:17.709362+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:58:48.332578+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:59:18.406975+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T14:59:48.504359+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:00:19.245105+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:00:49.158624+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:01:18.776360+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:01:49.248867+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:02:19.572507+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:02:49.901921+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:03:19.751178+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:03:50.329638+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:04:20.476337+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:04:50.716435+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:05:20.767759+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:05:51.224986+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:06:21.315581+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:06:51.904097+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:07:21.913987+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:07:52.596259+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:08:22.438623+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:08:53.030496+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:09:23.011964+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:09:53.659480+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:10:23.545557+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:10:54.078271+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:11:23.798602+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:11:54.223674+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:12:24.462026+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:12:55.981609+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:13:25.387757+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:13:56.476774+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:14:26.247446+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:14:56.769612+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:15:26.915707+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:15:56.697173+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:16:27.637581+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:16:57.234741+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:17:27.347654+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:17:58.117783+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:18:27.783568+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:18:58.490786+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:19:28.747560+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:19:59.115267+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:20:28.968690+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:20:59.913766+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:21:29.617641+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:22:00.146213+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:22:30.406294+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:23:00.929678+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:23:30.590285+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:24:01.140557+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:24:31.172866+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:25:01.672246+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:25:32.226191+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:26:02.233599+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:26:32.324920+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:27:02.823225+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:27:32.963612+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:28:03.756774+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:28:33.490534+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:29:04.180424+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:29:34.050832+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:30:04.713458+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:30:34.557033+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:31:05.100449+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:31:35.725602+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:32:05.815784+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:32:35.714942+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:33:08.945899+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:33:36.360421+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:34:06.682750+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:34:36.960854+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:35:08.501293+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:35:38.193548+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:36:17.707985+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:36:38.970478+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:37:08.798227+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:37:38.781883+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:38:08.725479+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:38:38.753491+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:39:09.397865+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:39:39.110500+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:40:10.310051+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:40:39.397699+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:41:09.872492+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:41:39.954703+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:42:11.132289+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:42:41.047283+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:43:12.327596+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:43:41.017955+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:44:11.908547+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:44:41.575338+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:45:12.465681+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:45:42.494343+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:46:12.327141+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:46:42.985300+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:47:13.235133+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:47:46.396550+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:48:21.592572+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:48:43.478540+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:49:14.248740+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:49:44.147880+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:50:14.462494+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:50:44.627144+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:51:15.007090+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:51:45.146780+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:52:17.008247+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:52:45.928987+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:53:16.903163+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:53:46.586173+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:54:16.574168+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:54:46.731663+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:55:16.952460+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:55:47.783855+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:56:17.540934+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:56:47.695471+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:57:18.613965+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:57:48.774715+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:58:19.452255+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:58:49.068036+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:59:19.294314+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T15:59:49.918308+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:00:22.435851+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:00:49.919039+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:01:20.329518+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:01:50.518781+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:02:20.911859+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:02:51.095535+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:03:21.442916+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:03:51.841989+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:04:22.321775+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:04:52.714311+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:05:23.090881+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:05:53.802988+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:06:23.633276+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:06:53.920926+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:07:25.390532+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:07:54.378212+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:08:24.925520+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:08:55.263950+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:09:25.321789+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:08.712414+00:00",
+    "trade_id": 1130585404,
+    "symbol": "EURGBP",
+    "pnl": -11.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:10.989759+00:00",
+    "trade_id": 1131849267,
+    "symbol": "EURUSD",
+    "pnl": 15.98,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:13.670136+00:00",
+    "trade_id": 1131848821,
+    "symbol": "XAGUSD",
+    "pnl": 16.45,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:14.927342+00:00",
+    "trade_id": 1131849159,
+    "symbol": "SP500",
+    "pnl": 1.37,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:17.005091+00:00",
+    "trade_id": 1133517154,
+    "symbol": "CL-OIL",
+    "pnl": -16.53,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:17.994509+00:00",
+    "trade_id": 1131848884,
+    "symbol": "XAUUSD",
+    "pnl": -65.55,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:19.858214+00:00",
+    "trade_id": 1130302883,
+    "symbol": "QCOM",
+    "pnl": 0.65,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:21.086335+00:00",
+    "trade_id": 1129750347,
+    "symbol": "AAPL",
+    "pnl": -2.34,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:22.314109+00:00",
+    "trade_id": 1122164790,
+    "symbol": "GS",
+    "pnl": 3.99,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:24.362530+00:00",
+    "trade_id": 1131849006,
+    "symbol": "NAS100",
+    "pnl": 7.9,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:25.463142+00:00",
+    "trade_id": 1138025389,
+    "symbol": "SOLUSD",
+    "pnl": -0.1,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:26.430222+00:00",
+    "trade_id": 1137897711,
+    "symbol": "XAGUSD",
+    "pnl": 87.15,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:27.430455+00:00",
+    "trade_id": 1133517209,
+    "symbol": "ADAUSD",
+    "pnl": -17.1,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:28.390340+00:00",
+    "trade_id": 1137897623,
+    "symbol": "CL-OIL",
+    "pnl": -30.11,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:30.137886+00:00",
+    "trade_id": 1137897789,
+    "symbol": "XPDUSD",
+    "pnl": 43.73,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:32.609568+00:00",
+    "trade_id": 1140944257,
+    "symbol": "GER40",
+    "pnl": -6.66,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:33.616374+00:00",
+    "trade_id": 1140946793,
+    "symbol": "UK100",
+    "pnl": -2.49,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:34.579130+00:00",
+    "trade_id": 1140945430,
+    "symbol": "FRA40",
+    "pnl": 2.68,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:35.553625+00:00",
+    "trade_id": 1140906125,
+    "symbol": "XPDUSD",
+    "pnl": -15.64,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:37.327587+00:00",
+    "trade_id": 1140946828,
+    "symbol": "EURGBP",
+    "pnl": -17.68,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:38.349612+00:00",
+    "trade_id": 1140945450,
+    "symbol": "NAS100",
+    "pnl": -3.94,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:39.350591+00:00",
+    "trade_id": 1140946811,
+    "symbol": "SP500",
+    "pnl": 1.25,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:40.300840+00:00",
+    "trade_id": 1140906064,
+    "symbol": "CL-OIL",
+    "pnl": -10.37,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:41.289433+00:00",
+    "trade_id": 1140943114,
+    "symbol": "ETHUSD",
+    "pnl": 0.05,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:42.294356+00:00",
+    "trade_id": 1142404963,
+    "symbol": "XPDUSD",
+    "pnl": -17.95,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:43.558378+00:00",
+    "trade_id": 1143068813,
+    "symbol": "USDJPY",
+    "pnl": -1.06,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:44.784020+00:00",
+    "trade_id": 1143068750,
+    "symbol": "CL-OIL",
+    "pnl": -14.14,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:45.799723+00:00",
+    "trade_id": 1140906080,
+    "symbol": "XAGUSD",
+    "pnl": -43.9,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:46.812346+00:00",
+    "trade_id": 1140922829,
+    "symbol": "SOLUSD",
+    "pnl": -0.06,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:48.642380+00:00",
+    "trade_id": 1143735883,
+    "symbol": "XAGUSD",
+    "pnl": -32.45,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:50.496460+00:00",
+    "trade_id": 1143068797,
+    "symbol": "XPDUSD",
+    "pnl": 21.32,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:52.481062+00:00",
+    "trade_id": 1143735873,
+    "symbol": "CL-OIL",
+    "pnl": -16.2,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:53.488318+00:00",
+    "trade_id": 1143735913,
+    "symbol": "USDJPY",
+    "pnl": -1.33,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:54.688329+00:00",
+    "trade_id": 1142406090,
+    "symbol": "SP500",
+    "pnl": 2.16,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:55.745127+00:00",
+    "trade_id": 1142404983,
+    "symbol": "GER40",
+    "pnl": 3.4,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:57.729147+00:00",
+    "trade_id": 1144144308,
+    "symbol": "XAGUSD",
+    "pnl": -41.55,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:10:59.136523+00:00",
+    "trade_id": 1142406078,
+    "symbol": "NAS100",
+    "pnl": 9.94,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:00.477022+00:00",
+    "trade_id": 1142405001,
+    "symbol": "HK50",
+    "pnl": -1.52,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:02.296077+00:00",
+    "trade_id": 1140944254,
+    "symbol": "BNBUSD",
+    "pnl": -0.71,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:04.075892+00:00",
+    "trade_id": 1144144342,
+    "symbol": "XPDUSD",
+    "pnl": -24.92,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:05.058603+00:00",
+    "trade_id": 1140943118,
+    "symbol": "XRPUSD",
+    "pnl": 8.54,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:06.032483+00:00",
+    "trade_id": 1142406068,
+    "symbol": "FRA40",
+    "pnl": 6.97,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:07.825566+00:00",
+    "trade_id": 1144757352,
+    "symbol": "SOLUSD",
+    "pnl": -0.11,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T16:11:08.869361+00:00",
+    "trade_id": 1144144291,
+    "symbol": "CL-OIL",
+    "pnl": 25.27,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T23:06:33.917276+00:00",
+    "trade_id": 1144757093,
+    "symbol": "XAGUSD",
+    "pnl": 22.75,
+    "critique": "**FINANCIAL POST-MORTEM:"
+  },
+  {
+    "timestamp": "2026-04-09T23:06:35.593794+00:00",
+    "trade_id": 1144757245,
+    "symbol": "XPDUSD",
+    "pnl": 11.93,
+    "critique": "Forensic failure: 429 Client Error: Too Many Requests for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  },
+  {
+    "timestamp": "2026-04-09T23:06:38.660930+00:00",
+    "trade_id": 1142566867,
+    "symbol": "EURGBP",
+    "pnl": 0.89,
+    "critique": "**FINANCIAL POST-MORTEM:"
+  },
+  {
+    "timestamp": "2026-04-10T02:07:31.079461+00:00",
+    "trade_id": 1146452790,
+    "symbol": "XPDUSD",
+    "pnl": -17.49,
+    "critique": "**FINANCIAL POST-MORTEM: X"
+  },
+  {
+    "timestamp": "2026-04-10T06:27:25.803520+00:00",
+    "trade_id": 1146452856,
+    "symbol": "XPTUSD",
+    "pnl": 4.34,
+    "critique": "Forensic failure: 503 Server Error: Service Unavailable for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY"
+  }
+]

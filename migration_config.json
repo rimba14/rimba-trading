@@ -1,0 +1,24 @@
+{
+  "project_root": "C:\\Sentinel_Project",
+  "arctic_db_root": "C:\\sentinel_arctic",
+  "arctic_db_uri": "lmdb://c:/sentinel_arctic",
+  "staging_root": "X:\\Sentinel_Staging",
+  "nodes": {
+    "project_root": {
+      "path": "C:\\Sentinel_Project",
+      "exclude_dirs": ["__pycache__", ".agents", ".gemini", "brain", "tmp", "$Recycle.Bin", "System Volume Information"]
+    },
+    "arctic_db": {
+      "path": "C:\\sentinel_arctic",
+      "exclude_dirs": ["__pycache__"]
+    },
+    "mt5_data": {
+      "path": "C:\\Users\\Administrator\\AppData\\Roaming\\MetaQuotes\\Terminal",
+      "exclude_dirs": ["__pycache__"]
+    },
+    "venv": {
+      "path": "C:\\Sentinel_Project\\venv",
+      "exclude_dirs": ["__pycache__"]
+    }
+  }
+}

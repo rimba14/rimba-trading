@@ -1,0 +1,7 @@
+{
+  "symbol": "SP500",
+  "pulse": 0.1,
+  "count": 10,
+  "timestamp": "2026-04-20T13:53:38.423665",
+  "rationale": "Analyzed 10 headlines for ^GSPC. Net signal: 0.1"
+}

@@ -1,0 +1,26 @@
+# .archon/workflows/sentinel-evolution.yaml
+# Governs the clinical evolution of the Vantage Trading Engine
+
+nodes:
+  - id: plan
+    prompt: "Forensic Analysis: Audit the current 13D Alpha Combiner and propose a structural upgrade that maintains institutional stability."
+    
+  - id: implement
+    depends_on: [plan]
+    loop:
+      prompt: "Implement the next task in the plan. Ensure zero-bloat coding standards."
+      until: UNTIL_TESTS_PASS
+      fresh_context: true
+      
+  - id: structural-validate
+    depends_on: [implement]
+    bash: "python e:/gitagent_native_validator.py" # Zero-AI deterministic check
+    
+  - id: human-gate
+    depends_on: [structural-validate]
+    interactive: true
+    prompt: "Awaiting Institutional Review. Please approve the code changes for Master Drive E deployment."
+    
+  - id: commit-master
+    depends_on: [human-gate]
+    bash: "git add . && git commit -m 'Sentinel Evolution: Institutional Upgrade'"

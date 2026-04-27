@@ -1,0 +1,5 @@
+--- ACCOUNT: $1042.01 | 0.5% TARGET: $5.21 ---
+SYMBOL     | VOL   | SL_DIST    | RISK_$   | %_RISK   | RESULT
+XRPUSD     | 0.17  | 0.01410    | $23.97   | 2.30   % | ❌ OVER-RISK
+HK50       | 0.3   | 113.00000  | $4.33    | 0.42   % | ✅ OK
+HK50       | 0.3   | 112.00000  | $4.29    | 0.41   % | ✅ OK

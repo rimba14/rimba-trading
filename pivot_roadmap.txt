@@ -1,0 +1,15 @@
+To pivot back to profit, considering the issues you've identified, here are three simple changes you can implement:
+
+1. **Adjust Stop-Loss Levels to Mitigate Precision Friction:**
+   - **WHY:** Precision friction, caused by rounding errors, is leading to unnecessary stop-loss moves. This can result in frequent, small losses that erode your capital over time.
+   - **HOW:** Implement a small buffer around your stop-loss levels. For example, if your stop-loss is set at $50.00, adjust it to $50.05 or $49.95 to avoid the rounding error issue. This simple adjustment can reduce the frequency of stop-loss activations due to minor price fluctuations.
+
+2. **Reduce Position Sizes to Alleviate Risk Saturation:**
+   - **WHY:** Being 142% risk-saturated means you're over-exposed to potential losses. This level of risk can amplify drawdowns, as you've experienced, moving from $760 to $560.
+   - **HOW:** Decrease your position sizes immediately. If you're using a fixed fractional position sizing strategy, reduce the fraction of your capital allocated to each trade. For instance, if you've been risking 2% of your capital per trade, reduce this to 1% or even 0.5% until you're back to a more manageable risk level, ideally below 100% risk saturation.
+
+3. **Implement a Volatility Filter to Avoid Turbulent Markets:**
+   - **WHY:** Trading during high volatility can exacerbate losses, especially when you're already experiencing a drawdown. High volatility increases the likelihood of your stop-losses being hit and can lead to larger losses.
+   - **HOW:** Introduce a simple volatility filter based on the Average True Range (ATR) or Bollinger Bands. For example, you could decide not to enter trades when the ATR is above a certain threshold (e.g., 20% higher than its 20-day average) or when the price is outside the upper or lower Bollinger Band. This can help you avoid trading during the most turbulent periods, potentially reducing the impact of stop-loss moves and helping you to recover more smoothly from the drawdown.
+
+These changes are straightforward to implement and address the core issues you've identified: mitigating the effect of precision friction, reducing risk exposure, and avoiding trading during highly volatile conditions. By making these adjustments, you can work towards pivoting back to profit and managing your risk more effectively.

@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "SOLUSD": {
+      "confidence": 0.53946,
+      "observations": 4,
+      "net_pnl": 0
+    },
+    "EURGBP": {
+      "confidence": 0.52947,
+      "observations": 3,
+      "net_pnl": 0
+    },
+    "EURUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "XAGUSD": {
+      "confidence": 0.55944,
+      "observations": 6,
+      "net_pnl": 0
+    },
+    "SP500": {
+      "confidence": 0.52947,
+      "observations": 3,
+      "net_pnl": 0
+    },
+    "CL-OIL": {
+      "confidence": 0.55944,
+      "observations": 6,
+      "net_pnl": 0
+    },
+    "XAUUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "QCOM": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "AAPL": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "GS": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "NAS100": {
+      "confidence": 0.52947,
+      "observations": 3,
+      "net_pnl": 0
+    },
+    "ADAUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "XPDUSD": {
+      "confidence": 0.5694300000000001,
+      "observations": 7,
+      "net_pnl": 0
+    },
+    "GER40": {
+      "confidence": 0.51948,
+      "observations": 2,
+      "net_pnl": 0
+    },
+    "UK100": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "FRA40": {
+      "confidence": 0.51948,
+      "observations": 2,
+      "net_pnl": 0
+    },
+    "ETHUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "USDJPY": {
+      "confidence": 0.51948,
+      "observations": 2,
+      "net_pnl": 0
+    },
+    "HK50": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "BNBUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "XRPUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    },
+    "XPTUSD": {
+      "confidence": 0.50949,
+      "observations": 1,
+      "net_pnl": 0
+    }
+  },
+  "lessons": [],
+  "meta": {
+    "last_update": 1776008237.2391727,
+    "total_processed": 306
+  }
+}
