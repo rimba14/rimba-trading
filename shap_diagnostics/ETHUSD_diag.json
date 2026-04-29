@@ -1,9 +1,9 @@
 {
-  "symbol": "GBPUSD",
+  "symbol": "ETHUSD",
   "prediction": -1,
-  "conviction": 0.24930492043495178,
-  "reasoning": "Reasoning Engine skipped.",
-  "timestamp": 1777315058.177306,
+  "conviction": 0.5,
+  "reasoning": "Fail-safe neutral \u2014 endpoint unavailable.",
+  "timestamp": 1777482202.997181,
   "weights": {
     "W_rsi": -0.6272432208061218,
     "W_macd": 0.19944210350513458,

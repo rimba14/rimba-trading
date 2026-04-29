@@ -15,3 +15,8 @@ xgboost
 statsmodels
 psutil
 colorama
+google-genai
+discord.py
+tenacity
+google-generativeai
+groq

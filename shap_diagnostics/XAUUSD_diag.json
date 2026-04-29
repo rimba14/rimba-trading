@@ -1,9 +1,9 @@
 {
   "symbol": "XAUUSD",
   "prediction": 1,
-  "conviction": 0.10541561990976334,
-  "reasoning": "Reasoning Engine skipped.",
-  "timestamp": 1777315644.241425,
+  "conviction": 0.5,
+  "reasoning": "Fail-safe neutral \u2014 endpoint unavailable.",
+  "timestamp": 1777483837.883294,
   "weights": {
     "W_rsi": -0.6215722560882568,
     "W_macd": -0.016835840418934822,

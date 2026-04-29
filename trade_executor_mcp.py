@@ -126,8 +126,11 @@ def execute_trade(symbol, conviction, hmm_regime):
         total_vol = risk_usd / (sl_distance / info.point * point_val + 1e-12)
         vol_per_order = utils.normalize_volume(symbol, total_vol / 5.0)
         
-        if vol_per_order < info.volume_min:
-            return {"status": "error", "message": "VOLUME_TOO_LOW", "vol": vol_per_order}
+        # Directive 1: SRE Small Account Bypass (v16.9)
+        if vol_per_order > 0 and vol_per_order < info.volume_min:
+            vol_per_order = info.volume_min
+            print(f"[WARNING] Small Account Override Active: Forcing broker minimum {info.volume_min} lot size for {symbol}. Hard Risk Cap breached.")
+            logging.warning(f"Small Account Override Active: Forcing broker minimum {info.volume_min} lot size for {symbol}. Hard Risk Cap breached.")
 
         # 6. Grid Execution (1 Market, 4 Limits)
         direction = mt5.ORDER_TYPE_BUY if conviction > 0.5 else mt5.ORDER_TYPE_SELL
@@ -136,6 +139,19 @@ def execute_trade(symbol, conviction, hmm_regime):
         # Market Order
         price = tick.ask if direction == mt5.ORDER_TYPE_BUY else tick.bid
         sl = price - sl_distance if direction == mt5.ORDER_TYPE_BUY else price + sl_distance
+
+        # Shadow Ledger Writing (Directive: Flawless Logic Audit)
+        try:
+            from datetime import datetime
+            ledger_path = "C:/Sentinel_Project/simulated_ledger.csv"
+            exists = os.path.exists(ledger_path)
+            with open(ledger_path, "a", encoding='utf-8') as f:
+                if not exists:
+                    f.write("timestamp,symbol,direction,lots,price,sl,conviction,hmm_regime\n")
+                f.write(f"{datetime.now().isoformat()},{symbol},{'BUY' if direction == mt5.ORDER_TYPE_BUY else 'SELL'},{vol_per_order * 5},{price},{sl},{conviction},{hmm_regime}\n")
+            logging.info(f"[LEDGER] Shadow entry written for {symbol}")
+        except Exception as e:
+            logging.error(f"Ledger Write Failed: {e}")
         
         request = {
             "action": mt5.TRADE_ACTION_DEAL,

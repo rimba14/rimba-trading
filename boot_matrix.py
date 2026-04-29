@@ -1,6 +1,6 @@
 """
-boot_matrix.py - ADAPTIVE SENTINEL MASTER BOOTSTRAPPER (v16.8)
-Unified ignition sequence for decoupled microservices.
+boot_matrix.py - ADAPTIVE SENTINEL MASTER BOOTSTRAPPER (v17.2 Cloud-Native Build)
+Unified ignition sequence for decoupled microservices with RAM-locked LLM verification.
 """
 
 import subprocess
@@ -9,11 +9,45 @@ import time
 import signal
 import logging
 import os
+import requests
+from dotenv import load_dotenv
+
+# Load configuration
+load_dotenv("C:\\Sentinel_Project\\.env")
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [BOOT_MATRIX] %(message)s')
 
-# Core Matrix Scripts
+def check_llm_status():
+    """Directive 1: LLM Endpoint Pre-Flight Audit (v17.2)"""
+    endpoint = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434") + "/api/tags"
+    target_model = os.getenv("REASONING_MODEL", "qwen2.5-coder:3b")
+    
+    logging.info(f"[SYSTEM] Auditing Local LLM Endpoint: {endpoint}...")
+    try:
+        response = requests.get(endpoint, timeout=5)
+        if response.status_code == 200:
+            models = [m['name'] for m in response.json().get('models', [])]
+            # Check for exact match or :latest tag
+            if target_model in models or f"{target_model}:latest" in models:
+                logging.info(f"\033[92m[SUCCESS] Local LLM Server (Ollama) is reachable. Model '{target_model}' READY.\033[0m")
+                return True
+            else:
+                logging.error(f"Model '{target_model}' not found in Ollama library. Found: {models}")
+        else:
+            logging.error(f"Ollama returned status code {response.status_code}")
+    except Exception as e:
+        logging.error(f"Connection Refused: {e}")
+    
+    print("\033[91m" + "═"*60)
+    print("[FATAL] SRE Pre-Flight Audit Failed.")
+    print(f"Please ensure Ollama is running and model '{target_model}' is pulled.")
+    print("Command: ollama pull " + target_model)
+    print("The Ignition Sequence has been halted to prevent Fail-Safe conviction flatlines.")
+    print("═"*60 + "\033[0m")
+    return False
+
+# Core Matrix Scripts (Updated for v17.2 naming)
 CORE_SCRIPTS = [
     'hermes_orchestrator.py',
     'sentinel_slow_loop.py',
@@ -22,9 +56,9 @@ CORE_SCRIPTS = [
 ]
 
 def ignite_matrix():
-    """Ignites all core microservices concurrently."""
+    """Ignites all core microservices concurrently as headless daemon processes."""
     print("\n" + "="*60)
-    print("IGNITING ADAPTIVE SENTINEL MATRIX (v16.8)")
+    print("IGNITING ADAPTIVE SENTINEL MATRIX (v17.2 - CLOUD-NATIVE)")
     print("="*60)
     
     running_processes = []
@@ -43,13 +77,15 @@ def ignite_matrix():
         logging.info(f"Igniting {script}...")
         try:
             # Use sys.executable to ensure same VENV is used
+            # v17.2 Directive: Run as headless daemon (no new console window)
             proc = subprocess.Popen(
                 [sys.executable, script_path],
                 env=env,
-                cwd=os.path.dirname(os.path.abspath(__file__))
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             running_processes.append((script, proc))
-            # Staggered boot to prevent CPU spikes and resource contention
+            # Staggered boot to prevent CPU spikes
             time.sleep(3) 
         except Exception as e:
             logging.error(f"Failed to ignite {script}: {e}")
@@ -68,7 +104,8 @@ def ignite_matrix():
                     new_proc = subprocess.Popen(
                         [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), name)],
                         env=env,
-                        cwd=os.path.dirname(os.path.abspath(__file__))
+                        cwd=os.path.dirname(os.path.abspath(__file__)),
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                     )
                     running_processes[i] = (name, new_proc)
             
@@ -83,7 +120,7 @@ def ignite_matrix():
             logging.info(f"Terminating {name} (PID: {proc.pid})...")
             proc.terminate()
             
-        # Wait for all processes to close to prevent orphans
+        # Wait for all processes to close
         for name, proc in running_processes:
             try:
                 proc.wait(timeout=5)
@@ -96,4 +133,7 @@ def ignite_matrix():
         print("="*60)
 
 if __name__ == "__main__":
-    ignite_matrix()
+    if check_llm_status():
+        ignite_matrix()
+    else:
+        sys.exit(1)
