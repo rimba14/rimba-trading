@@ -52,6 +52,29 @@ from sentinel_config import (
     OLLAMA_KEEP_ALIVE, WATCHLIST, REASONING_TIMEOUT,
 )
 
+# ── Contextual Routing — Phase 5 Constitution ─────────────────────────────────
+# Crypto + Metals  →  Groq  (Llama-3.1-8b-instant, high-speed momentum analysis)
+# Forex + Indices  →  Gemini (gemini-2.5-flash, deep macro-synthesis)
+CRYPTO_METALS_ASSETS = {"BTCUSD", "ETHUSD", "XAUUSD", "XAGUSD"}
+FOREX_INDEX_ASSETS   = {"EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCHF", "NZDUSD",
+                        "SP500", "NAS100", "GER40"}
+
+try:
+    from gemini_engine import GeminiReasoningEngine
+    _GEMINI_ENGINE = GeminiReasoningEngine()
+    logging.info("[ROUTER] Gemini engine initialized (Forex/Index stream).")
+except Exception as _e:
+    _GEMINI_ENGINE = None
+    logging.warning(f"[ROUTER] Gemini engine unavailable: {_e}")
+
+try:
+    from groq_engine import GroqReasoningEngine
+    _GROQ_ENGINE = GroqReasoningEngine(model_name="llama-3.1-8b-instant")
+    logging.info("[ROUTER] Groq engine initialized (Crypto/Metal stream).")
+except Exception as _e:
+    _GROQ_ENGINE = None
+    logging.warning(f"[ROUTER] Groq engine unavailable: {_e}")
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(r"C:\Sentinel_Project")
 SHAP_DIR     = PROJECT_ROOT / "shap_diagnostics"
@@ -153,7 +176,7 @@ def optimize_fracdiff_d(series: np.ndarray):
     # Absolute fallback — use d=1.0 (minimum differentiation, NOT pct_change)
     return 1.0, apply_frac_diff(series, 1.0)
 
-# ── Meta-Model (loaded once) ──────────────────────────────────────────────────
+# ── Meta-Model (loaded once) ──────────────────────────────────────────────────────────────────────────────
 _META_MODEL: xgb.XGBClassifier | None = None
 _SHAP_EXPLAINER = None
 if META_MODEL_PATH.exists():
@@ -162,33 +185,62 @@ if META_MODEL_PATH.exists():
     _SHAP_EXPLAINER = shap.TreeExplainer(_META_MODEL)
     logging.info("[BOOT] Meta-Model + SHAP Explainer loaded.")
 
-# ── Ollama MoE Reasoning (Phase 2 — keep_alive=-1, enable_thinking=True) ──────
-OLLAMA_ENDPOINT = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/") + "/api/generate"
-OLLAMA_MODEL    = os.getenv("REASONING_MODEL", "qwen2.5-coder:3b")
-
-# Serialization lock — Ollama (qwen2.5-coder:3b) is single-threaded.
-# Concurrent requests queue up and ALL time out. One-at-a-time prevents this.
-_OLLAMA_LOCK = threading.Lock()
 def _moe_reason(symbol: str, features: dict, direction: int) -> dict:
     """
-    Phase 2: Native Qwen/Ollama MoE reasoning with RAM-lock and thinking enabled.
-    Serialized via _OLLAMA_LOCK — Ollama is single-threaded; concurrent calls all time out.
-    Fail-safe: returns neutral 0.500 on any timeout/error.
+    Phase 5: Contextual Routing — Constitution Directive 1.
+
+    Crypto + Metals  →  Groq  (Llama-3.1-8b-instant, high-speed momentum)
+    Forex + Indices  →  Gemini (gemini-2.5-flash, deep macro-synthesis)
+    Fallback         →  Local Ollama MoE if both cloud engines are unavailable.
+
+    Serialized Ollama path: _OLLAMA_LOCK prevents Thundering Herd on local GPU.
+    Fail-safe: returns neutral 0.500 on any unhandled error.
     """
+    feat_summary = json.dumps(
+        {k: round(float(v), 6) if isinstance(v, (int, float, np.floating)) else str(v)
+         for k, v in list(features.items())[:20]}
+    )
+    system_prompt = (
+        "You are the Sentinel Meta-Model. Analyze the trading features and return ONLY valid JSON "
+        "with keys: decision (BUY|SELL|HOLD), confidence (0.0-1.0), reasoning (string)."
+    )
+    user_prompt = (
+        f"SYMBOL: {symbol} | PRIMARY_DIR: {direction} | FEATURES: {feat_summary}"
+    )
+
+    # ── Contextual Route: Crypto/Metals → Groq ───────────────────────────────
+    if symbol in CRYPTO_METALS_ASSETS:
+        if _GROQ_ENGINE is not None:
+            try:
+                logging.info(f"[ROUTER] {symbol} → Groq (Crypto/Metal stream)")
+                return _GROQ_ENGINE.json_with_retry(system_prompt, user_prompt)
+            except Exception as e:
+                logging.warning(f"[ROUTER] Groq failed for {symbol}, falling back to Ollama: {e}")
+        else:
+            logging.warning(f"[ROUTER] Groq engine not available for {symbol}. Falling back to Ollama.")
+
+    # ── Contextual Route: Forex/Indices → Gemini ───────────────────────────
+    elif symbol in FOREX_INDEX_ASSETS:
+        if _GEMINI_ENGINE is not None:
+            try:
+                logging.info(f"[ROUTER] {symbol} → Gemini (Forex/Index stream)")
+                return _GEMINI_ENGINE.json_with_retry(system_prompt, user_prompt)
+            except Exception as e:
+                logging.warning(f"[ROUTER] Gemini failed for {symbol}, falling back to Ollama: {e}")
+        else:
+            logging.warning(f"[ROUTER] Gemini engine not available for {symbol}. Falling back to Ollama.")
+
+    # ── Fallback: Local Ollama MoE (serialized) ──────────────────────────────
+    logging.info(f"[ROUTER] {symbol} → Ollama (local fallback)")
     payload = {
         "model": OLLAMA_MODEL,
-        "prompt": (
-            f"You are the Sentinel Meta-Model. Analyze the features and return ONLY valid JSON "
-            f"with keys: decision (BUY|SELL|HOLD), confidence (0.0-1.0), reasoning (string).\n\n"
-            f"SYMBOL: {symbol} | PRIMARY_DIR: {direction} | "
-            f"FEATURES: {json.dumps({k: round(float(v), 6) if isinstance(v, (int, float, np.floating)) else str(v) for k, v in list(features.items())[:20]})}"
-        ),
+        "prompt": f"{system_prompt}\n\n{user_prompt}",
         "stream": False,
-        "keep_alive": OLLAMA_KEEP_ALIVE,   # Phase 2: RAM-lock
-        "options": {"temperature": 0.05, "num_ctx": 256, "num_predict": 128},  # Ultra-lean for speed
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {"temperature": 0.05, "num_ctx": 256, "num_predict": 128},
     }
     try:
-        with _OLLAMA_LOCK:  # Serialize — only one Ollama call at a time
+        with _OLLAMA_LOCK:  # Serialize — prevent Thundering Herd on local GPU
             resp = requests.post(OLLAMA_ENDPOINT, json=payload, timeout=REASONING_TIMEOUT)
         raw = resp.json().get("response", "{}")
         start, end = raw.find("{"), raw.rfind("}") + 1

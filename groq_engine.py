@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Dict, Any, Optional
 from groq import Groq
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 from dotenv import load_dotenv
 
 # Load configuration
@@ -22,7 +22,7 @@ class GroqReasoningEngine:
         self.logger = logging.getLogger("GroqEngine")
 
     @retry(
-        wait=wait_exponential(multiplier=1, min=2, max=60),
+        wait=wait_random_exponential(multiplier=1, max=60),
         stop=stop_after_attempt(6),
         retry=retry_if_exception_type(Exception)
     )

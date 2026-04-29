@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Dict, Any, Optional
 import google.generativeai as genai
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 from dotenv import load_dotenv
 
 # Load configuration
@@ -25,9 +25,9 @@ class GeminiReasoningEngine:
         self.logger = logging.getLogger("GeminiEngine")
 
     @retry(
-        wait=wait_exponential(multiplier=1, min=2, max=60),
+        wait=wait_random_exponential(multiplier=1, max=60),
         stop=stop_after_attempt(6),
-        retry=retry_if_exception_type(Exception) 
+        retry=retry_if_exception_type(Exception)
     )
     def _generate_with_retry(self, prompt: str, system_instruction: str) -> str:
         """Internal method with tenacity retry logic."""
