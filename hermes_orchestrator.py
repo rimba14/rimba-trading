@@ -14,6 +14,7 @@ import logging
 import concurrent.futures
 import pandas as pd
 from pathlib import Path
+import requests
 
 def resilient_run(agent, command):
     """Executes a command via the Hermes Agent with error isolation."""
@@ -44,7 +45,8 @@ if not HERMES_ROOT.exists():
 # Insert at position 0 to prioritize this path over global packages
 sys.path.insert(0, str(HERMES_ROOT))
 
-SIGNAL_DIR = PROJECT_ROOT / "pending_signals"
+SIGNAL_DIR = PROJECT_ROOT / "cognition_queue"
+ACTION_DIR = PROJECT_ROOT / "action_queue"
 POLL_INTERVAL = 1  # Seconds between directory scans
 
 # Configure Logging
@@ -231,18 +233,26 @@ def pre_flight_audit():
     sys.exit(1)
 
 def push_to_firebase(payload):
-    """Phase 5: Firebase Signal Bridge (VPS -> Cloud)."""
-    # Placeholder for Firebase pushing
-    # In v17.2, we push to Firebase Realtime Database
-    # self.ref.push(payload)
-    
-    # Simulation: Push to pending_signals/ for Local Listener to pick up
-    SIGNAL_QUEUE = PROJECT_ROOT / "pending_signals"
-    os.makedirs(SIGNAL_QUEUE, exist_ok=True)
-    filename = SIGNAL_QUEUE / f"signal_{int(time.time())}_{payload['symbol']}.json"
+    """Phase 5: Firebase & Discord Signal Bridge (VPS -> Cloud)."""
+    # 1. Action Queue (Local VPS fallback)
+    os.makedirs(ACTION_DIR, exist_ok=True)
+    filename = ACTION_DIR / f"signal_{int(time.time())}_{payload['symbol']}.json"
     with open(filename, 'w') as f:
         json.dump(payload, f, indent=2)
-    logger.info(f"[FIREBASE_BRIDGE] Signal pushed for {payload['symbol']}: {filename}")
+    logger.info(f"[ACTION_BRIDGE] Signal pushed for {payload['symbol']}: {filename}")
+    
+    # 2. Discord Webhook (Primary VPS -> VPS / Sniper Bridge)
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if webhook_url:
+        try:
+            # We wrap the payload in a Discord content string
+            # The Sniper (vantage_execute) reads the raw JSON from the content field
+            requests.post(webhook_url, json={"content": json.dumps(payload)}, timeout=8)
+            logger.info(f"[DISCORD_BRIDGE] Signal broadcast to execution channel for {payload['symbol']}")
+        except Exception as e:
+            logger.error(f"[DISCORD_BRIDGE] Failed to broadcast signal: {e}")
+    
+    return True
     return True
 
 def process_signal(agent, sig_file):
