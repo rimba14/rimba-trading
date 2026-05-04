@@ -1,0 +1,11 @@
+{
+  "event": "THESIS_DRIVEN_LIQUIDATION",
+  "symbol": "NAS100",
+  "ticket": 1248875829,
+  "direction": "SELL",
+  "hmm_state": "BULL",
+  "live_p": 0.5,
+  "pnl": 2.85,
+  "timestamp": 1777661184,
+  "version": "v17.9-PROD"
+}

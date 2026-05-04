@@ -1,37 +1,62 @@
 """
-sentinel_config.py - ADAPTIVE SENTINEL CONFIGURATION & SYMBOL DISCOVERY (v17.3)
-Constitution Article: Symbol Auto-Discovery, Risk Parameters, UTC Constants.
+sentinel_config.py - ADAPTIVE SENTINEL CONFIGURATION & SYMBOL DISCOVERY (v19.2)
+Constitution Article: Precision Isolation & Micro-Variance Scaling.
+Phase 1-6 Architecture Online: Asynchronous Micro-Batching, 6-Decimal Precision, Z-Score Scaling.
+Phase 4: Dynamic Optuna Injection (Gate, Kelly, Heat, Wall).
 """
 import os
+import json
 import MetaTrader5 as mt5
 import logging
+from pathlib import Path
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
+# v19.2 Directive: Dynamic Risk Parameter Injection (Optuna Bridge)
+# If sentinel_hyperopt.py has generated new parameters, we inject them here.
+PARAMS_PATH = Path(r"C:\Sentinel_Project\dynamic_risk_params.json")
+DYN_PARAMS = {}
+if PARAMS_PATH.exists():
+    try:
+        with open(PARAMS_PATH, "r") as f:
+            DYN_PARAMS = json.load(f)
+        logging.info(f"[CONFIG] Dynamic parameters injected from {PARAMS_PATH.name}")
+    except Exception as e:
+        logging.warning(f"[CONFIG] Failed to load dynamic parameters: {e}")
+
 # Configure Logging for Discovery
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [DISCOVERY] %(message)s')
 
-# ---------------------------------------------------------------------------
 # RISK PARAMETERS (Phase 4 — Fractional Kelly & Absolute Risk Ceilings)
-# ---------------------------------------------------------------------------
-KELLY_FRACTION   = 0.25   # Quarter-Kelly for drawdown protection
-PORTFOLIO_HEAT_CAP = 0.20  # 20% max open risk (portfolio heat)
-HARD_RISK_CAP    = 0.02   # 2.0% per-trade absolute maximum
-LEVERAGE_WALL    = 10.0   # 10× notional margin limit
+KELLY_FRACTION     = float(DYN_PARAMS.get("kelly_fraction", 0.25))
+PORTFOLIO_HEAT_CAP = float(DYN_PARAMS.get("portfolio_heat_cap", 0.20))
+HARD_RISK_CAP      = 0.02   # 2.0% per-trade absolute maximum
+LEVERAGE_WALL      = 10.0   # 10× notional margin limit
 
-# ---------------------------------------------------------------------------
-# SYSTEM CONSTANTS (v17.3)
-# ---------------------------------------------------------------------------
+# SYSTEM CONSTANTS (v19.2)
 STALENESS_THRESHOLD = 900   # Hard 900 s signal staleness gate
-ARCTIC_TIMEOUT      = 0.3   # 300 ms latency cap for ArcticDB reads/writes
-EPISTEMIC_GATE      = 0.82  # Absolute minimum meta-conviction threshold
-REASONING_TIMEOUT   = int(os.getenv("REASONING_TIMEOUT", 45))  # Ollama API timeout (env-driven)
+ARCTIC_TIMEOUT      = 0.3   # Hard 300ms latency cap for ArcticDB (v19.1)
+EPISTEMIC_GATE      = 0.7000  # v19.2 SRE Override for London Climax
+REASONING_TIMEOUT   = int(os.getenv("REASONING_TIMEOUT", 45))
 
-# Ollama MoE RAM-lock directive (keep_alive: -1 means lock forever)
-OLLAMA_KEEP_ALIVE   = -1
+# PSR Reset Epoch (Phase 5 — SRE Reset v18.1)
+# Only deals AFTER this timestamp contribute to the PSR calculation.
+# Setting to 1746090457 (2025-05-01 09:07:37 UTC)
+PSR_EPOCH = 1746090457
+
+# [DEPRECATED v17.9] Ollama MoE RAM-lock — Local inference deprecated. Cloud-only architecture.
+OLLAMA_KEEP_ALIVE   = -1  # Kept for legacy import compatibility only
+
+# ---------------------------------------------------------------------------
+# DUAL-ENGINE MODEL CONSTANTS (v17.9)
+# ---------------------------------------------------------------------------
+# Groq serves Crypto assets via high-speed LLM (Gemma as per v17.9 Constitution)
+GROQ_GEMMA_MODEL   = os.getenv("GROQ_MODEL", "gemma2-9b-it")
+# Gemini serves Forex and Indices (deep macro-synthesis engine)
+GEMINI_MODEL_NAME  = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # ---------------------------------------------------------------------------
 # ASSET CLASS DEFINITIONS (Weekend Blackout & Regime Routing)
@@ -99,19 +124,24 @@ def resolve_watchlist(base_list: list) -> list:
 
 
 # ---------------------------------------------------------------------------
-# WATCHLIST BOOTSTRAP (v17.7 — 13-Asset Core Liquid List)
-# Pruned from 56-asset load to stabilise 429 Too Many Requests errors.
-# Dual-Engine split: Gemini → first 7 assets, Groq → remaining 6 assets.
+# WATCHLIST BOOTSTRAP (v19.5 — 50-Asset Expanded Universe)
+# Asynchronous Micro-Batching (chunks of 10) enforced in Slow Loop.
+# Dual-Engine routing:
+#   Groq (Gemma)  -> CRYPTO (15 assets)
+#   Gemini        -> FOREX, INDICES, COMMODITIES (35 assets)
 # ---------------------------------------------------------------------------
 BASE_WATCHLIST = [
-    # Forex Majors (6)
-    "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCHF", "NZDUSD",
-    # Crypto (2)
-    "BTCUSD", "ETHUSD",
-    # Indices (3)
-    "SP500", "NAS100", "GER40",
-    # Metals (2)
-    "XAUUSD", "XAGUSD",
+    # Crypto (15)
+    "BTCUSD", "ETHUSD", "SOLUSD", "AVAXUSD", "LINKUSD", "LTCUSD", "BCHUSD", "XRPUSD", "ADAUSD", "DOTUSD",
+    "MATICUSD", "DOGEUSD", "UNIUSD", "ATOMUSD", "TRXUSD",
+    
+    # Forex & Macro (25)
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "NZDUSD", "USDCAD", "EURGBP", "EURJPY", "GBPJPY",
+    "EURCHF", "AUDJPY", "NZDJPY", "CHFJPY", "EURAUD", "GBPAUD", "USDMXN", "USDZAR", "USDTRY", "EURNOK",
+    "EURSEK", "USDCNH", "USDSGD", "USDHKD", "EURPLN",
+    
+    # Indices & Commodities (10)
+    "SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40", "XAUUSD", "XAGUSD", "CL-OIL"
 ]
 
 if not mt5.initialize():

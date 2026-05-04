@@ -1,0 +1,45 @@
+{
+  "symbol": "TRXUSD",
+  "prediction": -1,
+  "conviction": 0.3170979714501107,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777909907.863893,
+  "weights": {
+    "xgb_p": -0.04411368771370137,
+    "kronos_p": -0.012665681778661569,
+    "hmm_state": 0.12574294731103997,
+    "faiss_sim": -0.09538716119585741,
+    "macro_sent": 0.2295578006773724,
+    "macro_risk": 0.2505608025349085,
+    "catalyst": 0.24197191640290724
+  },
+  "top_pos": [
+    [
+      "macro_risk",
+      0.2505608025349085
+    ],
+    [
+      "catalyst",
+      0.24197191640290724
+    ],
+    [
+      "macro_sent",
+      0.2295578006773724
+    ]
+  ],
+  "top_neg": [
+    [
+      "kronos_p",
+      -0.012665681778661569
+    ],
+    [
+      "xgb_p",
+      -0.04411368771370137
+    ],
+    [
+      "faiss_sim",
+      -0.09538716119585741
+    ]
+  ],
+  "concept_drift": false
+}

@@ -1,215 +1,24 @@
-ADAPTIVE SENTINEL CONSTITUTION — Master Prompt v17.3 (Decoupled Production Build)
-Last updated: 2026-04-29 by AI Coding Agent (auto-update per Phase 6 mandate).
-Save/overwrite this file as: C:\Sentinel_Project\Master_Prompt.txt
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 1 — ARCHITECTURE, SYNCHRONISATION & SCALABILITY
-═══════════════════════════════════════════════════════════════════════════════
-
-1.1  Information-Driven Architecture (Dollar/Volume Bars)
-     • Time Bars (e.g. 5-min charts) are strictly prohibited.
-     • The Dual-Loop matrix is event-driven via gitagent_bars.InformationBarStreamer.
-     • Default threshold: $10,000,000 USD per dollar bar.
-     • Both Slow Loop (sentinel_slow_loop.py) and Fast Loop (chat_gemma.py) only
-       trigger on statistically significant fiat-volume thresholds.
-     • System natively sleeps during low-volume noise; hyper-samples during spikes.
-
-1.2  Symbol Auto-Discovery
-     • Broker suffixes MUST NEVER be hardcoded.
-     • sentinel_config.get_valid_mt5_symbol() implements a 3-phase fallback:
-       Phase 1 — direct match | Phase 2 — suffix probe | Phase 3 — full scan.
-     • resolve_watchlist() builds WATCHLIST dynamically at boot.
-
-1.3  Universal UTC & Staleness Gate
-     • All timestamps written to / read from ArcticDB use utils.get_utc_epoch()
-       (UTC epoch seconds).
-     • ArcticDB reads AND writes enforce a hard 300 ms timeout via
-       concurrent.futures.ThreadPoolExecutor (ARCTIC_TIMEOUT = 0.3).
-     • If cached signal age > STALENESS_THRESHOLD (900 s), [STALE_SIGNAL] is
-       logged and new entries for that asset are halted.
-
-1.4  Fractional Differentiation (FracDiff)
-     • Integer differentiation (pct_change() / .diff()) on raw price series is
-       strictly forbidden for ML model inputs.
-     • optimize_fracdiff_d() finds the minimum d (step 0.05) achieving ADF
-       stationarity (p < 0.05), preserving maximum market memory.
-     • Applied independently to all OHLC columns before Kronos/XGBoost/TimesNet.
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 2 — PERCEPTION & COGNITION (LOCAL BRAIN / HEAVY COMPUTE)
-═══════════════════════════════════════════════════════════════════════════════
-
-2.1  HMM Oracle
-     • gitagent_hmm.get_current_state() returns (state, prob, _).
-     • States: BULL | BEAR | RANGE with dynamic std-dev regime boundaries.
-     • HMM data cached to ArcticDB: {symbol}_hmm (state, prob, atr, timestamp).
-
-2.2  Meta-Labeling Architecture (Decoupled Sizing)
-     • Primary Model (Direction only): Kronos + XGBoost blend (70/30).
-       p_blend > 0.55 → LONG (+1) | p_blend < 0.45 → SHORT (-1) | else HOLD (0).
-     • Meta-Model (Conviction / Sizing): XGBClassifier (medallion_model.json).
-       Outputs probability p that the primary direction is correct.
-     • Final conviction: p_final = (base_p × 0.60) + (moe_confidence × 0.40).
-
-2.3  Sovereign MoE Reasoning & Memory Lock
-     • qwen_reasoning_engine.QwenReasoningEngine uses the native Ollama /api/generate
-       endpoint (not OpenAI-compatible layer).
-     • Payload MUST include "keep_alive": -1 to lock the model in RAM.
-     • Fail-safe: any Timeout or endpoint error returns HOLD / 0.500 immediately.
-
-2.4  SHAP Feature Importance
-     • shap.TreeExplainer(_META_MODEL) runs for every prediction in Slow Loop.
-     • Top 3 positive + negative drivers formatted into JSON and written to
-       shap_diagnostics/{symbol}_diag.json.
-     • Payload fields: symbol, prediction, conviction, reasoning, timestamp,
-       weights (all features), top_pos, top_neg, concept_drift (bool).
-
-2.5  Epistemic Gate (0.82 Threshold)
-     • norm_p = abs(meta_p - 0.5) + 0.5
-     • Signals are ONLY routed to pending_signals/ if norm_p >= 0.82 AND
-       primary_dir != 0.
-     • This gate is re-enforced on the VPS side (vantage_execute.py).
-     • Bypass of this gate is constitutionally prohibited.
-
-2.6  Regime Alignment
-     • If HMM == BEAR and primary_dir == BUY  → meta_p forced to 0.50 (blocked).
-     • If HMM == BULL and primary_dir == SELL → meta_p forced to 0.50 (blocked).
-     • Applied in BOTH slow_loop and vantage_execute for belt-and-suspenders.
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 3 — CONTEXTUAL MEMORY AUDIT (FAISS)
-═══════════════════════════════════════════════════════════════════════════════
-
-3.1  FAISS EpisodicMemory (Dim=93)
-     • RAM-loaded index file: sentinel_episodic.index
-     • Live feature vectors are queried against the index on every signal.
-
-3.2  Legend Override
-     • If cosine similarity to a legend_wei template vector > 85%, HMM penalties
-       are bypassed and the signal is escalated.
-
-3.3  Graveyard Block
-     • If cosine similarity to any cluster of post_mortem_failure vectors > 85%,
-       the trade is autonomously blocked regardless of conviction.
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 4 — RISK GATES & FRACTIONAL KELLY SIZING
-═══════════════════════════════════════════════════════════════════════════════
-
-4.1  Amnesia Lock
-     • Before any execution, check MT5 open positions.
-     • If a position in the SAME direction already exists for that symbol
-       (magic=142), the new sub-order is blocked.
-
-4.2  Weekend Blackout
-     • Forex, Indices, Equities: blacked out Friday 21:55 UTC → Sunday 22:15 UTC
-       (≈ Friday 23:55 → Monday 00:15 broker UTC+2 time).
-     • Crypto (CRYPTO regime): runs 24/7, never blacked out.
-
-4.3  Fractional Kelly Sizing
-     • f_raw  = p − (q / b)   where q = 1−p, b = 2.0 (assumed 2:1 reward:risk).
-     • f_kelly = f_raw × KELLY_FRACTION (0.25).
-     • Capped at HARD_RISK_CAP = 0.02 (2.0% of equity per trade).
-
-4.4  Small-Account Execution Bypass
-     • If 0.0 < calculated_lot < MIN_LOT (0.01): round up to 0.01.
-     • Log: "[HARD_RISK_CAP_WARN] … Rounding UP to allow signal execution."
-
-4.5  Absolute Risk Ceilings
-     • Portfolio Heat cap:  PORTFOLIO_HEAT_CAP  = 20%  (used_margin / equity).
-     • Hard Risk Cap:       HARD_RISK_CAP       = 2.0% (per-trade f_kelly ceiling).
-     • Leverage Wall:       LEVERAGE_WALL       = 10×  (total notional / equity).
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 5 — DECOUPLED BRIDGE & VIRTUAL EXECUTION
-═══════════════════════════════════════════════════════════════════════════════
-
-5.1  Machine A — Cognitive Engine (Local Laptop)
-     Components: Hermes SRE Agent, hermes_orchestrator.py, sentinel_slow_loop.py,
-                 Ollama (LLM), ArcticDB cache, sentinel_dashboard.py.
-     • Machine A NEVER sends orders to MT5 directly.
-     • On P > 0.82: Orchestrator pushes JSON signal via Discord Webhook to Machine B.
-
-5.2  Machine B — Execution Node (Oracle VPS)
-     Script: vantage_execute.py (runs under WINE on Linux VPS).
-     • Listens on Discord channel for JSON payloads.
-     • Re-validates conviction >= 0.82, regime, amnesia lock, weekend blackout.
-     • Executes market orders via MT5 with SL=0, TP=0 (naked entries).
-
-5.3  Pure Virtual Stops (VPS-Managed)
-     • Virtual SL = entry ± (ATR × catastrophe_multiplier).
-     • Virtual TP = entry ± (ATR × catastrophe_multiplier × 2.0).
-     • BrawnExecutor._tick_monitor() polls at 0.5 s intervals.
-     • On breach → immediate market-close order (no pending orders, no error 10016).
-     • VPS machine protects positions even if Machine A (Laptop) goes offline.
-
-5.4  Catastrophe Multipliers (ATR-based Virtual Stop Distance)
-     • Forex:          12.0×  | Indices/Commodity/Crypto: 8.0×  | Equity: 6.0×
-
-5.5  Visual Command Center
-     • sentinel_dashboard.py (Streamlit, Machine A only).
-     • Read-only. Decoupled from all execution threads.
-     • Panels: HMM Radar, Meta-Conviction Matrix, SHAP Drift Monitor,
-               Pending Signal Queue, PSR ticket counter.
-     • ArcticDB reads enforce 300 ms timeout in dashboard too.
-
-5.6  PSR Tripwire
-     • profit_manager.py audits last 7 days of closed deals every 10 min.
-     • If PSR (Bailey & Lopez de Prado formula) < 0.80:
-       → Drops psr_fail_{ts}.json to pending_diagnostics/.
-       → Sends Discord SRE alert.
-       → Hermes picks up ticket and enters SRE mode.
-
-5.7  Concept Drift Monitor
-     • hermes_orchestrator.py scans shap_diagnostics/*.json every poll cycle.
-     • If any feature weight > 65%: log [CONCEPT_DRIFT_WARNING], force conviction
-       to 0.0 in ArcticDB (300 ms timeout), send SRE Discord alert.
-
-═══════════════════════════════════════════════════════════════════════════════
-PHASE 6 — CONSTITUTION MAINTENANCE (SELF-UPDATING PROTOCOL)
-═══════════════════════════════════════════════════════════════════════════════
-
-6.1  Living Document
-     • This file (Master_Prompt.txt) is the strict constitution of the Adaptive
-       Sentinel matrix.
-
-6.2  Forced Overwrite
-     • Whenever the AI coding agent implements a feature, fixes a bug, or adjusts
-       a mathematical threshold, it MUST update this constitution to reflect the
-       new architecture and output the full updated text.
-     • USER INSTRUCTION: Save/overwrite this file at C:\Sentinel_Project\Master_Prompt.txt
-
-═══════════════════════════════════════════════════════════════════════════════
-FILE MAP (v17.3)
-═══════════════════════════════════════════════════════════════════════════════
-
-sentinel_config.py         Symbol discovery, all system constants
-sentinel_slow_loop.py      Brain: FracDiff, HMM, Kronos, Meta-Labeling, SHAP, Gate
-hermes_orchestrator.py     Orchestrator: signal routing, SRE, Concept Drift, PSR
-qwen_reasoning_engine.py   Ollama MoE wrapper (keep_alive=-1, fail-safe)
-vantage_execute.py         Brawn (VPS): Kelly sizing, virtual stops, Discord bridge
-profit_manager.py          PSR auditor, SRE halt, position telemetry
-sentinel_dashboard.py      Streamlit read-only command center
-gitagent_bars.py           Dollar-bar event-driven data pipeline
-gitagent_hmm.py            Hidden Markov Model oracle
-gitagent_utils.py          ATR, UTC epoch, symbol regime helpers
-kronos_bridge.py           Kronos + XGBoost cognition cache updater
-timesfm_bridge.py          TimesFM risk cache updater
-git_arctic.py              ArcticDB singleton accessor
-
-═══════════════════════════════════════════════════════════════════════════════
-MATHEMATICAL THRESHOLDS (v17.3)
-═══════════════════════════════════════════════════════════════════════════════
-
-EPISTEMIC_GATE          = 0.82   (absolute minimum norm conviction)
-STALENESS_THRESHOLD     = 900    (seconds)
-ARCTIC_TIMEOUT          = 0.300  (seconds — hard cap on DB ops)
-KELLY_FRACTION          = 0.25   (quarter-Kelly)
-HARD_RISK_CAP           = 0.02   (2.0% per trade)
-PORTFOLIO_HEAT_CAP      = 0.20   (20%)
-LEVERAGE_WALL           = 10.0   (10× equity)
-PSR_THRESHOLD           = 0.80   (below → SRE halt)
-CONCEPT_DRIFT_THRESHOLD = 0.65   (single feature > 65% weight → drift alert)
-OLLAMA_KEEP_ALIVE       = -1     (RAM-lock forever)
-MIN_LOT                 = 0.01   (broker minimum micro-lot)
-DOLLAR_BAR_THRESHOLD    = $10,000,000 USD
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v19.8 - Strict Net Exposure) 🚨
+CRITICAL AI INSTRUCTION: This document is the absolute, unquestionable authority for the Adaptive Sentinel architecture. Purge all prior architectures (v1.0 through v19.7). Strictly obey v19.8.
+Phase 1: Architecture, Synchronization & Scalability
+Event-Driven Architecture: The system rejects Time Bars. Inference is triggered by fiat value thresholds.
+Absolute State Isolation: sentinel_slow_loop.py MUST process assets via asyncio.gather(). All feature vectors MUST be instantiated from scratch INSIDE each coroutine.
+ASCII Auditing: Conviction scores logged at 6-decimal precision. All terminal logging MUST be strictly ASCII-compliant to prevent Windows charmap crashes.
+OOM Prevention: 1. Hard-cap PyTorch threads via torch.set_num_threads(4). 2. Pre-quantize models offline; live bridges are strictly "Load-Only" (.pt files > 1MB). 3. Aggressive garbage collection (gc.collect()) after model I/O.
+Phase 2: Perception, Cognition & Self-Evolving Execution
+Gemini Deep Research Oracle: Background process outputs macro_state.json every 24h.
+Mathematical Meta-Model & Soft Scaling: Meta-Model calculates Conviction ($P$).
+Soft Confidence Blend: MoE reasoning applies a soft floor: strength = max(0.6, reasoning_conf) to preserve the ML signal (p_final = 0.5 + (base_p - 0.5) * strength).
+I/O Hardening: .pkl Meta-Model MUST be loaded using joblib.load() within a try/except block catching I/O race conditions.
+SHAP Diagnostic Hardening: Explicitly cast feature vectors to 2D matrices (reshape(1, -1)). Set check_additivity=False.
+Black Swan Override: If black_swan_risk > 0.85, force $P=0.0$ and broadcast global LIQUIDATE ALL.
+Phase 3: Contextual Memory Audit (FAISS SQ8)
+SQ8 Episodic Memory: Query RAM-loaded FAISS utilizing INT8/SQ8. Live vectors remain FP32 for query execution against Legend/Graveyard templates.
+Phase 4: Dynamic Risk Gates & Hyperopt Sizing
+Optuna Bayesian Engine: Continuously hunts for optimal Epistemic Gate (e.g., > 0.82) and Kelly Fraction parameters.
+The Amnesia & Mutual Exclusion Lock (CRITICAL): The system operates on STRICT NET EXPOSURE (No Hedging). Query MT5 for existing positions. If a position exists in the same direction, DO NOT execute new sub-orders. If a position exists in the opposite direction, the system MUST autonomously liquidate the opposite position before executing the new signal.
+Phase 5: Decoupled Bridge & Virtual Execution
+The Cognitive Engine: Runs EXCLUSIVELY as headless daemon processes. Format signals as JSON payloads pushed via HTTP POST to the local Execution node.
+Autonomous Profit Manager: Execution scripts MUST NEVER attach physical SL/TP orders to the broker. profit_manager.py MUST run as an autonomous, endless background polling loop. If a Long's $P \le 0.48$ or a Short's $P \ge 0.52$, the manager MUST instantly and autonomously fire a liquidation payload without any human-in-the-loop authorization.
+Phase 6: Constitution Maintenance
+Scorched Earth Rule: Autonomously DELETE older versions of this prompt to prevent RAG contamination. There can be only ONE Master_Prompt.txt.

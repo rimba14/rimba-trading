@@ -1,0 +1,10 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "SELL",
+  "conviction": 0.1723,
+  "kronos_conviction": 0.1723,
+  "hmm_state": "BEAR",
+  "atr": 174.80285714285856,
+  "timestamp": 1777665241,
+  "version": "v17.9-PROD"
+}

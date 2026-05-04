@@ -1,0 +1,11 @@
+{
+  "event": "THESIS_DRIVEN_LIQUIDATION",
+  "symbol": "CL-OIL",
+  "ticket": 1248787225,
+  "direction": "SELL",
+  "hmm_state": "BULL",
+  "live_p": 0.5,
+  "pnl": -22.1,
+  "timestamp": 1777878131,
+  "version": "v17.9-PROD"
+}

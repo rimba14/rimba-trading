@@ -1,0 +1,44 @@
+{
+  "symbol": "AUDCHF",
+  "prediction": -1,
+  "conviction": 0.1502,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777661952.715985,
+  "weights": {
+    "W_rsi": -0.5763765573501587,
+    "W_macd": 0.08146364241838455,
+    "Wy_trend": -0.04330471530556679,
+    "B_bbpos": -0.26546522974967957,
+    "S_struct": 0.0,
+    "WHL_vol": -0.033389754593372345
+  },
+  "top_pos": [
+    [
+      "W_macd",
+      0.08146364241838455
+    ],
+    [
+      "S_struct",
+      0.0
+    ],
+    [
+      "WHL_vol",
+      -0.033389754593372345
+    ]
+  ],
+  "top_neg": [
+    [
+      "Wy_trend",
+      -0.04330471530556679
+    ],
+    [
+      "B_bbpos",
+      -0.26546522974967957
+    ],
+    [
+      "W_rsi",
+      -0.5763765573501587
+    ]
+  ],
+  "concept_drift": false
+}

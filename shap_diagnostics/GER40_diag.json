@@ -1,43 +1,44 @@
 {
   "symbol": "GER40",
-  "prediction": 1,
-  "conviction": 0.5,
-  "reasoning": "Fail-safe neutral \u2014 endpoint unavailable.",
-  "timestamp": 1777484078.477231,
+  "prediction": 0,
+  "conviction": 0.4899122308681594,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777913030.577723,
   "weights": {
-    "W_rsi": -0.6272432208061218,
-    "W_macd": 0.19944210350513458,
-    "Wy_trend": -0.0821608453989029,
-    "B_bbpos": 0.07184654474258423,
-    "S_struct": 0.0,
-    "WHL_vol": -0.019307268783450127
+    "xgb_p": -0.08155477357843217,
+    "kronos_p": -0.04114528030344054,
+    "hmm_state": -0.16289121659019629,
+    "faiss_sim": -0.11399055996745039,
+    "macro_sent": 0.24969405237576034,
+    "macro_risk": 0.26227885066283585,
+    "catalyst": -0.08844526367107786
   },
   "top_pos": [
     [
-      "W_macd",
-      0.19944210350513458
+      "macro_risk",
+      0.26227885066283585
     ],
     [
-      "B_bbpos",
-      0.07184654474258423
+      "macro_sent",
+      0.24969405237576034
     ],
     [
-      "S_struct",
-      0.0
+      "kronos_p",
+      -0.04114528030344054
     ]
   ],
   "top_neg": [
     [
-      "WHL_vol",
-      -0.019307268783450127
+      "catalyst",
+      -0.08844526367107786
     ],
     [
-      "Wy_trend",
-      -0.0821608453989029
+      "faiss_sim",
+      -0.11399055996745039
     ],
     [
-      "W_rsi",
-      -0.6272432208061218
+      "hmm_state",
+      -0.16289121659019629
     ]
   ],
   "concept_drift": false

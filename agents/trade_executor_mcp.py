@@ -54,11 +54,31 @@ class TradeNotifier:
 
 notifier = TradeNotifier()
 
+def get_dynamic_risk_params():
+    params = {
+        "epistemic_gate": MIN_CONVICTION_GATE,
+        "kelly_fraction": KELLY_FRACTION,
+        "virtual_sl_multiplier": None
+    }
+    try:
+        with open("C:/Sentinel_Project/dynamic_risk_params.json", "r") as f:
+            data = json.load(f)
+            if "epistemic_gate" in data: params["epistemic_gate"] = float(data["epistemic_gate"])
+            if "kelly_fraction" in data: params["kelly_fraction"] = float(data["kelly_fraction"])
+            if "virtual_sl_multiplier" in data: params["virtual_sl_multiplier"] = float(data["virtual_sl_multiplier"])
+    except Exception:
+        pass
+    return params
+
 def get_asset_multiplier(symbol):
     """
     Returns ATR multiplier based on asset class.
     Directive: Pulls from global_hyperparameters ArcticDB Feature Store if available.
     """
+    params = get_dynamic_risk_params()
+    if params["virtual_sl_multiplier"] is not None:
+        return params["virtual_sl_multiplier"]
+
     regime = utils.get_symbol_regime(symbol)
     try:
         import git_arctic
@@ -87,13 +107,15 @@ def calculate_kelly_lot_size(p: float, equity: float, sl_points: float, tick_val
     Directive 2: Quarter-Kelly Sizing Calculation.
     f* = (p - (q/b)) * 0.25. Assuming b=1.5 for risk/reward.
     """
+    params = get_dynamic_risk_params()
+    
     p_val = p if p > 0.5 else (1.0 - p)
     q_val = 1.0 - p_val
     b = 1.5
     f_star = p_val - (q_val / b)
     
-    # Apply the 0.25 Quarter-Kelly suppressing fraction
-    f_star *= KELLY_FRACTION
+    # Apply the dynamic Kelly suppressing fraction
+    f_star *= params["kelly_fraction"]
     
     # Hard Risk Cap (2.0%)
     f_star = min(f_star, MAX_RISK_PER_TRADE)
@@ -117,10 +139,12 @@ def execute_trade(symbol: str, kronos_conviction: float, hmm_regime: str) -> str
         return json.dumps({"error": "MT5 Initialization Failed"})
 
     try:
+        params = get_dynamic_risk_params()
+        
         # 1. The Epistemic Gate (Directive 2)
         conv_score = abs(kronos_conviction - 0.5) + 0.5
-        if conv_score < MIN_CONVICTION_GATE:
-            return json.dumps({"status": "REJECTED", "reason": f"Conviction {conv_score:.3f} below 0.82 threshold."})
+        if conv_score < params["epistemic_gate"]:
+            return json.dumps({"status": "REJECTED", "reason": f"Conviction {conv_score:.3f} below {params['epistemic_gate']:.3f} threshold."})
 
         # 2. Fetch Market Data & Symbol Info
         info = mt5.symbol_info(symbol)

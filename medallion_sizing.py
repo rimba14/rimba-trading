@@ -27,6 +27,17 @@ RISK_BUDGET_PCT = 0.02  # Maximum absolute risk for a single idea
 KELLY_FRACTION = 0.25   # Quarter Kelly fraction 
 MAX_ACCOUNT_RISK_CAP = 0.20 # Enforced: 20% Total Portfolio Heat Cap
 
+def get_dynamic_risk_params():
+    params = {"kelly_fraction": KELLY_FRACTION}
+    try:
+        import json
+        with open("C:/Sentinel_Project/dynamic_risk_params.json", "r") as f:
+            data = json.load(f)
+            if "kelly_fraction" in data: params["kelly_fraction"] = float(data["kelly_fraction"])
+    except Exception:
+        pass
+    return params
+
 ASSET_GROUPS = {
     "FX_MAJOR": ["EURUSD", "GBPUSD", "AUDUSD", "USDJPY", "USDCHF"],
     "FX_CROSS": ["GBPJPY", "EURJPY", "EURGBP", "AUDJPY", "NZDUSD"],
@@ -134,7 +145,8 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
     else:
         f_raw = p - (q / b)
         
-    f_kelly = max(0, f_raw) * KELLY_FRACTION * size_mult
+    params = get_dynamic_risk_params()
+    f_kelly = max(0, f_raw) * params["kelly_fraction"] * size_mult
     
     # Enforce the 2% maximum absolute risk cap per idea
     risk_dollars = equity * min(f_kelly, RISK_BUDGET_PCT)

@@ -1,0 +1,9 @@
+{
+  "symbol": "EURJPY",
+  "direction": "BUY",
+  "conviction": 0.7058,
+  "hmm_state": "RANGE",
+  "atr": 0.09400000000000423,
+  "timestamp": 1777901663,
+  "version": "v19.5-AUDIT"
+}

@@ -27,7 +27,7 @@ def fire_synthetic_ping():
     # Construct the signal matching the v17.5 schema
     signal_payload = {
         "symbol": "EURUSD",
-        "direction": "BUY",  # Matching discord_sniper.py enum
+        "direction": "BUY",  # Matching discord_listener.py enum
         "conviction": 0.99,
         "hmm_state": "BULL",
         "calculated_lot_size": 0.01,  # Telemetry

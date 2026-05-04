@@ -1,43 +1,44 @@
 {
   "symbol": "XAUUSD",
-  "prediction": 1,
-  "conviction": 0.5,
-  "reasoning": "Fail-safe neutral \u2014 endpoint unavailable.",
-  "timestamp": 1777483837.883294,
+  "prediction": 0,
+  "conviction": 0.5215249658485815,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777912964.903293,
   "weights": {
-    "W_rsi": -0.6215722560882568,
-    "W_macd": -0.016835840418934822,
-    "Wy_trend": -0.042268600314855576,
-    "B_bbpos": -0.2780197858810425,
-    "S_struct": 0.0,
-    "WHL_vol": -0.04130345582962036
+    "xgb_p": -0.030102276422682272,
+    "kronos_p": 0.00788201631972131,
+    "hmm_state": 0.15206010458956362,
+    "faiss_sim": -0.11535382003015009,
+    "macro_sent": 0.3085941170475042,
+    "macro_risk": 0.3198810431775277,
+    "catalyst": -0.06612661912072047
   },
   "top_pos": [
     [
-      "S_struct",
-      0.0
+      "macro_risk",
+      0.3198810431775277
     ],
     [
-      "W_macd",
-      -0.016835840418934822
+      "macro_sent",
+      0.3085941170475042
     ],
     [
-      "WHL_vol",
-      -0.04130345582962036
+      "hmm_state",
+      0.15206010458956362
     ]
   ],
   "top_neg": [
     [
-      "Wy_trend",
-      -0.042268600314855576
+      "xgb_p",
+      -0.030102276422682272
     ],
     [
-      "B_bbpos",
-      -0.2780197858810425
+      "catalyst",
+      -0.06612661912072047
     ],
     [
-      "W_rsi",
-      -0.6215722560882568
+      "faiss_sim",
+      -0.11535382003015009
     ]
   ],
   "concept_drift": false

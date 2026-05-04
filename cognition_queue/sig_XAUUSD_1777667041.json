@@ -1,0 +1,10 @@
+{
+  "symbol": "XAUUSD",
+  "direction": "SELL",
+  "conviction": 0.1522,
+  "kronos_conviction": 0.1522,
+  "hmm_state": "BEAR",
+  "atr": 7.38857142857127,
+  "timestamp": 1777667041,
+  "version": "v17.9-PROD"
+}

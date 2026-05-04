@@ -100,8 +100,17 @@ class MultiHeadAttention(nn.Module):
     if self.use_per_dim_scale: query = self.per_dim_scale(query)
     if decode_cache is not None:
       start = decode_cache.next_index[0]; end = start + n_patches
-      decode_cache.key[:, start:end] = key; decode_cache.value[:, start:end] = value
-      key = decode_cache.key; value = decode_cache.value
+      
+      # Directive 2: TurboQuant KV Cache Compression (4-bit simulated storage)
+      decode_cache.key[:, start:end] = key
+      # Only compress 'value' as per directive
+      compressed_v = decode_cache.compress_value(value)
+      decode_cache.value[:, start:end] = compressed_v
+      
+      key = decode_cache.key
+      # Decompress for attention calculation
+      value = decode_cache.decompress_value(decode_cache.value)
+      
       decode_cache.next_index += n_patches; decode_cache.num_masked = num_masked
       attn_mask = make_attn_mask(n_patches, num_masked, next_index, decode_cache.value.shape[1])
     else: attn_mask = make_attn_mask(n_patches, num_masked)

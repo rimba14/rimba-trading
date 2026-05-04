@@ -39,28 +39,38 @@ import gitagent_utils as utils
 CACHE_LIB = "oracle_cache"
 MODEL_PATH = "google/timesfm-2.5-200m-pytorch"
 
+import gc
+if torch:
+    torch.set_num_threads(4)
+
 _MODEL = None
+QUANT_PATH = "C:/Sentinel_Project/data/timesfm_quantized.pt"
 
 def init_model():
     global _MODEL
-    if _MODEL is None and TimesFM_2p5_200M_torch is not None:
-        try:
-            print("[TIMESFM] Loading Risk Oracle (2.5 200M Torch)...")
-            # Call from_pretrained on the class
-            _MODEL = TimesFM_2p5_200M_torch.from_pretrained(MODEL_PATH)
-            
-            config = ForecastConfig(
-                max_context=1024,
-                max_horizon=48,
-                normalize_inputs=True,
-                use_continuous_quantile_head=True
-            )
-            print(f"[TIMESFM] Compiling with config: {config}")
-            _MODEL.compile(config)
-            print("[TIMESFM] Oracle Initialized and Compiled.")
-        except Exception as e:
-            print(f"[TIMESFM] Initialization/Compilation Failed: {e}")
-            _MODEL = None
+    if _MODEL is not None:
+        return _MODEL
+        
+    if TimesFM_2p5_200M_torch is None:
+        return None
+
+    try:
+        # Directive 3: Hard-Lock the Bridge Loader
+        # Ensure file exists and is greater than 1MB (1,000,000 bytes)
+        if not os.path.exists(QUANT_PATH) or os.path.getsize(QUANT_PATH) < 1000000:
+            print(f"CRITICAL ERROR: Quantized TimesFM artifact missing or corrupted at {QUANT_PATH}")
+            print("Please run 'python compile_quantized_models.py' first to generate valid model artifacts.")
+            sys.exit(1)
+
+        print(f"[TIMESFM] Loading Pre-Quantized Model from {QUANT_PATH}...")
+        _MODEL = torch.load(QUANT_PATH, weights_only=False)
+        print("[TIMESFM] Pre-Quantized Model Loaded Successfully.")
+        print("[TIMESFM] Oracle Operational (Q4.12 Optimized).")
+    except Exception as e:
+        print(f"[TIMESFM] CRITICAL: Model Loading Failed: {e}")
+        import traceback
+        print(traceback.format_exc())
+        sys.exit(1)
     return _MODEL
 
 def update_risk_cache(symbol: str, ohlcv_df: pd.DataFrame):
@@ -83,6 +93,10 @@ def update_risk_cache(symbol: str, ohlcv_df: pd.DataFrame):
         mean_val = np.mean(close_raw)
         std_val = np.std(close_raw) + 1e-9
         close_prices = (close_raw - mean_val) / std_val
+        
+        # Directive 1: Strict Input Normalization (v18.7)
+        # Bounding to [-5.0, 5.0] to prevent Q4.12 fixed-point clipping at 7.99
+        close_prices = np.clip(close_prices, -5.0, 5.0)
         
         # Inference
         print(f"[TIMESFM] Running inference for {symbol} (Input Normalized)...")

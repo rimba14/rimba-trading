@@ -7,6 +7,7 @@ import onnxruntime as ort
 import logging
 import traceback
 import torch
+import safetensors
 
 # Inject Kronos Repo Path
 KRONOS_REPO_PATH = r"C:\Sentinel_Project\kronos_repo"
@@ -15,7 +16,11 @@ if KRONOS_REPO_PATH not in sys.path:
 
 try:
     from model.kronos import KronosTokenizer
-except ImportError:
+except ImportError as e:
+    logging.error(f"[KRONOS_BOOT_ERR] Failed to import KronosTokenizer: {e}")
+    KronosTokenizer = None
+except Exception as e:
+    logging.error(f"[KRONOS_BOOT_ERR] Unexpected error importing KronosTokenizer: {e}")
     KronosTokenizer = None
 
 # Inject project path
@@ -24,9 +29,34 @@ import git_arctic
 import gitagent_utils as utils
 
 # Configuration
-ONNX_PATH = r"C:\Sentinel_Project\kronos_int8.onnx"
+QUANT_PATH = r"C:\Sentinel_Project\data\kronos_quantized.pt"
 CACHE_LIB = "oracle_cache"
 TEMPERATURE = 3.0 # Stretch conviction signals
+
+_MODEL = None
+
+def init_model():
+    global _MODEL
+    if _MODEL is not None:
+        return _MODEL
+
+    try:
+        # Directive 3: Hard-Lock the Bridge Loader
+        if not os.path.exists(QUANT_PATH) or os.path.getsize(QUANT_PATH) < 1000000:
+            print(f"CRITICAL ERROR: Quantized Kronos artifact missing or corrupted at {QUANT_PATH}")
+            print("Please run 'python compile_quantized_models.py' first to generate valid model artifacts.")
+            sys.exit(1)
+
+        print(f"[KRONOS] Loading Pre-Quantized Model from {QUANT_PATH}...")
+        _MODEL = torch.load(QUANT_PATH, weights_only=False)
+        _MODEL.eval()
+        print("[KRONOS] Pre-Quantized Model Loaded Successfully.")
+    except Exception as e:
+        print(f"[KRONOS] CRITICAL: Model Loading Failed: {e}")
+        import traceback
+        print(traceback.format_exc())
+        sys.exit(1)
+    return _MODEL
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [KRONOS_BRIDGE] %(message)s')
@@ -40,23 +70,18 @@ def calc_time_stamps(x_timestamp):
     time_df['month'] = x_timestamp.dt.month
     return time_df
 
-class KronosONNXBridge:
+class KronosBridge:
     def __init__(self):
-        self.model_path = ONNX_PATH
+        self.model = None
         self.tokenizer_path = "NeoQuasar/Kronos-Tokenizer-base"
-        self.session = None
         self.tokenizer = None
-        self._init_session()
+        self._init_components()
         self.store = git_arctic.get_arctic()
 
-    def _init_session(self):
+    def _init_components(self):
         try:
-            # 1. Init ONNX
-            if os.path.exists(self.model_path):
-                self.session = ort.InferenceSession(self.model_path, providers=['CPUExecutionProvider'])
-                logging.info("ONNX Session Ready.")
-            else:
-                logging.error(f"Model not found at {self.model_path}")
+            # 1. Init PyTorch Model via Hard-Lock
+            self.model = init_model()
             
             # 2. Init Tokenizer
             if KronosTokenizer:
@@ -65,8 +90,8 @@ class KronosONNXBridge:
             else:
                 logging.error("KronosTokenizer class not found.")
         except Exception as e:
-            logging.error(f"Session/Tokenizer Init Failed: {e}")
-            return None
+            logging.error(f"Bridge Components Init Failed: {e}")
+            sys.exit(1)
 
     def get_wake_up_gate(self, symbol: str) -> bool:
         """
@@ -150,12 +175,12 @@ class KronosONNXBridge:
             return
 
         # 2. Ensemble Execution (Passed Gate)
-        if self.session is None:
-            logging.error(f"CRITICAL: Inference requested for {symbol} but ONNX session is OFFLINE.")
+        if self.model is None:
+            logging.error(f"CRITICAL: Inference requested for {symbol} but Model is OFFLINE.")
             return
 
         try:
-            # 3. Prepare ONNX Inputs
+            # 3. Prepare Inputs
             price_cols = ['open', 'high', 'low', 'close']
             vol_col = 'tick_volume' # MT5 specific
             amt_col = 'real_volume'
@@ -180,18 +205,18 @@ class KronosONNXBridge:
             x_std = np.std(x_raw, axis=0) + 1e-9 # Prevent div by zero
             x_norm = (x_raw - x_mean) / x_std
             
-            # Clamp outliers to ensure stable gradients
-            x_norm = np.clip(x_norm, -3.0, 3.0)
+            # Clamp outliers to ensure stable gradients and prevent Q4.12 fixed-point clipping
+            x_norm = np.clip(x_norm, -5.0, 5.0)
             
             x_tensor = torch.from_numpy(x_norm[np.newaxis, :]).float()
             if self.tokenizer:
                 with torch.no_grad():
                     z_indices = self.tokenizer.encode(x_tensor, half=True)
-                s1_ids = z_indices[0].numpy().astype(np.int64)
-                s2_ids = z_indices[1].numpy().astype(np.int64)
+                s1_ids = z_indices[0].long()
+                s2_ids = z_indices[1].long()
             else:
-                s1_ids = np.zeros((1, 512), dtype=np.int64)
-                s2_ids = np.zeros((1, 512), dtype=np.int64)
+                s1_ids = torch.zeros((1, 512), dtype=torch.long)
+                s2_ids = torch.zeros((1, 512), dtype=torch.long)
             
             # Directive 2: Normalize Time-Stamps (Prevent 0.50 Collapse)
             time_df = calc_time_stamps(df['time'].tail(512))
@@ -205,24 +230,27 @@ class KronosONNXBridge:
             stamp = time_df.values.astype(np.float32)
             if len(stamp) < 512:
                 stamp = np.pad(stamp, ((512 - len(stamp), 0), (0, 0)), mode='edge')
-            stamp = stamp[np.newaxis, :]
+            stamp_tensor = torch.from_numpy(stamp[np.newaxis, :]).float()
             
             # Inference
-            outputs = self.session.run(None, {
-                's1_ids': s1_ids,
-                's2_ids': s2_ids,
-                'stamp': stamp
-            })
+            with torch.no_grad():
+                outputs = self.model(s1_ids, s2_ids, stamp_tensor)
             
             # 4. Extract Meaningful Probability
             # Get logits for the LAST step (prediction for next step)
-            s1_logits = torch.from_numpy(outputs[0][:, -1, :])
-            s2_logits = torch.from_numpy(outputs[1][:, -1, :])
+            s1_logits = outputs[0][:, -1, :]
+            s2_logits = outputs[1][:, -1, :]
             
             # Greedy decode next token
             next_s1 = torch.argmax(s1_logits, dim=-1, keepdim=True)
             next_s2 = torch.argmax(s2_logits, dim=-1, keepdim=True)
             
+            # Initialize defaults
+            base_atr = 0.0
+            mu = 0.0
+            signal = 0.0
+            kronos_raw = 0.5
+
             if self.tokenizer:
                 with torch.no_grad():
                     # Decode tokens back to normalized space
@@ -239,7 +267,6 @@ class KronosONNXBridge:
                     mu = (pred_close_raw - curr_close_raw) / (curr_close_raw + 1e-9)
                     
                     # 2. Calculate Recent Volatility (ATR)
-                    # Use the already calculated base_atr from below (moving it up)
                     highs = df['high'].tail(100).values
                     lows = df['low'].tail(100).values
                     closes = df['close'].tail(100).values
@@ -260,10 +287,6 @@ class KronosONNXBridge:
                     
                     # Clamp output to [0.01, 0.99] to maintain resolution
                     kronos_raw = np.clip(kronos_raw, 0.01, 0.99)
-            else:
-                kronos_raw = 0.5
-                mu = 0.0
-                signal = 0.0
 
             # ATR already calculated above as base_atr
             # (Redundant block removed)
@@ -301,7 +324,7 @@ def update_cognition_cache(symbol: str, ohlcv_df: pd.DataFrame):
     """Bridge function for sentinel_slow_loop.py"""
     global _BRIDGE
     if _BRIDGE is None:
-        _BRIDGE = KronosONNXBridge()
+        _BRIDGE = KronosBridge()
     _BRIDGE.run_inference(symbol, ohlcv_df)
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+{
+  "event": "THESIS_DRIVEN_LIQUIDATION",
+  "symbol": "EURNOK",
+  "ticket": 1248785567,
+  "direction": "SELL",
+  "hmm_state": "BULL",
+  "live_p": 0.5,
+  "pnl": -1.41,
+  "timestamp": 1777862669,
+  "version": "v17.9-PROD"
+}

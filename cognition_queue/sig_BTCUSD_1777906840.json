@@ -1,0 +1,9 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "BUY",
+  "conviction": 0.700663,
+  "hmm_state": "RANGE",
+  "atr": 310.5364285714282,
+  "timestamp": 1777906824,
+  "version": "v19.5-AUDIT"
+}

@@ -1,0 +1,45 @@
+{
+  "symbol": "USDTRY",
+  "prediction": -1,
+  "conviction": 0.2942,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777909942.444849,
+  "weights": {
+    "xgb_p": -0.05089786148399614,
+    "kronos_p": -0.0075966860573323325,
+    "hmm_state": -0.16892461200843342,
+    "faiss_sim": -0.118924041469792,
+    "macro_sent": 0.30500260932201767,
+    "macro_risk": 0.3108088700393626,
+    "catalyst": -0.03784531622504337
+  },
+  "top_pos": [
+    [
+      "macro_risk",
+      0.3108088700393626
+    ],
+    [
+      "macro_sent",
+      0.30500260932201767
+    ],
+    [
+      "kronos_p",
+      -0.0075966860573323325
+    ]
+  ],
+  "top_neg": [
+    [
+      "xgb_p",
+      -0.05089786148399614
+    ],
+    [
+      "faiss_sim",
+      -0.118924041469792
+    ],
+    [
+      "hmm_state",
+      -0.16892461200843342
+    ]
+  ],
+  "concept_drift": false
+}

@@ -46,13 +46,12 @@ class MachineBListener:
         direction = signal.get("direction")
         conviction = signal.get("conviction", 0.0)
         
-        # 1. Amnesia Lock: Check for existing positions in the same direction
+        # 1. Amnesia Lock: Check for any existing positions for this symbol
         existing = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
         if existing:
-            mt5_dir = 0 if direction == "BUY" else 1
-            if any(pos.type == mt5_dir for pos in existing):
-                logger.warning(f"[{symbol}] Amnesia Lock: {direction} position already exists. Skipping.")
-                return False
+            # v17.3 Strict Mode: No hedging. One position max per asset.
+            logger.warning(f"[{symbol}] Amnesia Lock: Position already exists. Blocking {direction} to prevent hedging.")
+            return False
 
         # 2. Risk Sanitization (Fractional Kelly Sizing)
         # In v17.2, sizing is calculated on Machine A and passed in the signal
@@ -100,18 +99,24 @@ class MachineBListener:
         # In a real Firebase setup, we'd use:
         # self.ref.listen(self.signal_callback)
         
-        # For now, we poll a local placeholder directory to simulate the bridge
-        SIGNAL_QUEUE = Path("C:/Sentinel_Project/pending_signals")
+        # Decoupled Action Queue (Phase 5)
+        SIGNAL_QUEUE = Path("C:/Sentinel_Project/action_queue")
         os.makedirs(SIGNAL_QUEUE, exist_ok=True)
         
         while True:
             try:
                 signals = list(SIGNAL_QUEUE.glob("*.json"))
                 for sig_file in signals:
-                    with open(sig_file, 'r') as f:
-                        signal = json.load(f)
-                    if self.execute_trade(signal):
-                        os.remove(sig_file)
+                    try:
+                        with open(sig_file, 'r') as f:
+                            signal = json.load(f)
+                        # Execute and then ALWAYS remove the file to prevent logic loops
+                        self.execute_trade(signal)
+                        if os.path.exists(sig_file):
+                            os.remove(sig_file)
+                    except Exception as e:
+                        logger.error(f"Error processing {sig_file.name}: {e}")
+                        if os.path.exists(sig_file): os.remove(sig_file)
                 time.sleep(1)
             except Exception as e:
                 logger.error(f"Listener Error: {e}")

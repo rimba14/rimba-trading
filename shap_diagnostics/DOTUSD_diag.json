@@ -1,0 +1,45 @@
+{
+  "symbol": "DOTUSD",
+  "prediction": 1,
+  "conviction": 0.6920465827618066,
+  "reasoning": "Math Meta-Model Bypass",
+  "timestamp": 1777909907.821354,
+  "weights": {
+    "xgb_p": -0.08155477357843217,
+    "kronos_p": -0.04114528030344054,
+    "hmm_state": -0.16289121659019629,
+    "faiss_sim": -0.11399055996745039,
+    "macro_sent": 0.24969405237576034,
+    "macro_risk": 0.26227885066283585,
+    "catalyst": -0.08844526367107786
+  },
+  "top_pos": [
+    [
+      "macro_risk",
+      0.26227885066283585
+    ],
+    [
+      "macro_sent",
+      0.24969405237576034
+    ],
+    [
+      "kronos_p",
+      -0.04114528030344054
+    ]
+  ],
+  "top_neg": [
+    [
+      "catalyst",
+      -0.08844526367107786
+    ],
+    [
+      "faiss_sim",
+      -0.11399055996745039
+    ],
+    [
+      "hmm_state",
+      -0.16289121659019629
+    ]
+  ],
+  "concept_drift": false
+}

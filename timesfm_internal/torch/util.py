@@ -9,6 +9,20 @@ class DecodeCache:
   num_masked: torch.Tensor
   key: torch.Tensor
   value: torch.Tensor
+  
+  # Directive 2: TurboQuant KV Cache Compression (4-bit allocation for values)
+  def compress_value(self, v_tensor: torch.Tensor):
+      """Compresses the value tensor to 4-bit simulated representation to prevent OOM."""
+      # In this implementation, we use a scaling factor to squeeze into 4-bit range [0, 15]
+      # then cast to int8 for storage.
+      self.v_scale = (v_tensor.max() - v_tensor.min()) / 15.0 + 1e-9
+      self.v_min = v_tensor.min()
+      compressed = ((v_tensor - self.v_min) / self.v_scale).to(torch.uint8)
+      return compressed
+
+  def decompress_value(self, compressed_v: torch.Tensor):
+      """Decompresses 4-bit values back to float32 for attention calculation."""
+      return compressed_v.to(torch.float32) * self.v_scale + self.v_min
 
 def update_running_stats(n, mu, sigma, x, mask):
   is_legit = torch.logical_not(mask)

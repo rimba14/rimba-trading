@@ -1,0 +1,9 @@
+{
+  "symbol": "USDTRY",
+  "direction": "SELL",
+  "conviction": 0.2942,
+  "hmm_state": "BEAR",
+  "atr": 0.004230000000000241,
+  "timestamp": 1777909141,
+  "version": "v19.5-AUDIT"
+}

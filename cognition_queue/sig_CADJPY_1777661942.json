@@ -1,0 +1,10 @@
+{
+  "symbol": "CADJPY",
+  "direction": "SELL",
+  "conviction": 0.1502,
+  "kronos_conviction": 0.1502,
+  "hmm_state": "BEAR",
+  "atr": 0.07778571428571521,
+  "timestamp": 1777661942,
+  "version": "v17.9-PROD"
+}

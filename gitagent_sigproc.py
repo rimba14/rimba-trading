@@ -7,6 +7,18 @@ import time
 from typing import Dict, Any
 import MetaTrader5 as mt5
 
+def strict_normalize(series: np.ndarray) -> np.ndarray:
+    """
+    v19.1 Directive: Strict Input Normalization.
+    Transforms raw input into bounded range [-5.0, +5.0] to prevent fixed-point clipping.
+    Uses Z-score normalization followed by hard clipping.
+    """
+    if len(series) < 2: return series
+    mean = np.mean(series)
+    std = np.std(series) + 1e-9
+    norm = (series - mean) / std
+    return np.clip(norm, -5.0, 5.0)
+
 def get_m15_dataframe(symbol, count=200):
     """Utility to fetch MT5 M15 rates and return a cleaned DataFrame."""
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, count)
