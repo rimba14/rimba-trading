@@ -1,0 +1,11 @@
+{
+  "event": "[TIME STOP / THESIS DECAY]",
+  "symbol": "BTCUSD",
+  "ticket": 1259945729,
+  "direction": "SELL",
+  "hmm_state": "RANGE",
+  "live_p": 0.5724005321079296,
+  "pnl": 1.11,
+  "timestamp": 1777985349,
+  "version": "v19.9-PROD"
+}

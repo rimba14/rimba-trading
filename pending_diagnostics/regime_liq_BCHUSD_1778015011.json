@@ -1,0 +1,11 @@
+{
+  "event": "[HARD VIRTUAL STOP]",
+  "symbol": "BCHUSD",
+  "ticket": 1261967924,
+  "direction": "SELL",
+  "hmm_state": "BEAR",
+  "live_p": 0.2953113518562617,
+  "pnl": -11.45,
+  "timestamp": 1778015011,
+  "version": "v20.4-PROD"
+}

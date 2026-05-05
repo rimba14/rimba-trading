@@ -1,6 +1,6 @@
 """
 fastapi_sniper.py - Adaptive Sentinel Direct HTTP Execution Bridge (Machine B)
-Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v19.2)
+Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v20.4)
 
 Exposes a REST API via FastAPI to receive signals from the Oracle VPS Brain.
 Replaces the unstable Discord WebSocket bridge to eliminate 'Amnesia Locks'.
@@ -221,7 +221,7 @@ def perform_mt5_trade(symbol, direction, lot, p):
         "type": order_type,
         "price": price,
         "magic": MAGIC_NUMBER,
-        "comment": f"SENTINEL_v18.4_P{p:.2f}",
+        "comment": f"SENTINEL_v20.4_P{p:.2f}",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }

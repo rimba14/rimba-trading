@@ -1,0 +1,11 @@
+{
+  "event": "[HARD VIRTUAL STOP]",
+  "symbol": "SP500",
+  "ticket": 1258689793,
+  "direction": "SELL",
+  "hmm_state": "RANGE",
+  "live_p": 0.2942,
+  "pnl": -2.68,
+  "timestamp": 1777982999,
+  "version": "v19.9-PROD"
+}

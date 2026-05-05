@@ -1,0 +1,11 @@
+{
+  "event": "[HARD VIRTUAL STOP]",
+  "symbol": "LTCUSD",
+  "ticket": 1261967943,
+  "direction": "SELL",
+  "hmm_state": "RANGE",
+  "live_p": 0.05789474335734013,
+  "pnl": -20.6,
+  "timestamp": 1778014219,
+  "version": "v20.4-PROD"
+}

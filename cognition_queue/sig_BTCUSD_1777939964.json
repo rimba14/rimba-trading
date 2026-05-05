@@ -1,0 +1,9 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "SELL",
+  "conviction": 0.295915,
+  "hmm_state": "RANGE",
+  "atr": 156.79214285714468,
+  "timestamp": 1777939948,
+  "version": "v19.5-AUDIT"
+}

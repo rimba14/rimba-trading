@@ -1,5 +1,5 @@
 """
-profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v19.2)
+profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v20.4)
 Constitution: PSR tripwire, Virtual Stop monitoring, SRE halt,
               Dynamic Regime Liquidation (Phase 5 Constitution + Phase 6 SRE Patch).
 """
@@ -23,6 +23,8 @@ load_dotenv()
 MAGIC_NUMBER       = 142
 MAGIC_LEGACY       = 17300
 PSR_THRESHOLD      = 0.80
+PSR_EPOCH          = 1746090457 # v19.2 Phase 5 SRE Reset
+WEBHOOK_URL        = os.getenv("DISCORD_WEBHOOK_URL")
 DIAG_DIR           = Path("C:/Sentinel_Project/pending_diagnostics")
 LOG_DIR            = Path(r"C:\sentinel_logs")
 ARCTIC_DIR         = "lmdb://C:/Sentinel_Project/data/arctic_cache"
@@ -36,7 +38,7 @@ logging.basicConfig(
     force=True,
     handlers=[
         logging.StreamHandler(io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")),
-        logging.FileHandler(str(LOG_DIR / "profit_manager_v19_2.log"), encoding="utf-8"),
+        logging.FileHandler(str(LOG_DIR / "profit_manager_v20_4.log"), encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("ProfitManager")
@@ -138,6 +140,10 @@ def _notify(msg: str):
         pass
 
 
+_LIQUIDATION_COOLDOWN = {}
+LIQUIDATION_COOLDOWN_S = 60.0
+REGIME_POLL_INTERVAL = 5.0
+
 class SentinelProfitManager:
     """
     v17.9: PSR auditor + SRE halt tripwire + Dynamic Regime Liquidation.
@@ -153,7 +159,7 @@ class SentinelProfitManager:
             logger.critical("[FATAL] MT5 init failed.")
             sys.exit(1)
         self._last_regime_check: dict[str, float] = {}
-        logger.info("Profit Manager v17.9 online — Dynamic Regime Liquidation ACTIVE | PSR Tripwire ARMED.")
+        logger.info("Profit Manager v20.4 online — Dynamic Regime Liquidation ACTIVE | PSR Tripwire ARMED.")
 
     # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
     def calculate_psr(self, returns: list) -> float:
@@ -240,28 +246,84 @@ class SentinelProfitManager:
             hmm_state = oracle_data["hmm_state"]
             live_p    = oracle_data["conviction"]
 
-            pos_direction = "BUY" if pos.type == 0 else "SELL"
+            atr       = oracle_data["atr"]
 
-            # Directive 2: Thesis-Driven Liquidation (v19.7 Autonomous SRE Patch)
-            # Liquidate LONG if P <= 0.48
-            # Liquidate SHORT if P >= 0.52
+            pos_direction = "BUY" if pos.type == 0 else "SELL"
+            price_open = pos.price_open
             
-            is_violation = False
-            if pos_direction == "BUY" and live_p <= 0.48:
-                is_violation = True
-            elif pos_direction == "SELL" and live_p >= 0.52:
-                is_violation = True
+            # Fetch live price for Virtual Stops
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick:
+                continue
+            current_price = tick.bid if pos.type == 0 else tick.ask
             
-            if is_violation:
-                reason = (
-                    f"THESIS_DRIVEN_LIQUIDATION | "
-                    f"Live_P={live_p:.4f} | "
-                    f"Ticket={pos.ticket} | PnL={pos.profit:+.2f}"
-                )
-                logger.warning(
-                    f"🚨 [AUTONOMOUS SRE] Liquidated {symbol} due to Thesis Decay (P={live_p:.4f}). "
-                    f"PnL={pos.profit:+.2f}"
-                )
+            # Define Risk Multipliers locally (Sentinel Standard v20.4)
+            symbol_up = symbol.upper()
+            if symbol_up in ["GER40", "NAS100", "SP500", "US30", "UK100", "FRA40", "AUS200", "STOXX50"]:
+                SL_ATR_MULT = 4.0
+                TP_ATR_MULT = 8.0
+            elif symbol_up in ["BTCUSD", "ETHUSD", "LTCUSD", "BCHUSD", "ADAUSD", "XRPUSD", "SOLUSD", "XAUUSD", "XAGUSD"]:
+                SL_ATR_MULT = 4.0
+                TP_ATR_MULT = 8.0
+            elif len(symbol_up) == 6 and symbol_up[-3:] in ["USD", "EUR", "JPY", "GBP", "CHF", "AUD", "CAD", "NZD"]:
+                SL_ATR_MULT = 6.0
+                TP_ATR_MULT = 12.0
+            else:
+                SL_ATR_MULT = 3.0
+                TP_ATR_MULT = 6.0
+            
+            # Directive: Asymmetric Regime Risk (v20.4)
+            if hmm_state == "BULL":
+                SL_ATR_MULT = 3.0
+                TP_ATR_MULT = 6.0
+            elif hmm_state == "BEAR":
+                SL_ATR_MULT = 4.0
+                TP_ATR_MULT = 3.0
+            
+            sl_level = price_open - (SL_ATR_MULT * atr) if pos.type == 0 else price_open + (SL_ATR_MULT * atr)
+            tp_level = price_open + (TP_ATR_MULT * atr) if pos.type == 0 else price_open - (TP_ATR_MULT * atr)
+            
+            # Time-Weighted Conviction Decay
+            days_open = (now - pos.time) / 86400.0
+            adjusted_p = live_p - (days_open * 0.01) if pos_direction == "BUY" else live_p + (days_open * 0.01)
+
+            # Check Virtual Stop Breaches
+            is_sl_hit = (pos.type == 0 and current_price <= sl_level) or (pos.type == 1 and current_price >= sl_level)
+            is_tp_hit = (pos.type == 0 and current_price >= tp_level) or (pos.type == 1 and current_price <= tp_level)
+
+            # Directive 3: Consolidation Tolerance (v20.4)
+            is_regime_conflict = False
+            if pos_direction == "BUY" and hmm_state == "BEAR":
+                is_regime_conflict = True
+            elif pos_direction == "SELL" and hmm_state == "BULL":
+                is_regime_conflict = True
+            # Note: A shift to RANGE is considered consolidation (DO NOT liquidate).
+
+            # Time-Weighted Conviction Decay
+            is_thesis_decay = False
+            # Suspend thesis decay liquidation during RANGE consolidation
+            if hmm_state != "RANGE":
+                if pos_direction == "BUY" and adjusted_p <= 0.48:
+                    is_thesis_decay = True
+                elif pos_direction == "SELL" and adjusted_p >= 0.52:
+                    is_thesis_decay = True
+            
+            if is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit:
+                if is_regime_conflict:
+                    reason_type = "[REGIME CONFLICT]"
+                    trigger_desc = f"{pos_direction} vs {hmm_state}"
+                elif is_thesis_decay:
+                    reason_type = "[TIME STOP / THESIS DECAY]"
+                    trigger_desc = f"Adj_P={adjusted_p:.4f} (Raw={live_p:.4f}, Days={days_open:.2f})"
+                elif is_sl_hit:
+                    reason_type = "[HARD VIRTUAL STOP]"
+                    trigger_desc = f"Price={current_price:.5f} hit SL={sl_level:.5f}"
+                else:
+                    reason_type = "[THESIS COMPLETE / VTP]"
+                    trigger_desc = f"Price={current_price:.5f} hit TP={tp_level:.5f}"
+
+                reason = f"{reason_type} | {trigger_desc} | Ticket={pos.ticket} | PnL={pos.profit:+.2f}"
+                logger.warning(f"🚨 [AUTONOMOUS SRE] Liquidated {symbol} due to {reason_type}. PnL={pos.profit:+.2f}")
 
                 # Step 1: Push exit signal to Discord (VPS orchestrator awareness)
                 _push_exit_signal(pos, reason)
@@ -272,7 +334,7 @@ class SentinelProfitManager:
                     _LIQUIDATION_COOLDOWN[pos.ticket] = now
                     # Drop SRE diagnostic ticket for audit trail
                     diag = {
-                        "event":      "THESIS_DRIVEN_LIQUIDATION",
+                        "event":      reason_type,
                         "symbol":     symbol,
                         "ticket":     pos.ticket,
                         "direction":  pos_direction,
@@ -280,48 +342,13 @@ class SentinelProfitManager:
                         "live_p":     live_p,
                         "pnl":        round(pos.profit, 2),
                         "timestamp":  int(now),
-                        "version":    "v17.9-PROD",
+                        "version":    "v20.4-PROD",
                     }
                     diag_path = DIAG_DIR / f"regime_liq_{symbol}_{int(now)}.json"
                     with open(diag_path, "w") as fh:
                         json.dump(diag, fh, indent=2)
                     logger.info(f"[DIAG] SRE ticket written: {diag_path.name}")
             else:
-                # ── Virtual SL/TP Tracking (Phase 5 Stabilization) ────────────
-                # If thesis is still intact (aligned OR high conviction), check virtual stops.
-                try:
-                    # hmm_data was already fetched above
-                    row = _get_live_hmm_state(symbol) # Refresh for row access if needed or use local
-                    # To minimize hits, we reuse hmm_data if possible
-                    # But for ATR we need the row again.
-                    from arcticdb import Arctic
-                    store = Arctic(ARCTIC_DIR)
-                    lib   = store["oracle_cache"]
-                    item  = lib.read(f"{symbol}_meta")
-                    row   = item.data.iloc[-1]
-                    atr   = float(row["atr"])
-                    
-                    price_open = pos.price_open
-                    tick = mt5.symbol_info_tick(symbol)
-                    if tick:
-                        current = tick.bid if pos.type == 0 else tick.ask
-                        
-                        sl_level = price_open - (SL_ATR_MULT * atr) if pos.type == 0 else price_open + (SL_ATR_MULT * atr)
-                        tp_level = price_open + (TP_ATR_MULT * atr) if pos.type == 0 else price_open - (TP_ATR_MULT * atr)
-                        
-                        is_sl_hit = (pos.type == 0 and current <= sl_level) or (pos.type == 1 and current >= sl_level)
-                        is_tp_hit = (pos.type == 0 and current >= tp_level) or (pos.type == 1 and current <= tp_level)
-                        
-                        if is_sl_hit or is_tp_hit:
-                            reason = "VIRTUAL_SL_HIT" if is_sl_hit else "VIRTUAL_TP_HIT"
-                            logger.info(f"[VIRTUAL_EXIT] {symbol} #{pos.ticket} hit {reason}. Price={current:.5f}, Level={sl_level if is_sl_hit else tp_level:.5f}")
-                            _push_exit_signal(pos, reason)
-                            _market_close(pos)
-                            continue
-
-                except Exception as e:
-                    logger.debug(f"[VIRTUAL_STOP_ERR] {symbol}: {e}")
-
                 logger.debug(f"[REGIME_OK] {symbol} #{pos.ticket}: {pos_direction} | HMM={hmm_state} — aligned.")
 
     # ── Monitor Loop ──────────────────────────────────────────────────────────

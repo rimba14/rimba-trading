@@ -1,8 +1,9 @@
 import os
 import time
 from dotenv import load_dotenv
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import ApiCreds, OrderArgs
+from py_clob_client_v2.client import ClobClient
+from py_clob_client_v2.clob_types import ApiCreds, OrderArgs
+from py_clob_client_v2 import SignatureTypeV2, Side, OrderType
 
 load_dotenv()
 
@@ -23,7 +24,7 @@ class PolyExecutionAgent:
                 self.base_url,
                 key=self.private_key,
                 chain_id=137,
-                signature_type=1, # 1 for Proxy/Magic/Gnosis
+                signature_type=SignatureTypeV2.POLY_PROXY, 
                 funder="0x0e0502ccE5A641dFC3B61a258C0523DC3Ad70923"
             )
 
@@ -36,61 +37,64 @@ class PolyExecutionAgent:
                 api_passphrase=self.api_passphrase
             )
             self.client.set_api_creds(creds)
-            print(f"🔐 [EXECUTION] SDK Client Initialized for Signer: {self.client.get_address()}")
+            print(f"LOCK [EXECUTION] SDK Client Initialized for Signer: {self.client.get_address()}")
         else:
             self.client = None
-            print("⚠️ [EXECUTION] No Private Key found. Operations restricted to SIMULATION.")
+            print("WARNING [EXECUTION] No Private Key found. Operations restricted to SIMULATION.")
 
     def place_order(self, token_id: str, side: str, amount_usd: float, limit_price: float):
         """Places a signed limit order via the SDK."""
         if not self.client:
-            print(f"🏗️ [SIMULATION] {side} {amount_usd}USD of {token_id} @ {limit_price}")
+            print(f"SIMULATION [SIMULATION] {side} {amount_usd}USD of {token_id} @ {limit_price}")
             return None
             
         size = round(amount_usd / limit_price, 2)
         
-        print(f"📦 [EXECUTION] Submitting {side} for {token_id[:10]}... (Size: {size})")
+        print(f"ORDER [EXECUTION] Submitting {side} for {token_id[:10]}... (Size: {size})")
         
         try:
-            # 1. Create the signed order object
+            # V2 unified create and post order
+            side_enum = Side.BUY if side.upper() == "BUY" else Side.SELL
+            
             order_args = OrderArgs(
                 price=limit_price,
                 size=size,
-                side=side,
+                side=side_enum,
                 token_id=token_id
             )
-            signed_order = self.client.create_order(order_args)
             
-            # 2. POST the signed order to the exchange
-            print(f"📡 [POSTING] Broadcasting signed order to exchange...")
-            resp = self.client.post_order(signed_order)
+            print(f"POST [POSTING] Broadcasting signed order to V2 exchange...")
+            resp = self.client.create_and_post_order(
+                order_args=order_args,
+                order_type=OrderType.GTC
+            )
             
-            print(f"📦 [DEBUG] API Response: {resp}")
+            print(f"DEBUG [DEBUG] API Response: {resp}")
             
             if resp and resp.get("success"):
-                print(f"✅ [SUCCESS] Order Accepted | OrderID: {resp.get('orderID')}")
+                print(f"SUCCESS [SUCCESS] Order Accepted | OrderID: {resp.get('orderID')}")
                 return resp
             else:
-                print(f"❌ [API_ERR] Order rejected: {resp}")
+                print(f"ERROR [API_ERR] Order rejected: {resp}")
                 return None
                 
         except Exception as e:
-            print(f"❌ [CRITICAL] SDK Exception during execution: {e}")
+            print(f"CRITICAL [CRITICAL] SDK Exception during execution: {e}")
             return None
 
     def cancel_all_orders(self):
         """Cancels all open orders for the account."""
         if not self.client:
-            print("🏗️ [SIMULATION] Cancelling all orders...")
+            print("SIMULATION [SIMULATION] Cancelling all orders...")
             return True
             
-        print("📡 [CANCEL] Sending cancel_all request...")
+        print("CANCEL [CANCEL] Sending cancel_all request...")
         try:
             resp = self.client.cancel_all()
-            print(f"✅ [SUCCESS] Cancel Response: {resp}")
+            print(f"SUCCESS [SUCCESS] Cancel Response: {resp}")
             return resp
         except Exception as e:
-            print(f"❌ [CRITICAL] SDK Exception during cancellation: {e}")
+            print(f"CRITICAL [CRITICAL] SDK Exception during cancellation: {e}")
             return None
 
 if __name__ == "__main__":

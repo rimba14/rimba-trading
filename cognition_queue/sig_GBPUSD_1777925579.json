@@ -1,0 +1,9 @@
+{
+  "symbol": "GBPUSD",
+  "direction": "SELL",
+  "conviction": 0.2942,
+  "hmm_state": "BEAR",
+  "atr": 0.0007049999999999557,
+  "timestamp": 1777925563,
+  "version": "v19.5-AUDIT"
+}

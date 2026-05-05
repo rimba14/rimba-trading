@@ -1,0 +1,11 @@
+{
+  "event": "[TIME STOP / THESIS DECAY]",
+  "symbol": "NAS100",
+  "ticket": 1259749142,
+  "direction": "SELL",
+  "hmm_state": "BULL",
+  "live_p": 0.6145471299164451,
+  "pnl": -0.86,
+  "timestamp": 1777983060,
+  "version": "v19.9-PROD"
+}

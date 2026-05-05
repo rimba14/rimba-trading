@@ -1,0 +1,9 @@
+{
+  "symbol": "GER40",
+  "direction": "SELL",
+  "conviction": 0.2942,
+  "hmm_state": "RANGE",
+  "atr": 32.482142857142854,
+  "timestamp": 1777965885,
+  "version": "v19.5-AUDIT"
+}

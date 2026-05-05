@@ -1,24 +1,33 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v19.8 - Strict Net Exposure) 🚨
-CRITICAL AI INSTRUCTION: This document is the absolute, unquestionable authority for the Adaptive Sentinel architecture. Purge all prior architectures (v1.0 through v19.7). Strictly obey v19.8.
-Phase 1: Architecture, Synchronization & Scalability
-Event-Driven Architecture: The system rejects Time Bars. Inference is triggered by fiat value thresholds.
-Absolute State Isolation: sentinel_slow_loop.py MUST process assets via asyncio.gather(). All feature vectors MUST be instantiated from scratch INSIDE each coroutine.
-ASCII Auditing: Conviction scores logged at 6-decimal precision. All terminal logging MUST be strictly ASCII-compliant to prevent Windows charmap crashes.
-OOM Prevention: 1. Hard-cap PyTorch threads via torch.set_num_threads(4). 2. Pre-quantize models offline; live bridges are strictly "Load-Only" (.pt files > 1MB). 3. Aggressive garbage collection (gc.collect()) after model I/O.
-Phase 2: Perception, Cognition & Self-Evolving Execution
-Gemini Deep Research Oracle: Background process outputs macro_state.json every 24h.
-Mathematical Meta-Model & Soft Scaling: Meta-Model calculates Conviction ($P$).
-Soft Confidence Blend: MoE reasoning applies a soft floor: strength = max(0.6, reasoning_conf) to preserve the ML signal (p_final = 0.5 + (base_p - 0.5) * strength).
-I/O Hardening: .pkl Meta-Model MUST be loaded using joblib.load() within a try/except block catching I/O race conditions.
-SHAP Diagnostic Hardening: Explicitly cast feature vectors to 2D matrices (reshape(1, -1)). Set check_additivity=False.
-Black Swan Override: If black_swan_risk > 0.85, force $P=0.0$ and broadcast global LIQUIDATE ALL.
-Phase 3: Contextual Memory Audit (FAISS SQ8)
-SQ8 Episodic Memory: Query RAM-loaded FAISS utilizing INT8/SQ8. Live vectors remain FP32 for query execution against Legend/Graveyard templates.
-Phase 4: Dynamic Risk Gates & Hyperopt Sizing
-Optuna Bayesian Engine: Continuously hunts for optimal Epistemic Gate (e.g., > 0.82) and Kelly Fraction parameters.
-The Amnesia & Mutual Exclusion Lock (CRITICAL): The system operates on STRICT NET EXPOSURE (No Hedging). Query MT5 for existing positions. If a position exists in the same direction, DO NOT execute new sub-orders. If a position exists in the opposite direction, the system MUST autonomously liquidate the opposite position before executing the new signal.
-Phase 5: Decoupled Bridge & Virtual Execution
-The Cognitive Engine: Runs EXCLUSIVELY as headless daemon processes. Format signals as JSON payloads pushed via HTTP POST to the local Execution node.
-Autonomous Profit Manager: Execution scripts MUST NEVER attach physical SL/TP orders to the broker. profit_manager.py MUST run as an autonomous, endless background polling loop. If a Long's $P \le 0.48$ or a Short's $P \ge 0.52$, the manager MUST instantly and autonomously fire a liquidation payload without any human-in-the-loop authorization.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v20.5 - Operation Phoenix) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures (v1.0 through v20.4). Strictly obey v20.5.
+
+Phase 1: Architecture, Isolation & Routing
+Event-Driven: Inference triggered by fiat value thresholds.
+State Isolation: Asynchronous asyncio.gather() loops. Zero state-bleed.
+OOM Prevention: Pre-quantized .pt models, PyTorch thread capping, aggressive garbage collection.
+Clean State Boot: System restarts MUST forcefully kill all prior Python PIDs to prevent zombie process contention.
+
+Phase 2: Perception, Cognition & Regime Hysteresis
+The HMM Oracle & Debouncing: The Official Regime (BULL, BEAR, RANGE) can only change if the underlying HMM registers the new state for 3 consecutive cycles.
+Mathematical Meta-Model: Uses Soft Confidence Blending max(0.6, MoE).
+
+Phase 3: Contextual Memory (FAISS SQ8)
+RAM-loaded FAISS index utilizing INT8/SQ8 for AVX2 hardware acceleration.
+
+Phase 4: Dynamic Strategy Routing & FFT Filtering
+BULL/BEAR: Route to Trend-Following Meta-Model. Gate: Optuna Baseline (e.g., 0.82).
+RANGE: Route to Mean-Reversion Sub-Routine (Bollinger + RSI fading). Gate: 0.75.
+FFT Coherence Lock: RANGE strategies MUST ONLY fire if the TimesNet FFT Amplitude proves strong cyclical coherence.
+Strict Net Exposure: No Hedging. Autonomously liquidate opposite positions before executing new signals.
+
+Phase 5: Autonomous Profit Manager & Asymmetric Exits
+Holds Virtual Exits in RAM. Physical MT5 stops are strictly prohibited.
+URL Routing: Bridge payloads MUST dynamically append the correct endpoint (/execute_trade or /liquidate) to a clean base .env URL to prevent 404s.
+Asymmetric Regime Risk:
+In BULL Regimes: Use VSL = 3.0 ATR, VTP = 6.0 ATR.
+In BEAR Regimes: Use Asymmetric Exits to survive bear-market rallies. VSL = 4.0 ATR, VTP = 3.0 ATR.
+Liquidation Matrix: Fire liquidation IF: 1) Time-adjusted Thesis Decays, 2) Hard Virtual Stop breached, 3) Virtual Take-Profit breached, 4) Polar Regime Conflict.
+SRE Tripwire: If PSR drops below 0.80, halt execution and drop a diagnostic ticket.
+
 Phase 6: Constitution Maintenance
-Scorched Earth Rule: Autonomously DELETE older versions of this prompt to prevent RAG contamination. There can be only ONE Master_Prompt.txt.
+Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

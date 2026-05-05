@@ -1,0 +1,168 @@
+:root {
+  --bg: #0a0b0e;
+  --card: #14171c;
+  --text: #ffffff;
+  --accent: #3b82f6;
+  --yes: #10b981;
+  --no: #ef4444;
+  --border: #2d333b;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.highlight {
+  color: var(--accent);
+}
+
+.status-badge {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  border: 1px solid var(--accent);
+}
+
+.trade-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  position: relative;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.card-label {
+  font-size: 0.7rem;
+  color: #8b949e;
+  font-weight: bold;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.bet-status {
+  font-size: 5rem;
+  font-weight: 900;
+  margin-bottom: 1rem;
+}
+
+.bet-status.YES { color: var(--yes); }
+.bet-status.NO { color: var(--no); }
+
+.last-action {
+  font-size: 0.9rem;
+  color: #8b949e;
+}
+
+.last-action span {
+  color: var(--text);
+}
+
+.meter-container {
+  background: #000;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 2rem 0;
+}
+
+.meter-fill {
+  background: var(--accent);
+  height: 100%;
+  transition: width 0.5s ease-in-out;
+  box-shadow: 0 0 20px var(--accent);
+}
+
+.sources-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.source-card {
+  text-align: center;
+}
+
+.source-name {
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.source-prob {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+
+.source-condition {
+  color: #8b949e;
+  font-size: 0.9rem;
+}
+
+footer {
+  margin-top: auto;
+  padding-top: 3rem;
+  display: flex;
+  justify-content: space-between;
+  color: #484f58;
+  font-size: 0.8rem;
+}
+
+.loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: bold;
+}

@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v19.5 - Information-Driven Matrix)
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v20.4 - Dynamic Asset-Class ATRs)
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -20,9 +20,32 @@ import itertools
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+
+# Global dicts for Regime Hysteresis (v20.4)
+_HMM_HISTORY = defaultdict(list)
+_OFFICIAL_REGIME = {}
+
+def calculate_mean_reversion_score(rsi, bbpos):
+    """
+    Mean-Reversion Conviction Score (0.0 to 1.0)
+    0.0 = Strong SELL (Overbought, Price > Upper BB)
+    1.0 = Strong BUY (Oversold, Price < Lower BB)
+    """
+    rsi_norm = max(0.0, min(1.0, rsi / 100.0))
+    bb_norm = max(0.0, min(1.0, bbpos))
+    
+    # Score where 1.0 means STRONG BUY, 0.0 means STRONG SELL
+    score = ((1.0 - rsi_norm) + (1.0 - bb_norm)) / 2.0
+    
+    # If RSI is not in extremes, dampen the conviction heavily towards 0.5
+    if 30 < rsi < 70:
+        score = 0.5 + (score - 0.5) * 0.3
+        
+    return score
 import MetaTrader5 as mt5
 import xgboost as xgb
 import shap
@@ -358,6 +381,7 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
         p_final = 0.500
         logging.warning(f"[{symbol}] MoE Fail-Safe engaged -> Neutral 0.500")
     else:
+        # v20.4: Soft Confidence Blending max(0.6, MoE)
         strength = max(0.6, reasoning_conf)
         p_final = 0.5 + (base_p - 0.5) * strength
 
@@ -395,7 +419,8 @@ def push_to_orchestrator(payload: Dict[str, Any]):
 
     try:
         logging.info(f"[COGNITION_ROUTE] Pushing {payload['symbol']} signal to Direct HTTP Bridge...")
-        _post_to_sniper(payload, endpoint_url)
+        target_url = f"{endpoint_url.rstrip('/')}/execute_trade"
+        _post_to_sniper(payload, target_url)
         logging.info(f"[COGNITION_ROUTE] [OK] Signal delivered to Execution Node successfully.")
     except Exception as e:
         logging.error(f"[COGNITION_ROUTE] [FAIL] Failed to push signal to HTTP Bridge: {e}")
@@ -421,7 +446,8 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         macro_path = PROJECT_ROOT / "data" / "macro_state.json"
         if macro_path.exists():
             with open(macro_path, "r") as f:
-                m_state = json.load(f)
+                # v20.4: Strict localized instantiation via copy.deepcopy()
+                m_state = copy.deepcopy(json.load(f))
                 if m_state.get("black_swan_risk", 0.0) > 0.85:
                     logging.critical(f"[BLACK_SWAN_OVERRIDE] Risk={m_state['black_swan_risk']:.2f} > 0.85. Forcing Conviction to 0.0 and LIQUIDATING ALL.")
                     push_to_orchestrator({
@@ -479,9 +505,23 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars after FracDiff. Skipping.")
             return
 
-        hmm_state, hmm_prob, _ = hmm.get_current_state(df_m15["close"].values)
+        raw_hmm_state, hmm_prob, _ = hmm.get_current_state(df_m15["close"].values)
+        
+        # Directive 1: Regime Hysteresis (Debouncing)
+        if symbol not in _OFFICIAL_REGIME:
+            _OFFICIAL_REGIME[symbol] = raw_hmm_state
+            
+        _HMM_HISTORY[symbol].append(raw_hmm_state)
+        if len(_HMM_HISTORY[symbol]) > 3:
+            _HMM_HISTORY[symbol].pop(0)
+            
+        if len(_HMM_HISTORY[symbol]) == 3 and all(s == raw_hmm_state for s in _HMM_HISTORY[symbol]):
+            _OFFICIAL_REGIME[symbol] = raw_hmm_state
+            
+        hmm_state = _OFFICIAL_REGIME[symbol]
+        
         atr = utils.calculate_atr(df_m15)
-        logging.info(f"[HMM] {symbol}: {hmm_state} (p={hmm_prob:.3f})")
+        logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f})")
 
         _arctic_write(f"{symbol}_hmm", pd.DataFrame([{
             "state": hmm_state,
@@ -514,7 +554,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
         primary_dir = 1 if p_blend > 0.55 else (-1 if p_blend < 0.45 else 0)
 
-        live_vec = sigproc.get_feature_vector(symbol)
+        live_vec = copy.deepcopy(sigproc.get_feature_vector(symbol))
         mem_matches = _MEMORY.retrieve(live_vec, k=3)
         is_legend = False; is_graveyard = False; max_sim = 0.0
         for match in mem_matches:
@@ -543,7 +583,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             z_xgb = (float(x_prob) - 0.5) / 0.15
             z_kronos = (float(k_prob) - 0.5) / 0.15
 
-        local_meta_features = {
+        local_meta_features = copy.deepcopy({
             "hmm_state": hmm_state,
             "xgb_p": z_xgb,
             "kronos_p": z_kronos,
@@ -551,14 +591,34 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0))
-        }
+        })
         
-        meta_p = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
-
-        if not is_legend:
-            if hmm_state == "BEAR" and primary_dir == 1: meta_p = 0.50
-            elif hmm_state == "BULL" and primary_dir == -1: meta_p = 0.50
-        if is_graveyard: meta_p = 0.50
+        # Directive 4: FFT Coherence Lock (v20.4)
+        if hmm_state == "RANGE":
+            rsi = df_ta["W_rsi"].iloc[-1]
+            bbpos = df_ta["B_bbpos"].iloc[-1]
+            
+            # Fetch FFT Power from sigproc (as proxy for TimesNet amplitude)
+            prices = df_m15['close'].values
+            fft_data = fft_cycle_detector(prices)
+            fft_amplitude = fft_data.get('power', 0.0)
+            
+            if fft_amplitude > 1.5:
+                meta_p = calculate_mean_reversion_score(rsi, bbpos)
+                logging.info(f"[{symbol}] ROUTING: Mean-Reversion (RSI={rsi:.1f}, BB={bbpos:.2f}, FFT={fft_amplitude:.2f}) -> P={meta_p:.4f}")
+            else:
+                meta_p = 0.50
+                logging.info(f"[{symbol}] [FILTER] RANGE detected, but FFT Coherence low ({fft_amplitude:.2f}). Trade suppressed.")
+            
+            primary_dir = 1 if meta_p > 0.5 else -1
+            current_gate = 0.75
+        else:
+            meta_p = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
+            current_gate = EPISTEMIC_GATE
+            if not is_legend:
+                if hmm_state == "BEAR" and primary_dir == 1: meta_p = 0.50
+                elif hmm_state == "BULL" and primary_dir == -1: meta_p = 0.50
+            if is_graveyard: meta_p = 0.50
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
@@ -571,7 +631,8 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         }]))
 
         norm_p = 0.5 if meta_p == 0.0 else abs(meta_p - 0.5) + 0.5
-        if norm_p >= EPISTEMIC_GATE and primary_dir != 0:
+        
+        if norm_p >= current_gate and primary_dir != 0:
             signal_dir = "BUY" if primary_dir == 1 else "SELL"
             push_to_orchestrator({
                 "symbol": symbol,
@@ -580,11 +641,14 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 "hmm_state": hmm_state,
                 "atr": float(atr),
                 "timestamp": int(time.time()),
-                "version": "v19.5-AUDIT",
+                "version": "v20.4-PROD",
             })
             logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | HMM={hmm_state}")
         else:
-            logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < {EPISTEMIC_GATE}. Suppressed.")
+            if hmm_state == "RANGE":
+                logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
+            else:
+                logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < {current_gate}. Suppressed.")
 
         timesfm_bridge.update_risk_cache(symbol, df_ml)
 
@@ -610,6 +674,7 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
             logging.info(f"[MICRO-BATCH] Processing batch {batch_idx} ({len(batch)} assets)...")
             tasks = [loop.run_in_executor(ex, update_slow_oracles, s, force_refresh) for s in batch]
             await asyncio.gather(*tasks)
+            gc.collect() # Aggressive GC (Phase 1)
             if len(batch) == 10:
                 await asyncio.sleep(0.5)
             batch_idx += 1
@@ -620,7 +685,7 @@ def execute_historical_backfill(watchlist: list):
 
 def main():
     logging.info("=" * 60)
-    logging.info("  ADAPTIVE SENTINEL SLOW LOOP v19.5 - Information-Driven Build")
+    logging.info("  ADAPTIVE SENTINEL SLOW LOOP v20.4 - Dynamic ATR Build")
     logging.info("  Machine A (Oracle VPS - Brain) | NEVER touches broker directly")
     logging.info("  Rate-limit: tenacity jittered backoff | ASCII Logging: True")
     logging.info("=" * 60)

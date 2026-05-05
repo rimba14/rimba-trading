@@ -15,38 +15,39 @@ class PolyDiagnostic:
         self.funder = "0x0e0502ccE5A641dFC3B61a258C0523DC3Ad70923"
         self.base_url = "https://clob.polymarket.com"
 
-        from py_clob_client.client import ClobClient
-        from py_clob_client.clob_types import ApiCreds
+        from py_clob_client_v2.client import ClobClient
+        from py_clob_client_v2.clob_types import ApiCreds
+        from py_clob_client_v2 import SignatureTypeV2
         
         self.client = ClobClient(
             self.base_url,
             key=self.private_key,
             chain_id=137,
-            signature_type=1,
+            signature_type=SignatureTypeV2.POLY_PROXY,
             funder=self.funder
         )
         self.client.set_api_creds(ApiCreds(self.api_key, self.api_secret, self.api_passphrase))
 
     def check_account_profile(self):
-        print(f"🔍 Signer Address: {self.client.get_address()}")
-        print(f"🔍 Funder Address: {self.funder}")
+        print(f"SEARCH Signer Address: {self.client.get_address()}")
+        print(f"SEARCH Funder Address: {self.funder}")
         try:
             # Check API connectivity
             status = self.client.get_ok()
-            print(f"✅ Connectivity Status: {status}")
+            print(f"OK Connectivity Status: {status}")
             
             # Get account orders
-            orders = self.client.get_orders()
-            print(f"✅ SUCCESS: Orders Found ({len(orders)} active).")
+            orders = self.client.get_open_orders()
+            print(f"OK SUCCESS: Orders Found ({len(orders)} active).")
             print(json.dumps(orders, indent=2))
             
             # Get trades
-            print("\n📈 [TRADES] Checking for recent match history...")
+            print("\nTRADES [TRADES] Checking for recent match history...")
             trades = self.client.get_trades()
             print(json.dumps(trades, indent=2))
             
         except Exception as e:
-            print(f"❌ CRITICAL: {e}")
+            print(f"CRITICAL: {e}")
 
 if __name__ == "__main__":
     diag = PolyDiagnostic()

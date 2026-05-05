@@ -1,0 +1,11 @@
+{
+  "event": "[HARD VIRTUAL STOP]",
+  "symbol": "SOLUSD",
+  "ticket": 1256865163,
+  "direction": "SELL",
+  "hmm_state": "BEAR",
+  "live_p": 0.5,
+  "pnl": -28.96,
+  "timestamp": 1777966802,
+  "version": "v19.9-PROD"
+}

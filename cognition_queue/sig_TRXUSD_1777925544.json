@@ -1,0 +1,9 @@
+{
+  "symbol": "TRXUSD",
+  "direction": "SELL",
+  "conviction": 0.2942,
+  "hmm_state": "RANGE",
+  "atr": 0.0005928571428571371,
+  "timestamp": 1777925528,
+  "version": "v19.5-AUDIT"
+}

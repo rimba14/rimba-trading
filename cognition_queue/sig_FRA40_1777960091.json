@@ -1,0 +1,9 @@
+{
+  "symbol": "FRA40",
+  "direction": "SELL",
+  "conviction": 0.294695,
+  "hmm_state": "BEAR",
+  "atr": 6.254285714285678,
+  "timestamp": 1777960075,
+  "version": "v19.5-AUDIT"
+}

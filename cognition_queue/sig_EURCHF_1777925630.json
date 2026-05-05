@@ -1,0 +1,9 @@
+{
+  "symbol": "EURCHF",
+  "direction": "BUY",
+  "conviction": 0.7058,
+  "hmm_state": "RANGE",
+  "atr": 0.00028928571428569035,
+  "timestamp": 1777925613,
+  "version": "v19.5-AUDIT"
+}

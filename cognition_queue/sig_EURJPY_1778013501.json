@@ -1,0 +1,9 @@
+{
+  "symbol": "EURJPY",
+  "direction": "SELL",
+  "conviction": 0.2942,
+  "hmm_state": "BEAR",
+  "atr": 0.03928571428571104,
+  "timestamp": 1778013485,
+  "version": "v20.3-PROD"
+}

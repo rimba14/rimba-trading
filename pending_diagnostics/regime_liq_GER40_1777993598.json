@@ -1,0 +1,11 @@
+{
+  "event": "[TIME STOP / THESIS DECAY]",
+  "symbol": "GER40",
+  "ticket": 1260437195,
+  "direction": "SELL",
+  "hmm_state": "BULL",
+  "live_p": 0.5216267593153325,
+  "pnl": -4.11,
+  "timestamp": 1777993598,
+  "version": "v19.9-PROD"
+}

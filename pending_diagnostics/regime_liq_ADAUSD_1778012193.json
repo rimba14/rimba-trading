@@ -1,0 +1,11 @@
+{
+  "event": "[HARD VIRTUAL STOP]",
+  "symbol": "ADAUSD",
+  "ticket": 1261905663,
+  "direction": "SELL",
+  "hmm_state": "RANGE",
+  "live_p": 0.10307702671571972,
+  "pnl": -34.77,
+  "timestamp": 1778012193,
+  "version": "v19.9-PROD"
+}
