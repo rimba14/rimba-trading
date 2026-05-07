@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.0 - Alpha Engineering)
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.4 - Data Warm-Up)
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -310,8 +310,12 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
             p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
             decision = "BUY" if direction == 1 else ("SELL" if direction == -1 else "HOLD")
             return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Bypass"}
+        except ValueError as e:
+            # v22.4: NaN / dimension errors are FATAL — propagate upward, do NOT default.
+            logging.critical(f"[ROUTER] [FATAL] {symbol}: Structural inference failure: {e}")
+            raise
         except Exception as e:
-            logging.error(f"[ROUTER] Math Meta-Model failure for {symbol}: {e}")
+            logging.error(f"[ROUTER] Math Meta-Model transient failure for {symbol}: {e}")
     else:
         logging.error(f"[ROUTER] Math Meta-Model not initialized for {symbol}.")
 
@@ -546,9 +550,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             df_ml[col] = np.pad(norm_fd, (pad, 0), mode="edge")
         logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied.")
 
-        # ── v22.0: Institutional Feature Engineering ──────────────────────
+        # ── v22.4: Institutional Feature Engineering (Data Warm-Up) ────────
         # Append frac_diff_price (López de Prado), FFT spectral amplitudes,
         # and Cross-Sectional Rank to the ML feature vector.
+        # CRITICAL: We pass the FULL df_ml (2000+ ticks) to provide the 50-bar
+        # historical buffer that rolling windows need to produce valid floats.
         vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
         current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
         
@@ -560,11 +566,21 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             fft_top_k=3,
             cs_rank=current_rank,
         )
-        logging.info(f"[{symbol}] v22.0 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]")
+        logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]")
 
         df_ml = df_ml.dropna()
         if len(df_ml) < 512:
             logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars after FracDiff. Skipping.")
+            return
+
+        # ── v22.4: Data Warm-Up Validation ──────────────────────────────────
+        # Verify the FINAL ROW has valid (non-NaN) Alpha Factory features.
+        # If rolling windows produced NaNs, we MUST halt — never default to 0.0.
+        _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
+        _final_row = df_ml.iloc[-1]
+        _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
+        if _nan_features:
+            logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
             return
 
         raw_hmm_state, hmm_prob, _ = hmm.get_current_state(df_m15["close"].values)
@@ -645,6 +661,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             z_xgb = (float(x_prob) - 0.5) / 0.15
             z_kronos = (float(k_prob) - 0.5) / 0.15
 
+        # v22.4: Extract Alpha Factory features from the FINAL ROW only.
+        # The upstream warm-up validation guarantees these are valid floats.
+        _final = df_ml.iloc[-1]
         local_meta_features = copy.deepcopy({
             "hmm_state": hmm_state,
             "xgb_p": z_xgb,
@@ -653,13 +672,19 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
-            # v22.1: Alpha Factory features injected from the live df_ml
-            "frac_diff": float(df_ml["frac_diff_price"].iloc[-1]) if "frac_diff_price" in df_ml.columns else 0.0,
-            "fft_amp_1": float(df_ml["fft_amp_1"].iloc[-1]) if "fft_amp_1" in df_ml.columns else 0.0,
-            "fft_amp_2": float(df_ml["fft_amp_2"].iloc[-1]) if "fft_amp_2" in df_ml.columns else 0.0,
-            "fft_amp_3": float(df_ml["fft_amp_3"].iloc[-1]) if "fft_amp_3" in df_ml.columns else 0.0,
+            # v22.4: Alpha Factory features from validated final row
+            "frac_diff": float(_final.get("frac_diff_price", 0.0)),
+            "fft_amp_1": float(_final.get("fft_amp_1", 0.0)),
+            "fft_amp_2": float(_final.get("fft_amp_2", 0.0)),
+            "fft_amp_3": float(_final.get("fft_amp_3", 0.0)),
             "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
         })
+        
+        # v22.4: Final NaN sweep — if ANY numeric feature is NaN, halt.
+        _nan_vals = {k: v for k, v in local_meta_features.items() if isinstance(v, float) and (np.isnan(v) or np.isinf(v))}
+        if _nan_vals:
+            logging.critical(f"[FATAL] {symbol}: NaN/Inf detected in meta-features: {list(_nan_vals.keys())}. Halting inference.")
+            return
         
         # Directive 4: FFT Coherence Lock (v20.4)
         if hmm_state == "RANGE":

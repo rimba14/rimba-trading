@@ -1,6 +1,6 @@
 """
 math_meta_model.py - SRE Patch (LLM Execution Bypass)
-Zero-Latency, Zero-Cost Mathematical Meta-Model (v22.3)
+Zero-Latency, Zero-Cost Mathematical Meta-Model (v22.4 - Data Warm-Up)
 """
 
 import os
@@ -105,15 +105,27 @@ class MathMetaModel:
             float(features.get("fft_amp_3", 0.0)),
             float(features.get("cs_rank", 0.5)),
         ]])
+        # v22.4: NaN Validation — NEVER silently default to 0.500
+        if np.any(np.isnan(X_live)) or np.any(np.isinf(X_live)):
+            nan_indices = np.argwhere(np.isnan(X_live) | np.isinf(X_live)).flatten()
+            feature_names = ["xgb_p", "kronos_p", "hmm", "faiss_sim", "macro_sent", 
+                           "macro_risk", "catalyst", "frac_diff", "fft_amp_1", 
+                           "fft_amp_2", "fft_amp_3", "cs_rank"]
+            bad_features = [feature_names[i] for i in nan_indices if i < len(feature_names)]
+            logger.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {bad_features}. Halting inference.")
+            raise ValueError(f"NaN/Inf in feature vector for {symbol}: {bad_features}")
         
         try:
             prediction = self.model.predict(X_live)[0]
             conviction = float(np.clip(prediction, 0.0, 1.0))
             logger.info(f"[META-MODEL] {symbol} prediction: {conviction:.6f}")
             return conviction
+        except ValueError as e:
+            logger.critical(f"[FATAL] {symbol}: XGBoost prediction failed with ValueError: {e}. NOT defaulting to 0.500.")
+            raise
         except Exception as e:
-            logger.error(f"[META-MODEL] Prediction failed: {e}. Defaulting to 0.500.")
-            return 0.500
+            logger.critical(f"[FATAL] {symbol}: XGBoost prediction failed: {e}. NOT defaulting to 0.500.")
+            raise
 
     def train_from_diagnostics(self):
         """Legacy 12-feature training."""
