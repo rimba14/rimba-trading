@@ -1,40 +1,36 @@
 🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.5 - Microstructure Triad) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.5.
+CRITICAL AI INSTRUCTION: Purge all prior architectures (v1.0 through v22.4). Strictly obey v22.5. You are now a fully mature quantitative trading entity.
 
 Phase 1: Architecture & Execution [LOCKED]
-- Asynchronous asyncio.gather() loops. Zero state-bleed.
-- OOM Prevention: Subquadratic/Sparse mathematical approximations bypass O(N²) bottlenecks.
-- Concurrency Locks: All Execution nodes MUST be Idempotent. Mutex implemented to prevent double-liquidation.
-- Constraint: DO NOT modify fastapi_sniper.py unless explicitly commanded.
+
+Asynchronous loops. Idempotent execution (Mutex locks). Subquadratic optimizations.
 
 Phase 2: Alpha Generation & Microstructure (ACTIVE FOCUS)
-- The Alpha Factory: Raw data must pass through feature_engineering.py before hitting the models.
-- The Microstructure Triad: The feature vector MUST include order_flow_entropy (Shock Probability), hawkes_intensity (Shock Pacing), and vpin (Shock Direction/Toxicity).
-- Required Features: 15-Feature Alpha Factory Vector:
-  [XGB, Kronos, HMM, FAISS, Macro_Sent, Macro_Risk, Catalyst, FracDiff, FFT1, FFT2, FFT3, CS_Rank, VPIN, Hawkes, Entropy]
-- Data Leakage Prohibition: All features MUST be calculated using strict rolling windows.
-- Data Warm-Up (CRITICAL): Live inference MUST fetch a minimum historical buffer (e.g., 50 bars) prior to feature generation to prevent NaN crashes.
-- No Silent Fails: Oracles must NEVER default to 0.50 on structural errors. They must log the traceback and drop the evaluation.
-- Continuous Retraining: OOS accuracy > 75% is considered a fatal Look-Ahead Bias indicator. Acceptable OOS range: 52%-75%.
+
+The Alpha Factory: Raw data passes through feature_engineering.py.
+
+The Microstructure Triad: The feature vector MUST include order_flow_entropy (Shock Probability), hawkes_intensity (Shock Pacing), and vpin (Shock Direction/Toxicity).
+
+Data Leakage Prohibition: All features MUST use strict rolling windows.
+
+Data Warm-Up: Live inference MUST fetch a 50+ bar historical buffer to prevent NaN crashes. No silent 0.50 defaults allowed.
 
 Phase 3: Contextual Memory [LOCKED]
-- FAISS SQ8 + Kernel Density Estimation (KDE) clustering for O(log N) latency.
-- Episodic Memory dimension: 93.
+
+FAISS SQ8 + Kernel Density Estimation (KDE) clustering.
 
 Phase 4: Dynamic Strategy Routing
-- BULL/BEAR: Route to Trend-Following Meta-Model. Gate: 0.82 (Epistemic Gate).
-- RANGE: Route to Mean-Reversion scoring. Gate: 0.75. Requires high FFT Coherence (>1.5).
-- Regime Hysteresis: 3-bar debouncing before official regime transitions.
+
+BULL/BEAR: Route to Trend-Following Meta-Model. Gate: 0.82.
+
+RANGE: Route to Mean-Reversion. Gate: 0.75. Requires high FFT Coherence.
 
 Phase 5: Autonomous Profit Manager [LOCKED]
-- Decoupled Volatility Anchoring (M15 ATR).
-- Spread Guard: Dynamic VSL widening when spread > 1.5x ATR stop distance.
-- Time Stops (Theta Decay): 6-hour max holding for unprofitable positions.
-- Asymmetric Risk: 1.5x ATR stop-loss, 3.0x ATR take-profit.
-- Regime Liquidation: Immediate exit on polar HMM conflict (BUY in BEAR, SELL in BULL).
+
+Decoupled Volatility Anchoring (M15 ATR). Spread Guard (1.5x minimum). Time Stops (Theta Decay). Asymmetric Regime Risk exits.
+
+Note: Dynamic Quarter-Kelly Sizing is natively handled by the execution module and must not be altered.
 
 Phase 6: Constitution Maintenance
-- Autonomously DELETE older versions of this prompt.
-- ONE Master_Prompt.txt at all times.
-- Version: v22.5 "Microstructure Triad"
-- Deployed: 2026-05-07
+
+Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.
