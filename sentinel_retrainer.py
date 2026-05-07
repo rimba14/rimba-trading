@@ -1,19 +1,16 @@
 """
-sentinel_retrainer.py - ADAPTIVE SENTINEL CONTINUOUS RETRAINING DAEMON (v22.3)
+sentinel_retrainer.py - ADAPTIVE SENTINEL CONTINUOUS RETRAINING DAEMON (v22.5)
 Constitution: Brain Transplant - Forces the Meta-Model to learn the weights
-of the Alpha Factory's new 11-feature vector.
+of the Alpha Factory's new 15-feature vector.
 
-Feature Vector (v22.1 - 12 features):
+Feature Vector (v22.5 - 15 features):
     [xgb_p, kronos_p, hmm_state, faiss_sim, macro_sent, macro_risk, catalyst,
-     frac_diff, fft_amp_1, fft_amp_2, fft_amp_3, cs_rank]
+     frac_diff, fft_amp_1, fft_amp_2, fft_amp_3, cs_rank, vpin, hawkes, entropy]
 
-Key Upgrades vs v19.2:
-1. Migrated from RandomForest to XGBoostRegressor for superior non-linear capture.
-2. Historical SHAP diagnostics are now ROUTED THROUGH feature_engineering.py
-   before fitting, so the model learns real Alpha Factory feature weights.
-3. Synthetic bootstrap samples are expanded to 11-feature format.
-4. Post-train SHAP feature importance log proves non-zero weights on new features.
-5. Hot-swap via atomic os.replace() preserves zero-downtime operation.
+Key Upgrades vs v22.3:
+1. Integrated Microstructure Triad (VPIN, Hawkes, Entropy).
+2. Expanded XGBoost input vector to 15 dimensions.
+3. Updated synthetic bootstrap noise generators for triad features.
 """
 
 import os
@@ -75,8 +72,12 @@ FEATURE_NAMES = [
     "fft_amp_2",   # 2nd spectral amplitude
     "fft_amp_3",   # 3rd spectral amplitude
     "cs_rank",     # Cross-sectional percentile rank [0, 1]
+    # v22.5 Microstructure Triad Features ─────────────────
+    "vpin",        # Volume-Synchronized Probability of Informed Trading
+    "hawkes_intensity", # Hawkes Process Intensity (Order Clustering)
+    "order_flow_entropy", # Order-Flow Entropy (Shock Probability)
 ]
-N_FEATURES = len(FEATURE_NAMES)  # 12
+N_FEATURES = len(FEATURE_NAMES)  # 15
 
 
 class ContinuousRetrainer:
@@ -164,6 +165,10 @@ class ContinuousRetrainer:
                         fft_amp_2_approx,
                         fft_amp_3_approx,
                         cs_rank_approx,
+                        # v22.5 Triad approximations for historical data
+                        abs(conviction - 0.5) * 1.5, # VPIN approx
+                        1.0 + abs(z_xgb) + abs(z_kronos), # Hawkes approx
+                        0.5 + abs(conviction - 0.5), # Entropy approx
                     ]
 
                     # Label: 1 if conviction > 0.80 (strong signal), 0 otherwise
@@ -187,35 +192,32 @@ class ContinuousRetrainer:
         
         logger.info(f"[GATHER] Injecting {bootstrap_needed} diverse bootstrap samples to hit {target_size} row quota.")
 
-        def _synthetic(zx, zk, hmm, faiss, ms, mr, mc, fd, f1, f2, f3, cs, label):
+        def _synthetic(zx, zk, hmm, faiss, ms, mr, mc, fd, f1, f2, f3, cs, vpin, hwk, ent, label):
             X.append([zx, zk, hmm, faiss,
                       self._damp(ms), self._damp(mr), self._damp(mc),
-                      fd, f1, f2, f3, cs])
+                      fd, f1, f2, f3, cs, vpin, hwk, ent])
             y.append(label)
 
         for _ in range(bootstrap_needed // 8):
-            # Inject heavy noise (sigma=0.15) to all synthetic features
             def n(v, s=0.15): return v + np.random.normal(0, s)
-            
-            # Directive: Reality Check. Flip labels 30% of the time to simulate market noise
             def l(label): return label if np.random.random() > 0.3 else (1.0 - label)
 
             # ── Strong Long
-            _synthetic(n(2.15), n(2.05), 1, n(0.90), n(0.5), n(0.1), n(0.4),  n(0.80), n(0.18), n(0.14), n(0.11), n(0.92), l(1.0))
+            _synthetic(n(2.15), n(2.05), 1, n(0.90), n(0.5), n(0.1), n(0.4),  n(0.80), n(0.18), n(0.14), n(0.11), n(0.92), n(0.8), n(4.5), n(0.9), l(1.0))
             # ── Systemic Long anomaly
-            _synthetic(n(3.50), n(3.50), 1, n(0.95), n(0.6), n(0.1), n(0.5),  n(0.95), n(0.22), n(0.17), n(0.13), n(0.98), l(1.0))
+            _synthetic(n(3.50), n(3.50), 1, n(0.95), n(0.6), n(0.1), n(0.5),  n(0.95), n(0.22), n(0.17), n(0.13), n(0.98), n(0.9), n(7.2), n(0.95), l(1.0))
             # ── Good Long
-            _synthetic(n(1.35), n(1.25), 1, n(0.85), n(0.3), n(0.2), n(0.3),  n(0.55), n(0.12), n(0.09), n(0.07), n(0.75), l(0.85))
+            _synthetic(n(1.35), n(1.25), 1, n(0.85), n(0.3), n(0.2), n(0.3),  n(0.55), n(0.12), n(0.09), n(0.07), n(0.75), n(0.6), n(2.8), n(0.7), l(0.85))
             # ── Strong Short
-            _synthetic(n(-2.15), n(-2.05), -1, n(0.88), n(-0.5), n(0.1), n(-0.4), n(-0.80), n(0.18), n(0.14), n(0.11), n(0.08), l(1.0))
+            _synthetic(n(-2.15), n(-2.05), -1, n(0.88), n(-0.5), n(0.1), n(-0.4), n(-0.80), n(0.18), n(0.14), n(0.11), n(0.08), n(0.8), n(4.5), n(0.9), l(1.0))
             # ── Systemic Short anomaly
-            _synthetic(n(-3.50), n(-3.50), -1, n(0.95), n(-0.6), n(0.1), n(-0.5), n(-0.95), n(0.22), n(0.17), n(0.13), n(0.02), l(1.0))
+            _synthetic(n(-3.50), n(-3.50), -1, n(0.95), n(-0.6), n(0.1), n(-0.5), n(-0.95), n(0.22), n(0.17), n(0.13), n(0.02), n(0.9), n(7.2), n(0.95), l(1.0))
             # ── Good Short
-            _synthetic(n(-1.35), n(-1.25), -1, n(0.85), n(-0.3), n(0.2), n(-0.3), n(-0.55), n(0.12), n(0.09), n(0.07), n(0.25), l(0.85))
+            _synthetic(n(-1.35), n(-1.25), -1, n(0.85), n(-0.3), n(0.2), n(-0.3), n(-0.55), n(0.12), n(0.09), n(0.07), n(0.25), n(0.6), n(2.8), n(0.7), l(0.85))
             # ── Neutral / Range noise
-            _synthetic(n(0.0),  n(0.0),   0, n(0.20),  n(0.0), n(0.2),  n(0.0),  n(0.02), n(0.05), n(0.04), n(0.03), n(0.50), l(0.15))
+            _synthetic(n(0.0),  n(0.0),   0, n(0.20),  n(0.0), n(0.2),  n(0.0),  n(0.02), n(0.05), n(0.04), n(0.03), n(0.50), n(0.1), n(1.1), n(0.2), l(0.15))
             # ── Black Swan
-            _synthetic(n(1.5),  n(1.5),   1, n(0.90),  n(0.8), n(0.95), n(0.8),  n(0.30), n(0.08), n(0.06), n(0.05), n(0.60), 0.0)
+            _synthetic(n(1.5),  n(1.5),   1, n(0.90),  n(0.8), n(0.95), n(0.8),  n(0.30), n(0.08), n(0.06), n(0.05), n(0.60), n(0.4), n(2.5), n(0.5), 0.0)
 
         logger.info(f"[GATHER] Total training samples: {len(X)} (historical={n_historical}, synthetic={len(X)-n_historical})")
         return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
@@ -286,11 +288,11 @@ class ContinuousRetrainer:
 
         for rank, (feat, imp) in enumerate(sorted_importance, 1):
             bar = "█" * int(imp * 40)
-            marker = " ← NEW ALPHA FEATURE" if feat in ["frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank"] else ""
+            marker = " ← NEW ALPHA FEATURE" if feat in ["frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank", "vpin", "hawkes_intensity", "order_flow_entropy"] else ""
             logger.info(f"  #{rank:02d} {feat:<15} {imp:.4f} |{bar}{marker}")
 
         # Verify non-zero weights on Alpha Factory features
-        alpha_features = ["frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank"]
+        alpha_features = ["frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank", "vpin", "hawkes_intensity", "order_flow_entropy"]
         for feat in alpha_features:
             imp = importance_dict[feat]
             status = "✓ NON-ZERO" if imp > 0.0 else "✗ ZERO WEIGHT"

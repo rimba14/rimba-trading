@@ -672,11 +672,14 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
-            # v22.4: Alpha Factory features from validated final row
+            # v22.5: Alpha Factory + Microstructure Triad features
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
             "fft_amp_1": float(_final.get("fft_amp_1", 0.0)),
             "fft_amp_2": float(_final.get("fft_amp_2", 0.0)),
             "fft_amp_3": float(_final.get("fft_amp_3", 0.0)),
+            "vpin": float(_final.get("vpin", 0.0)),
+            "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
+            "order_flow_entropy": float(_final.get("order_flow_entropy", 0.0)),
             "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
         })
         

@@ -1,46 +1,40 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.4 - Data Warm-Up) 🚨
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.5 - Microstructure Triad) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.5.
 
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.4.
+Phase 1: Architecture & Execution [LOCKED]
+- Asynchronous asyncio.gather() loops. Zero state-bleed.
+- OOM Prevention: Subquadratic/Sparse mathematical approximations bypass O(N²) bottlenecks.
+- Concurrency Locks: All Execution nodes MUST be Idempotent. Mutex implemented to prevent double-liquidation.
+- Constraint: DO NOT modify fastapi_sniper.py unless explicitly commanded.
 
-Phase 1: Architecture, Isolation & Subquadratic Scaling [LOCKED]
-  - Asynchronous asyncio.gather() loops. Zero state-bleed.
-  - OOM Prevention: Subquadratic/Sparse mathematical approximations bypass O(N²) bottlenecks.
-  - Concurrency Locks: All Execution nodes MUST be Idempotent. Mutex implemented to prevent double-liquidation.
-  - Constraint: DO NOT modify fastapi_sniper.py unless explicitly commanded.
+Phase 2: Alpha Generation & Microstructure (ACTIVE FOCUS)
+- The Alpha Factory: Raw data must pass through feature_engineering.py before hitting the models.
+- The Microstructure Triad: The feature vector MUST include order_flow_entropy (Shock Probability), hawkes_intensity (Shock Pacing), and vpin (Shock Direction/Toxicity).
+- Required Features: 15-Feature Alpha Factory Vector:
+  [XGB, Kronos, HMM, FAISS, Macro_Sent, Macro_Risk, Catalyst, FracDiff, FFT1, FFT2, FFT3, CS_Rank, VPIN, Hawkes, Entropy]
+- Data Leakage Prohibition: All features MUST be calculated using strict rolling windows.
+- Data Warm-Up (CRITICAL): Live inference MUST fetch a minimum historical buffer (e.g., 50 bars) prior to feature generation to prevent NaN crashes.
+- No Silent Fails: Oracles must NEVER default to 0.50 on structural errors. They must log the traceback and drop the evaluation.
+- Continuous Retraining: OOS accuracy > 75% is considered a fatal Look-Ahead Bias indicator. Acceptable OOS range: 52%-75%.
 
-Phase 2: Alpha Generation & Feature Engineering (ACTIVE FOCUS)
-  - The Alpha Factory: Raw data passes through feature_engineering.py before hitting the models.
-  - Data Leakage Prohibition: All features MUST be calculated using strict rolling windows.
-  - Data Warm-Up (CRITICAL): Live inference MUST fetch a minimum historical buffer (e.g., 50 bars)
-    prior to feature generation to prevent NaN crashes in rolling window calculations.
-    The full tick dataframe (2000+ ticks) MUST be passed to feature_engineering.py so that the
-    32-bar Rolling FFT and FracDiff have sufficient history to produce valid floats for the final row.
-  - No Silent Fails: Oracles must NEVER default to 0.50 on structural errors. They must log
-    [FATAL] with the full traceback and DROP the evaluation entirely. The system must HALT inference
-    for any asset where NaN or Inf values contaminate the feature vector.
-  - Required Features: 12-Feature Alpha Factory Vector:
-    [XGB, Kronos, HMM, FAISS, Macro_Sent, Macro_Risk, Catalyst, FracDiff, FFT1, FFT2, FFT3, CS_Rank]
-  - Continuous Retraining: OOS accuracy > 75% is considered a fatal Look-Ahead Bias indicator.
-    Acceptable OOS accuracy range: 52%–75%.
+Phase 3: Contextual Memory [LOCKED]
+- FAISS SQ8 + Kernel Density Estimation (KDE) clustering for O(log N) latency.
+- Episodic Memory dimension: 93.
 
-Phase 3: Contextual Memory (FAISS SQ8 & KDE) [LOCKED]
-  - Similarity searches use Kernel Density Estimation for O(log N) latency.
-  - Episodic Memory dimension: 93.
-
-Phase 4: Dynamic Strategy Routing & FFT Filtering
-  - BULL/BEAR: Route to Trend-Following Meta-Model. Gate: 0.82 (Epistemic Gate).
-  - RANGE: Route to Mean-Reversion scoring. Gate: 0.75. Requires high FFT Coherence (>1.5).
-  - Regime Hysteresis: 3-bar debouncing before official regime transitions.
+Phase 4: Dynamic Strategy Routing
+- BULL/BEAR: Route to Trend-Following Meta-Model. Gate: 0.82 (Epistemic Gate).
+- RANGE: Route to Mean-Reversion scoring. Gate: 0.75. Requires high FFT Coherence (>1.5).
+- Regime Hysteresis: 3-bar debouncing before official regime transitions.
 
 Phase 5: Autonomous Profit Manager [LOCKED]
-  - Decoupled Volatility Anchoring (M15 ATR).
-  - Spread Guard: Dynamic VSL widening when spread > 1.5x ATR stop distance.
-  - Time Stops (Theta Decay): 6-hour max holding for unprofitable positions.
-  - Asymmetric Risk: 1.5x ATR stop-loss, 3.0x ATR take-profit.
-  - Regime Liquidation: Immediate exit on polar HMM conflict (BUY in BEAR, SELL in BULL).
+- Decoupled Volatility Anchoring (M15 ATR).
+- Spread Guard: Dynamic VSL widening when spread > 1.5x ATR stop distance.
+- Time Stops (Theta Decay): 6-hour max holding for unprofitable positions.
+- Asymmetric Risk: 1.5x ATR stop-loss, 3.0x ATR take-profit.
+- Regime Liquidation: Immediate exit on polar HMM conflict (BUY in BEAR, SELL in BULL).
 
 Phase 6: Constitution Maintenance
-  - Autonomously DELETE older versions of this prompt.
-  - ONE Master_Prompt.txt at all times.
-  - Version: v22.4 "Data Warm-Up"
-  - Deployed: 2026-05-07
+- Autonomously DELETE older versions of this prompt.
+- ONE Master_Prompt.txt at all times.
+- Version: v22.5 "Microstructure Triad"
+- Deployed: 2026-05-07

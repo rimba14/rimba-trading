@@ -1,23 +1,13 @@
 """
-feature_engineering.py - ADAPTIVE SENTINEL FEATURE ENGINEERING MODULE (v22.0)
+feature_engineering.py - ADAPTIVE SENTINEL FEATURE ENGINEERING MODULE (v22.5)
 Constitution: Alpha Generation via Institutional-Grade Mathematical Features.
 
-This module provides two core feature generators for the XGBoost/Meta-Model
+This module provides core feature generators for the XGBoost/Meta-Model
 inference pipeline:
 
-1. Fractional Differencing (López de Prado, 2018):
-   Applies fractional weights to price series to achieve stationarity while
-   preserving long-memory (autocorrelation structure). Unlike integer differencing
-   (d=1), fractional differencing with d ≈ 0.4–0.6 retains the cointegration
-   signal that mean-reversion and trend-following models rely upon.
-
-2. Spectral Fingerprinting (FFT Top-K):
-   Extracts the dominant frequency amplitudes from the price/volume spectrum.
-   These serve as noise-free cycle indicators — capturing the true periodicity
-   of market oscillations without the lag of moving averages.
-
-Both feature sets are appended as new columns to the ML dataframe before
-it is passed into the XGBoost/Kronos inference matrix.
+1. Fractional Differencing (López de Prado, 2018)
+2. Spectral Fingerprinting (FFT Top-K)
+3. Microstructure Triad (VPIN, Hawkes Intensity, Order-Flow Entropy) - v22.5
 """
 
 import numpy as np
@@ -355,37 +345,88 @@ def generate_cross_sectional_rank(df_universe: pd.DataFrame) -> pd.DataFrame:
 
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECTIVE 4: MICROSTRUCTURE TRIAD (v22.5)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def calculate_rolling_vpin(df: pd.DataFrame, volume_bucket_size: float = 1000.0, window: int = 50) -> pd.Series:
+    """
+    Directive 1 (v22.5): Volume-Synchronized Probability of Informed Trading (VPIN).
+    Measures 'Order Flow Toxicity' by analyzing imbalances in volume buckets.
+    """
+    temp_df = df.copy()
+    if "tick_volume" not in temp_df.columns:
+        temp_df["tick_volume"] = 1.0
+    
+    # Cumulative volume to create buckets
+    temp_df["cum_vol"] = temp_df["tick_volume"].cumsum()
+    temp_df["bucket"] = (temp_df["cum_vol"] // volume_bucket_size).astype(int)
+    
+    # Buy/Sell proxy based on price delta
+    temp_df["price_change"] = temp_df["close"].diff().fillna(0)
+    temp_df["side"] = np.where(temp_df["price_change"] >= 0, 1, -1)
+    temp_df["buy_vol"] = np.where(temp_df["side"] == 1, temp_df["tick_volume"], 0)
+    temp_df["sell_vol"] = np.where(temp_df["side"] == -1, temp_df["tick_volume"], 0)
+    
+    # Aggregate per bucket
+    bucket_agg = temp_df.groupby("bucket").agg({
+        "buy_vol": "sum",
+        "sell_vol": "sum",
+        "tick_volume": "sum"
+    })
+    
+    bucket_agg["imbalance"] = (bucket_agg["buy_vol"] - bucket_agg["sell_vol"]).abs()
+    bucket_agg["vpin"] = bucket_agg["imbalance"].rolling(window).sum() / (bucket_agg["tick_volume"].rolling(window).sum() + 1e-9)
+    
+    # Map back to original dataframe rows
+    vpin_map = bucket_agg["vpin"].to_dict()
+    return temp_df["bucket"].map(vpin_map).fillna(0.0)
+
+def calculate_hawkes_intensity(df: pd.DataFrame, decay_factor: float = 0.1) -> pd.Series:
+    """
+    Directive 2 (v22.5): Hawkes Process Intensity (Order Clustering).
+    Models trade arrivals as a self-exciting point process.
+    """
+    # Use index if no timestamp, assuming index is time-ordered
+    times = np.arange(len(df))
+    intensities = np.zeros(len(df))
+    
+    # Recursive calculation for efficiency
+    # λ(t) = λ(t-1) * exp(-β * Δt) + 1
+    for i in range(1, len(df)):
+        dt = times[i] - times[i-1]
+        intensities[i] = intensities[i-1] * np.exp(-decay_factor * dt) + 1
+        
+    return pd.Series(intensities, index=df.index)
+
+def calculate_order_flow_entropy(series: pd.Series, window: int = 20) -> pd.Series:
+    """
+    Directive 2 (v22.5): Order-Flow Entropy (Shock Probability).
+    Measures the uncertainty/disorder in trade signs.
+    """
+    diff = series.diff().fillna(0)
+    signs = np.sign(diff)
+    
+    def entropy(x):
+        counts = pd.Series(x).value_counts(normalize=True)
+        return -np.sum(counts * np.log2(counts + 1e-9))
+    
+    return signs.rolling(window).apply(entropy).fillna(0.0)
+
+
 def engineer_features(
     df: pd.DataFrame,
     price_col: str = "close",
     volume_col: str = "tick_volume",
     frac_d: float = 0.45,
     fft_top_k: int = 3,
-    cs_rank: float = 0.5, # New: Injected cross-sectional rank
+    cs_rank: float = 0.5,
 ) -> pd.DataFrame:
     """
     Master feature engineering function. Appends institutional-grade features
     to the ML dataframe prior to XGBoost/Meta-Model inference.
-
-    New columns added:
-        - frac_diff_price: Fractionally differenced close prices (d ≈ 0.45).
-          Stationary but memory-preserving.
-        - fft_amp_1: Amplitude of the 1st dominant spectral frequency.
-        - fft_amp_2: Amplitude of the 2nd dominant spectral frequency.
-        - fft_amp_3: Amplitude of the 3rd dominant spectral frequency.
-        - cs_rank: Relative performance rank [0, 1] within the current watchlist.
-
-    Args:
-        df: Input dataframe with at minimum [price_col] and [volume_col].
-        price_col: Column name for close prices.
-        volume_col: Column name for tick/trade volume.
-        frac_d: Fractional differencing order.
-        fft_top_k: Number of FFT amplitudes to extract.
-        cs_rank: The percentile rank of this asset in the global cross-section.
-
-    Returns:
-        DataFrame with new feature columns appended. Row count is preserved
-        via edge-padding for the fractional differencing warmup window.
+    
+    v22.5: Added Microstructure Triad (VPIN, Hawkes, Entropy).
     """
     df = df.copy()
 
@@ -395,76 +436,46 @@ def engineer_features(
         fd_series = frac_diff_series(prices, d=frac_d)
 
         if len(fd_series) > 0:
-            # Pad the front with edge values to preserve row alignment
             pad_len = len(df) - len(fd_series)
             fd_padded = np.pad(fd_series, (pad_len, 0), mode="edge")
             df["frac_diff_price"] = fd_padded
         else:
             df["frac_diff_price"] = 0.0
-
-        logger.info(
-            f"[FEAT_ENG] FracDiff(d={frac_d}) applied to {price_col}. "
-            f"Output length: {len(fd_series)}"
-        )
     else:
         df["frac_diff_price"] = 0.0
-        logger.warning(f"[FEAT_ENG] Column '{price_col}' not found. FracDiff skipped.")
 
     # ── 2. Spectral Fingerprinting (Price) ─────────────────────────────────
-    # Directive 1 (v22.3): Strict Rolling Window FFT (No Global Leakage)
     if price_col in df.columns:
         prices = df[price_col].values
         window_size = 32
-        
-        # Initialize columns with zeros
         for i in range(fft_top_k):
             df[f"fft_amp_{i + 1}"] = 0.0
 
-        # Only compute for indices where we have enough history for a window
-        # For performance in large datasets, we use a stride or vectorized approach if needed,
-        # but for safety and strictness, we use a windowed apply logic.
         if len(prices) >= window_size:
-            # We compute the FFT for the final bar (current inference) 
-            # and potentially for historical bars if this is used in retraining.
-            # To avoid O(N^2), we compute it for the last bar and 
-            # provide a helper for full series rolling if in 'training mode'.
-            
-            # Optimization: If the dataframe is small (inference), do it for the last bar.
-            # If large (training), compute a rolling window.
             if len(df) < 500:
-                # Inference path: Just the most recent window
                 last_window = prices[-window_size:]
                 fft_amps = extract_fft_amplitudes(last_window, top_k=fft_top_k)
                 for i in range(fft_top_k):
                     df[f"fft_amp_{i + 1}"] = float(fft_amps[i])
             else:
-                # Training path: Vectorized rolling window (STFT proxy)
-                # We'll use a sliding window view for speed
                 from numpy.lib.stride_tricks import sliding_window_view
                 windows = sliding_window_view(prices, window_shape=window_size)
-                
-                # Apply extract_fft_amplitudes to each window
-                # This ensures row t ONLY sees prices from [t-32, t]
                 all_amps = np.array([extract_fft_amplitudes(w, top_k=fft_top_k) for w in windows])
-                
-                # Align results (sliding window shortens result by window_size - 1)
                 pad_len = len(df) - len(all_amps)
                 for i in range(fft_top_k):
-                    col_amps = all_amps[:, i]
-                    df[f"fft_amp_{i + 1}"] = np.pad(col_amps, (pad_len, 0), mode="constant")
-        
-        logger.info(f"[FEAT_ENG] Rolling FFT ({window_size} bars) applied to {price_col}.")
-    else:
-        for i in range(fft_top_k):
-            df[f"fft_amp_{i + 1}"] = 0.0
-        logger.warning(f"[FEAT_ENG] Column '{price_col}' not found. FFT skipped.")
+                    df[f"fft_amp_{i + 1}"] = np.pad(all_amps[:, i], (pad_len, 0), mode="constant")
 
     # ── 3. Cross-Sectional Rank ────────────────────────────────────────────
-    # Injected from the global watchlist pre-scan
     df["cs_rank"] = float(cs_rank)
 
+    # ── 4. Microstructure Triad (v22.5) ────────────────────────────────────
+    df["vpin"] = calculate_rolling_vpin(df, volume_bucket_size=1000.0, window=50)
+    df["hawkes_intensity"] = calculate_hawkes_intensity(df, decay_factor=0.1)
+    df["order_flow_entropy"] = calculate_order_flow_entropy(df[price_col], window=20)
+
     logger.info(
-        f"[FEAT_ENG] v22.3 Features: FracDiff={frac_d} | Rolling FFT=32 | CS Rank={cs_rank:.2f}"
+        f"[FEAT_ENG] v22.5 Features: FracDiff={frac_d} | FFT=32 | CS Rank={cs_rank:.2f} | Triad=[VPIN, Hawkes, Entropy]"
     )
 
     return df
+

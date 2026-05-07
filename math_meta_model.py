@@ -1,6 +1,6 @@
 """
 math_meta_model.py - SRE Patch (LLM Execution Bypass)
-Zero-Latency, Zero-Cost Mathematical Meta-Model (v22.4 - Data Warm-Up)
+Zero-Latency, Zero-Cost Mathematical Meta-Model (v22.5 - Microstructure Triad)
 """
 
 import os
@@ -43,13 +43,13 @@ class MathMetaModel:
         if self.model is None:
             # Fallback: Untrained Random Forest Regressor
             self.model = RandomForestRegressor(n_estimators=100, max_depth=4, random_state=42)
-            # Dummy fit to allow predict before real training (v22.3 - 12 features)
-            X_dummy = np.zeros((2, 12))
-            X_dummy[0] = [0.5, 0.5, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5]
-            X_dummy[1] = [0.8, 0.8, 1, 0.8, 0.1, 0.1, 0.2, 0.5, 0.1, 0.08, 0.05, 0.8]
+            # Dummy fit to allow predict before real training (v22.5 - 15 features)
+            X_dummy = np.zeros((2, 15))
+            X_dummy[0] = [0.5, 0.5, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0]
+            X_dummy[1] = [0.8, 0.8, 1, 0.8, 0.1, 0.1, 0.2, 0.5, 0.1, 0.08, 0.05, 0.8, 0.5, 1.2, 1.5]
             y_dummy = np.array([0.5, 0.9])
             self.model.fit(X_dummy, y_dummy)
-            logger.info("[META-MODEL] Initialized baseline dummy regressor model (12 features).")
+            logger.info("[META-MODEL] Initialized baseline dummy regressor model (15 features).")
 
     def _encode_hmm(self, hmm_state: str) -> int:
         """Encodes HMM state: BULL=1, BEAR=-1, RANGE=0."""
@@ -90,7 +90,7 @@ class MathMetaModel:
 
         hmm_encoded = self._encode_hmm(features.get("hmm_state", "RANGE"))
         
-        # Feature Array (v22.3 - 12 Features):
+        # Feature Array (v22.5 - 15 Features):
         X_live = np.array([[
             float(features.get("xgb_p", 0.5)), 
             float(features.get("kronos_p", 0.5)), 
@@ -104,13 +104,17 @@ class MathMetaModel:
             float(features.get("fft_amp_2", 0.0)),
             float(features.get("fft_amp_3", 0.0)),
             float(features.get("cs_rank", 0.5)),
+            float(features.get("vpin", 0.0)),
+            float(features.get("hawkes_intensity", 0.0)),
+            float(features.get("order_flow_entropy", 0.0)),
         ]])
         # v22.4: NaN Validation — NEVER silently default to 0.500
         if np.any(np.isnan(X_live)) or np.any(np.isinf(X_live)):
             nan_indices = np.argwhere(np.isnan(X_live) | np.isinf(X_live)).flatten()
             feature_names = ["xgb_p", "kronos_p", "hmm", "faiss_sim", "macro_sent", 
                            "macro_risk", "catalyst", "frac_diff", "fft_amp_1", 
-                           "fft_amp_2", "fft_amp_3", "cs_rank"]
+                           "fft_amp_2", "fft_amp_3", "cs_rank", "vpin", 
+                           "hawkes_intensity", "order_flow_entropy"]
             bad_features = [feature_names[i] for i in nan_indices if i < len(feature_names)]
             logger.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {bad_features}. Halting inference.")
             raise ValueError(f"NaN/Inf in feature vector for {symbol}: {bad_features}")
