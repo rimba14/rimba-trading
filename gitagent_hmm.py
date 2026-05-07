@@ -18,9 +18,9 @@ OBSERVATIONS (discretized daily returns — 5 bins):
   4 = STRONG DOWN (< -1.5%)
 
 Per-axis regime adjustments:
-  BULL  → lower confidence threshold by 5% (be more aggressive)
-  BEAR  → lower confidence threshold by 5% on SELL (be more aggressive short)
-  RANGE → raise confidence threshold by 10% (be more selective)
+  BULL  -> lower confidence threshold by 5% (be more aggressive)
+  BEAR  -> lower confidence threshold by 5% on SELL (be more aggressive short)
+  RANGE -> raise confidence threshold by 10% (be more selective)
 """
 
 import numpy as np
@@ -190,7 +190,7 @@ def get_current_state(price_series: np.ndarray, lookback: int = 200):
 
     state_labels = label_states(A, B)
 
-    # Build label → prob mapping
+    # Build label -> prob mapping
     label_probs = {}
     for state_idx, label in state_labels.items():
         label_probs[label] = float(current_probs[state_idx])

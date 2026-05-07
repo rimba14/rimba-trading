@@ -73,7 +73,7 @@ CRYPTO_BASE_SYMBOLS = {
 def get_valid_mt5_symbol(base_symbol: str) -> str | None:
     """
     Universal MT5 Symbol Discovery (v17.3): Dynamic matcher for broker suffixes.
-    Three-phase fallback: direct → suffix → pattern scan.
+    Three-phase fallback: direct -> suffix -> pattern scan.
     Strictly never hardcodes broker suffixes.
     """
     # Phase 1 — Direct match

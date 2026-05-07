@@ -41,7 +41,7 @@ def _get_frac_diff_weights(d: float, threshold: float = 1e-4) -> np.ndarray:
         threshold: Minimum absolute weight before truncation.
 
     Returns:
-        Weight array in chronological order (oldest → newest).
+        Weight array in chronological order (oldest -> newest).
     """
     weights = [1.0]
     k = 1
@@ -207,7 +207,7 @@ def extract_fft_amplitudes(
     # assumption of infinite periodicity.
     windowed = detrended * np.hanning(N)
 
-    # Step 3: FFT → One-Sided Power Spectrum
+    # Step 3: FFT -> One-Sided Power Spectrum
     fft_vals = np.fft.fft(windowed)
     # Only use the positive-frequency half (Nyquist symmetry)
     amplitudes = np.abs(fft_vals[1:N // 2])  # Skip DC component (index 0)
@@ -322,7 +322,7 @@ def generate_cross_sectional_rank(df_universe: pd.DataFrame) -> pd.DataFrame:
     rolling_corr = df[price_col].rolling(window).corr(df[vol_col].rolling(window).mean())
 
     # Negate: rising price on rising volume = bullish (positive rank)
-    # falling price on rising volume = bearish (negative → low rank)
+    # falling price on rising volume = bearish (negative -> low rank)
     alpha_series = rolling_corr.fillna(0.0)
     df["cs_alpha"] = alpha_series
 

@@ -1,7 +1,8 @@
-"""
+﻿"""
 qwen_reasoning_engine.py - ADAPTIVE SENTINEL REASONING CORE (v17.3 Native MoE)
 Constitution: Native Ollama API, keep_alive=-1 (RAM-lock), enable_thinking=True.
 Fail-safe: returns neutral 0.500 on any timeout or endpoint error.
+SRE v21.0: Global Circuit Breaker - trips on first timeout, instant HOLD thereafter.
 """
 import os
 import json
@@ -17,13 +18,22 @@ LOCAL_ENDPOINT = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/") 
 MODEL_ID       = os.getenv("REASONING_MODEL", "qwen2.5-coder:3b")
 KEEP_ALIVE     = int(os.getenv("OLLAMA_KEEP_ALIVE", "-1"))   # -1 = lock in RAM forever
 
+# SRE v21.0: Global Circuit Breaker
+# Once the Ollama endpoint times out once, this flag is set to True for the
+# lifetime of the process. All subsequent calls return FAIL_SAFE instantly
+# without waiting for another timeout. This prevents the 10s * N_assets hang.
+_OLLAMA_CIRCUIT_OPEN: bool = False  # True = breaker tripped, Ollama is dead
+_OLLAMA_TIMEOUT_SEC: float = 2.0    # Reduced from 10s -> 2s (SRE v21.0)
+_OLLAMA_DEAD_MSG: str = "Circuit breaker open: Ollama unreachable. Routing via Math Meta-Model."
+
 
 class QwenReasoningEngine:
     """
     CPU-optimised MoE reasoning engine via native Ollama API (v17.3).
-    • keep_alive = -1   → model stays resident in RAM (no cold-start timeouts)
-    • enable_thinking   → native chain-of-thought (Phase 2)
-    • Fail-safe default → HOLD / 0.500 on any error
+    - keep_alive = -1   -> model stays resident in RAM (no cold-start timeouts)
+    - enable_thinking   -> native chain-of-thought (Phase 2)
+    - Fail-safe default -> HOLD / 0.500 on any error
+    - Circuit breaker   -> trips on first timeout, instant HOLD thereafter (v21.0)
     """
 
     DECISION_SCHEMA = {
@@ -36,7 +46,7 @@ class QwenReasoningEngine:
         "required": ["decision", "confidence", "reasoning"],
     }
 
-    FAIL_SAFE = {"decision": "HOLD", "confidence": 0.500, "reasoning": "Fail-safe neutral — endpoint unavailable."}
+    FAIL_SAFE = {"decision": "HOLD", "confidence": 0.500, "reasoning": "Fail-safe neutral -> endpoint unavailable."}
 
     def __init__(self, endpoint: str = LOCAL_ENDPOINT):
         self.endpoint = endpoint
@@ -46,6 +56,14 @@ class QwenReasoningEngine:
         Non-streaming request with strict word budget.
         Constitution: enable_thinking=True, keep_alive=-1.
         """
+        global _OLLAMA_CIRCUIT_OPEN
+
+        # SRE v21.0: Circuit Breaker Check -- instant return if breaker is tripped
+        if _OLLAMA_CIRCUIT_OPEN:
+            import logging
+            logging.warning("[QWEN_ENGINE] Circuit breaker OPEN. Skipping Ollama call -> instant HOLD.")
+            return "TIMEOUT"
+
         payload = {
             "model":          MODEL_ID,
             "prompt":         f"{system_prompt}\n\n{user_prompt}",
@@ -58,7 +76,7 @@ class QwenReasoningEngine:
             },
         }
         try:
-            resp = requests.post(self.endpoint, json=payload, timeout=10)
+            resp = requests.post(self.endpoint, json=payload, timeout=_OLLAMA_TIMEOUT_SEC)
             resp.raise_for_status()
             raw = resp.json().get("response", "")
             # Respect word budget
@@ -67,6 +85,23 @@ class QwenReasoningEngine:
                 raw = " ".join(words[:word_budget])
             return raw
         except requests.exceptions.Timeout:
+            # SRE v21.0: Trip the circuit breaker on first timeout
+            _OLLAMA_CIRCUIT_OPEN = True
+            import logging
+            logging.error(
+                f"[QWEN_ENGINE] [CIRCUIT_BREAKER_TRIPPED] Ollama timed out after "
+                f"{_OLLAMA_TIMEOUT_SEC}s. Breaker is now OPEN. All subsequent "
+                f"assets will route via Math Meta-Model without delay."
+            )
+            return "TIMEOUT"
+        except requests.exceptions.ConnectionError:
+            # Connection refused (Ollama not running) - trip breaker immediately
+            _OLLAMA_CIRCUIT_OPEN = True
+            import logging
+            logging.error(
+                "[QWEN_ENGINE] [CIRCUIT_BREAKER_TRIPPED] Ollama connection refused. "
+                "Breaker OPEN. Routing via Math Meta-Model."
+            )
             return "TIMEOUT"
         except Exception as e:
             return f"Error: {e}"
