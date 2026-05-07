@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v20.4 - Dynamic Asset-Class ATRs)
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.0 - Alpha Engineering)
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -14,6 +14,7 @@ import json
 import logging
 import random
 import asyncio
+import traceback
 import threading
 import concurrent.futures
 import itertools
@@ -28,6 +29,37 @@ import pandas as pd
 # Global dicts for Regime Hysteresis (v20.4)
 _HMM_HISTORY = defaultdict(list)
 _OFFICIAL_REGIME = {}
+_GLOBAL_CS_RANKS = {}
+_LAST_CS_REFRESH = 0
+
+def _pre_scan_watchlist(watchlist: list):
+    """
+    Directive 3: Global Pre-Scan for Market Neutralization.
+    Calculates relative performance ranks across the entire watchlist.
+    """
+    global _GLOBAL_CS_RANKS
+    metrics = {}
+    
+    logging.info(f"[ALPHA_FACTORY] Executing Cross-Sectional Pre-Scan ({len(watchlist)} assets)...")
+    
+    for symbol in watchlist:
+        try:
+            # Use 24h momentum (M15 bars * 96) as the ranking metric
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 96)
+            if rates is not None and len(rates) > 1:
+                close_now = rates[-1]['close']
+                close_prev = rates[0]['close']
+                momentum = (close_now - close_prev) / (close_prev + 1e-9)
+                metrics[symbol] = momentum
+            else:
+                metrics[symbol] = 0.0
+        except Exception as e:
+            logging.warning(f"[ALPHA_FACTORY] Pre-scan failed for {symbol}: {e}")
+            metrics[symbol] = 0.0
+            
+    _GLOBAL_CS_RANKS = feat_eng.compute_cross_sectional_ranks(metrics)
+    logging.info(f"[ALPHA_FACTORY] Cross-Sectional Ranks computed for {len(_GLOBAL_CS_RANKS)} symbols.")
+
 
 def calculate_mean_reversion_score(rsi, bbpos):
     """
@@ -70,6 +102,7 @@ import timesfm_bridge
 import gitagent_utils as utils
 import gitagent_bars as bars
 import gitagent_memory as memory
+import feature_engineering as feat_eng
 
 # -- Config --------------------------------------------------------------------
 from sentinel_config import (
@@ -274,7 +307,7 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
         hmm_state = features.get("hmm_state", "RANGE")
         try:
             logging.info(f"[ROUTER] {symbol} -> Math Meta-Model (Zero-Latency)")
-            p_val = _MATH_META_MODEL.predict_conviction(symbol, xgb_val, kronos_val, hmm_state, faiss_sim)
+            p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
             decision = "BUY" if direction == 1 else ("SELL" if direction == -1 else "HOLD")
             return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Bypass"}
         except Exception as e:
@@ -355,14 +388,20 @@ def _run_shap(symbol: str, x_vec: list, f_keys: list, direction: int, p_final: f
 # -- Meta-Conviction (Phase 2 - Meta-Labeling Architecture) -------------------
 def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: float) -> float:
     """
-    Decoupled sizing: primary direction already decided.
+    v22.1: Expanded to 11-feature Alpha Factory vector.
+    [xgb_p, kronos_p, hmm_state, faiss_sim, macro_sent, macro_risk, catalyst,
+     frac_diff, fft_amp_1, fft_amp_2, fft_amp_3, cs_rank]
     """
-    f_keys = ["xgb_p", "kronos_p", "hmm_state", "faiss_sim", "macro_sent", "macro_risk", "catalyst"]
+    f_keys = [
+        "xgb_p", "kronos_p", "hmm_state", "faiss_sim",
+        "macro_sent", "macro_risk", "catalyst",
+        "frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank"
+    ]
     hmm_val = 1 if features.get("hmm_state") == "BULL" else (-1 if features.get("hmm_state") == "BEAR" else 0)
-    
+
     # v19.5: Logarithmic Dampening on Macro Features
     def damp(x): return np.sign(x) * np.log1p(abs(float(x)))
-    
+
     x_vec = [
         float(features.get("xgb_p", 0.5)),
         float(features.get("kronos_p", 0.5)),
@@ -370,7 +409,13 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
         float(features.get("faiss_sim", 0.0)),
         damp(features.get("macro_sent", 0.0)),
         damp(features.get("macro_risk", 0.0)),
-        damp(features.get("catalyst", 0.0))
+        damp(features.get("catalyst", 0.0)),
+        # v22.1 Alpha Factory features
+        float(features.get("frac_diff", 0.0)),
+        float(features.get("fft_amp_1", 0.0)),
+        float(features.get("fft_amp_2", 0.0)),
+        float(features.get("fft_amp_3", 0.0)),
+        float(features.get("cs_rank", 0.5)),
     ]
 
     moe = _moe_reason(symbol, features, direction)
@@ -468,10 +513,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
     df_m15 = df_ta = df_ml = None
     try:
-        logging.info(f"[{symbol}] Updating oracles...")
-        df_m15 = sigproc.get_m15_dataframe(symbol, 2000)
+        logging.info(f"[{symbol}] Updating high-resolution oracles (v21.0)...")
+        # Shift from M15 to Tick Ingestion (N=2000)
+        df_m15 = sigproc.get_tick_dataframe(symbol, 2000)
         if df_m15 is None or len(df_m15) < 512:
-            logging.error(f"[TICKER_ERROR] {symbol}: insufficient bars. Skipping.")
+            logging.error(f"[TICKER_ERROR] {symbol}: insufficient ticks. Skipping.")
             return
 
         df_ta = df_m15.copy()
@@ -499,6 +545,22 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             norm_fd = sigproc.strict_normalize(fd)
             df_ml[col] = np.pad(norm_fd, (pad, 0), mode="edge")
         logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied.")
+
+        # ── v22.0: Institutional Feature Engineering ──────────────────────
+        # Append frac_diff_price (López de Prado), FFT spectral amplitudes,
+        # and Cross-Sectional Rank to the ML feature vector.
+        vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
+        current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
+        
+        df_ml = feat_eng.engineer_features(
+            df_ml,
+            price_col="close",
+            volume_col=vol_col,
+            frac_d=0.45,
+            fft_top_k=3,
+            cs_rank=current_rank,
+        )
+        logging.info(f"[{symbol}] v22.0 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]")
 
         df_ml = df_ml.dropna()
         if len(df_ml) < 512:
@@ -590,7 +652,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "faiss_sim": float(max_sim),
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
-            "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0))
+            "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
+            # v22.1: Alpha Factory features injected from the live df_ml
+            "frac_diff": float(df_ml["frac_diff_price"].iloc[-1]) if "frac_diff_price" in df_ml.columns else 0.0,
+            "fft_amp_1": float(df_ml["fft_amp_1"].iloc[-1]) if "fft_amp_1" in df_ml.columns else 0.0,
+            "fft_amp_2": float(df_ml["fft_amp_2"].iloc[-1]) if "fft_amp_2" in df_ml.columns else 0.0,
+            "fft_amp_3": float(df_ml["fft_amp_3"].iloc[-1]) if "fft_amp_3" in df_ml.columns else 0.0,
+            "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
         })
         
         # Directive 4: FFT Coherence Lock (v20.4)
@@ -600,7 +668,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             
             # Fetch FFT Power from sigproc (as proxy for TimesNet amplitude)
             prices = df_m15['close'].values
-            fft_data = fft_cycle_detector(prices)
+            fft_data = sigproc.fft_cycle_detector(prices)
             fft_amplitude = fft_data.get('power', 0.0)
             
             if fft_amplitude > 1.5:
@@ -641,7 +709,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 "hmm_state": hmm_state,
                 "atr": float(atr),
                 "timestamp": int(time.time()),
-                "version": "v20.4-PROD",
+                "version": "v22.1-ALPHA-FACTORY",
             })
             logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | HMM={hmm_state}")
         else:
@@ -653,7 +721,24 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         timesfm_bridge.update_risk_cache(symbol, df_ml)
 
     except Exception as e:
-        logging.error(f"[{symbol}] Oracle update error: {e}")
+        error_msg = traceback.format_exc()
+        logging.error(f"[{symbol}] Oracle update error:\n{error_msg}")
+        
+        # Directive 2: SRE Diagnostic Ticket Dispatch (v21.2)
+        if isinstance(e, (NameError, ImportError, AttributeError)):
+            diag_path = Path(PROJECT_ROOT) / "pending_diagnostics"
+            diag_path.mkdir(parents=True, exist_ok=True)
+            diag_file = diag_path / f"fatal_error_{int(time.time())}.json"
+            with open(diag_file, "w") as f:
+                json.dump({
+                    "timestamp": int(time.time()),
+                    "symbol": symbol,
+                    "error_type": type(e).__name__,
+                    "message": str(e),
+                    "traceback": error_msg,
+                    "halt_required": True
+                }, f, indent=4)
+            logging.critical(f"[SRE_HALT] FATAL ERROR DETECTED. Ticket dispatched: {diag_file.name}")
     finally:
         df_m15 = df_ta = df_ml = None
 
@@ -668,6 +753,10 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
 
     loop = asyncio.get_event_loop()
     max_workers = 5 
+    
+    # Directive 3: Pre-Scan the entire watchlist before processing batches
+    _pre_scan_watchlist(watchlist)
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
         batch_idx = 1
         for batch in chunked(watchlist, 10):
@@ -684,8 +773,9 @@ def execute_historical_backfill(watchlist: list):
     pass
 
 def main():
+    global _LAST_CS_REFRESH
     logging.info("=" * 60)
-    logging.info("  ADAPTIVE SENTINEL SLOW LOOP v20.4 - Dynamic ATR Build")
+    logging.info("  ADAPTIVE SENTINEL SLOW LOOP v22.1 - Alpha Factory")
     logging.info("  Machine A (Oracle VPS - Brain) | NEVER touches broker directly")
     logging.info("  Rate-limit: tenacity jittered backoff | ASCII Logging: True")
     logging.info("=" * 60)
@@ -694,10 +784,16 @@ def main():
     execute_historical_backfill(watchlist)
     logging.info("[SYSTEM] Cache warm-up (parallel, force_refresh=True)...")
     asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
+    _LAST_CS_REFRESH = time.time()
     logging.info("[SYSTEM] Warm-up complete. Entering event-driven dollar-bar cycle.")
 
     streamer = bars.InformationBarStreamer(watchlist)
     for bar in streamer.stream_bars():
+        # Directive 3: Periodically refresh Cross-Sectional Ranks (every 15m)
+        if time.time() - _LAST_CS_REFRESH > 900:
+            _pre_scan_watchlist(watchlist)
+            _LAST_CS_REFRESH = time.time()
+            
         symbol = bar["symbol"]
         update_slow_oracles(symbol)
 

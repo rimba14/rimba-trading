@@ -1,33 +1,24 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v20.5 - Operation Phoenix) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures (v1.0 through v20.4). Strictly obey v20.5.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.3 - Temporal Embargo) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures (v1.0 through v22.2). Strictly obey v22.3. The Execution and Risk layers are locked. Your primary directive is Feature Engineering with absolute Data Leakage prevention.
 
-Phase 1: Architecture, Isolation & Routing
-Event-Driven: Inference triggered by fiat value thresholds.
-State Isolation: Asynchronous asyncio.gather() loops. Zero state-bleed.
-OOM Prevention: Pre-quantized .pt models, PyTorch thread capping, aggressive garbage collection.
-Clean State Boot: System restarts MUST forcefully kill all prior Python PIDs to prevent zombie process contention.
+Phase 1: Architecture, Isolation & Subquadratic Scaling [LOCKED]
+Asynchronous loops. Idempotent execution (Mutex locks). Subquadratic $O(N \log N)$ optimization. DO NOT modify fastapi_sniper.py.
 
-Phase 2: Perception, Cognition & Regime Hysteresis
-The HMM Oracle & Debouncing: The Official Regime (BULL, BEAR, RANGE) can only change if the underlying HMM registers the new state for 3 consecutive cycles.
-Mathematical Meta-Model: Uses Soft Confidence Blending max(0.6, MoE).
+Phase 2: Alpha Generation & Leakage Prevention (ACTIVE FOCUS)
+The Alpha Factory: Raw data passes through feature_engineering.py.
+Data Leakage Prohibition (CRITICAL): All engineered features (FFT, FracDiff, Rankings) MUST be calculated using strict rolling windows. Global aggregations prior to train/test splits are strictly forbidden.
+Temporal Embargo: Train/Test splits must be strictly chronological, featuring a data embargo (dropped rows) at the split boundary to prevent rolling-window leakage.
+Realistic Accuracy: Meta-Models must utilize strict Regularization. OOS accuracy > 75% is considered a fatal system failure (Look-Ahead Bias).
 
-Phase 3: Contextual Memory (FAISS SQ8)
-RAM-loaded FAISS index utilizing INT8/SQ8 for AVX2 hardware acceleration.
+Phase 3: Contextual Memory (FAISS SQ8 & KDE) [LOCKED]
+Similarity searches use Kernel Density Estimation for $O(\log N)$ latency.
 
 Phase 4: Dynamic Strategy Routing & FFT Filtering
-BULL/BEAR: Route to Trend-Following Meta-Model. Gate: Optuna Baseline (e.g., 0.82).
-RANGE: Route to Mean-Reversion Sub-Routine (Bollinger + RSI fading). Gate: 0.75.
-FFT Coherence Lock: RANGE strategies MUST ONLY fire if the TimesNet FFT Amplitude proves strong cyclical coherence.
-Strict Net Exposure: No Hedging. Autonomously liquidate opposite positions before executing new signals.
+BULL/BEAR: Route to Trend-Following Meta-Model. Gate: 0.82.
+RANGE: Route to Mean-Reversion Sub-Routine. Gate: 0.75. Requires high FFT Coherence.
 
-Phase 5: Autonomous Profit Manager & Asymmetric Exits
-Holds Virtual Exits in RAM. Physical MT5 stops are strictly prohibited.
-URL Routing: Bridge payloads MUST dynamically append the correct endpoint (/execute_trade or /liquidate) to a clean base .env URL to prevent 404s.
-Asymmetric Regime Risk:
-In BULL Regimes: Use VSL = 3.0 ATR, VTP = 6.0 ATR.
-In BEAR Regimes: Use Asymmetric Exits to survive bear-market rallies. VSL = 4.0 ATR, VTP = 3.0 ATR.
-Liquidation Matrix: Fire liquidation IF: 1) Time-adjusted Thesis Decays, 2) Hard Virtual Stop breached, 3) Virtual Take-Profit breached, 4) Polar Regime Conflict.
-SRE Tripwire: If PSR drops below 0.80, halt execution and drop a diagnostic ticket.
+Phase 5: Autonomous Profit Manager [LOCKED]
+Decoupled Volatility Anchoring (M15 ATR). Spread Guard. Time Stops (Theta Decay). Asymmetric Regime Risk. DO NOT modify profit_manager.py.
 
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.
