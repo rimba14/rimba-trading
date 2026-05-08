@@ -1,6 +1,6 @@
 """
-profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v20.4)
-Constitution: PSR tripwire, Virtual Stop monitoring, SRE halt,
+profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v21.3)
+Constitution: Decoupled Volatility, Spread Guard, Virtual Stop monitoring,
               Dynamic Regime Liquidation (Phase 5 Constitution + Phase 6 SRE Patch).
 """
 import MetaTrader5 as mt5
@@ -43,6 +43,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ProfitManager")
 
+def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_M15, period=14) -> float:
+    """Calculates ATR using macroscopic M15 bars (Directive 2 v21.3)."""
+    rates = mt5.copy_rates_from_pos(symbol, timeframe, 1, period + 1)
+    if rates is None or len(rates) < period + 1:
+        return 0.0
+    
+    high = rates['high']
+    low = rates['low']
+    close = rates['close']
+    
+    tr = np.zeros(period)
+    for i in range(period):
+        h_l = high[i+1] - low[i+1]
+        h_pc = abs(high[i+1] - close[i])
+        l_pc = abs(low[i+1] - close[i])
+        tr[i] = max(h_l, h_pc, l_pc)
+    
+    return float(np.mean(tr))
+
 def _get_live_oracle_meta(symbol: str) -> dict | None:
     """Reads the latest oracle metadata (HMM, conviction, ATR) from ArcticDB."""
     try:
@@ -59,6 +78,7 @@ def _get_live_oracle_meta(symbol: str) -> dict | None:
     except Exception as e:
         logger.warning(f"[ORACLE_READ_ERR] {symbol}: {e}")
         return None
+
 def _push_exit_signal(pos, reason: str):
     """
     Direct ultra-low-latency execution bridge (Phase 5).
@@ -159,7 +179,7 @@ class SentinelProfitManager:
             logger.critical("[FATAL] MT5 init failed.")
             sys.exit(1)
         self._last_regime_check: dict[str, float] = {}
-        logger.info("Profit Manager v20.4 online — Dynamic Regime Liquidation ACTIVE | PSR Tripwire ARMED.")
+        logger.info("Profit Manager v21.4 online — Theta Decay & Spread Guard ACTIVE.")
 
     # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
     def calculate_psr(self, returns: list) -> float:
@@ -215,12 +235,6 @@ class SentinelProfitManager:
         """
         Polls the live HMM regime for each open position.
         Immediately liquidates any position whose direction conflicts with the regime.
-
-        Liquidation Rule (Constitutional mandate — v17.9 Phase 6):
-            BUY  + HMM == BEAR  ->  REGIME_VIOLATION_LIQUIDATION
-            SELL + HMM == BULL  ->  REGIME_VIOLATION_LIQUIDATION
-
-        Bypasses Virtual SL/TP. Pushes exit signal to Discord before closing.
         """
         now = time.time()
 
@@ -245,7 +259,6 @@ class SentinelProfitManager:
             
             hmm_state = oracle_data["hmm_state"]
             live_p    = oracle_data["conviction"]
-
             atr       = oracle_data["atr"]
 
             pos_direction = "BUY" if pos.type == 0 else "SELL"
@@ -274,14 +287,31 @@ class SentinelProfitManager:
             
             # Directive: Asymmetric Regime Risk (v20.4)
             if hmm_state == "BULL":
-                SL_ATR_MULT = 3.0
-                TP_ATR_MULT = 6.0
+                SL_ATR_MULT *= 0.8
+                TP_ATR_MULT *= 1.2
             elif hmm_state == "BEAR":
-                SL_ATR_MULT = 4.0
-                TP_ATR_MULT = 3.0
+                SL_ATR_MULT *= 1.2
+                TP_ATR_MULT *= 0.8
             
-            sl_level = price_open - (SL_ATR_MULT * atr) if pos.type == 0 else price_open + (SL_ATR_MULT * atr)
-            tp_level = price_open + (TP_ATR_MULT * atr) if pos.type == 0 else price_open - (TP_ATR_MULT * atr)
+            # Directive 2: Decoupled Volatility Anchoring (v21.3)
+            macro_atr = _calculate_macroscopic_atr(symbol)
+            if macro_atr <= 0:
+                macro_atr = atr # Fallback if M15 fetch fails
+            
+            # Directive 3: Spread Sanity Guard (v21.3)
+            info = mt5.symbol_info(symbol)
+            spread = (info.ask - info.bid) if info else 0.0
+            
+            # Mathematical Fix: actively push VSL at least 1.5x live spread away by adding it to the ATR
+            sl_distance = (SL_ATR_MULT * macro_atr) + (spread * 1.5)
+            
+            min_stop_distance = spread * 1.5
+            if sl_distance < min_stop_distance:
+                sl_distance = min_stop_distance
+                logger.info(f"[{symbol}] Spread Guard Active: VSL forced to {sl_distance:.5f} (1.5x spread)")
+            
+            sl_level = price_open - sl_distance if pos.type == 0 else price_open + sl_distance
+            tp_level = price_open + (TP_ATR_MULT * macro_atr) if pos.type == 0 else price_open - (TP_ATR_MULT * macro_atr)
             
             # Time-Weighted Conviction Decay
             days_open = (now - pos.time) / 86400.0
@@ -297,24 +327,29 @@ class SentinelProfitManager:
                 is_regime_conflict = True
             elif pos_direction == "SELL" and hmm_state == "BULL":
                 is_regime_conflict = True
-            # Note: A shift to RANGE is considered consolidation (DO NOT liquidate).
 
-            # Time-Weighted Conviction Decay
             is_thesis_decay = False
-            # Suspend thesis decay liquidation during RANGE consolidation
             if hmm_state != "RANGE":
                 if pos_direction == "BUY" and adjusted_p <= 0.48:
                     is_thesis_decay = True
                 elif pos_direction == "SELL" and adjusted_p >= 0.52:
                     is_thesis_decay = True
             
-            if is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit:
+            # Directive 1: Time Stop (Theta Decay) - v21.4
+            MAX_HOLDING_SECONDS = 6 * 3600
+            elapsed_seconds = now - pos.time
+            is_theta_decay = (elapsed_seconds > MAX_HOLDING_SECONDS) and (pos.profit <= 0)
+            
+            if is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit or is_theta_decay:
                 if is_regime_conflict:
                     reason_type = "[REGIME CONFLICT]"
                     trigger_desc = f"{pos_direction} vs {hmm_state}"
                 elif is_thesis_decay:
                     reason_type = "[TIME STOP / THESIS DECAY]"
-                    trigger_desc = f"Adj_P={adjusted_p:.4f} (Raw={live_p:.4f}, Days={days_open:.2f})"
+                    trigger_desc = f"Adj_P={adjusted_p:.4f} (Raw={live_p:.4f})"
+                elif is_theta_decay:
+                    reason_type = "[TIME STOP / THETA DECAY]"
+                    trigger_desc = f"Held {elapsed_seconds/3600:.1f}h | PnL={pos.profit:.2f}"
                 elif is_sl_hit:
                     reason_type = "[HARD VIRTUAL STOP]"
                     trigger_desc = f"Price={current_price:.5f} hit SL={sl_level:.5f}"
@@ -325,14 +360,10 @@ class SentinelProfitManager:
                 reason = f"{reason_type} | {trigger_desc} | Ticket={pos.ticket} | PnL={pos.profit:+.2f}"
                 logger.warning(f"🚨 [AUTONOMOUS SRE] Liquidated {symbol} due to {reason_type}. PnL={pos.profit:+.2f}")
 
-                # Step 1: Push exit signal to Discord (VPS orchestrator awareness)
                 _push_exit_signal(pos, reason)
-
-                # Step 2: Execute immediate market close (bypass Virtual SL/TP)
                 success = _market_close(pos)
                 if success:
                     _LIQUIDATION_COOLDOWN[pos.ticket] = now
-                    # Drop SRE diagnostic ticket for audit trail
                     diag = {
                         "event":      reason_type,
                         "symbol":     symbol,
@@ -342,7 +373,7 @@ class SentinelProfitManager:
                         "live_p":     live_p,
                         "pnl":        round(pos.profit, 2),
                         "timestamp":  int(now),
-                        "version":    "v20.4-PROD",
+                        "version":    "v21.3-PROD",
                     }
                     diag_path = DIAG_DIR / f"regime_liq_{symbol}_{int(now)}.json"
                     with open(diag_path, "w") as fh:
@@ -354,52 +385,29 @@ class SentinelProfitManager:
     # ── Monitor Loop ──────────────────────────────────────────────────────────
     def monitor_loop(self):
         logger.info(
-            "Starting monitor loop — "
-            "PSR audit every 10 min | "
-            f"Position scan every 1 s | "
-            f"Regime liquidation poll every {REGIME_POLL_INTERVAL}s per symbol."
+            "Starting monitor loop — PSR audit every 10 min | Position scan every 1 s."
         )
         last_audit = 0.0
-
         while True:
             try:
-                # 1. Periodic PSR audit (every 10 min)
                 if time.time() - last_audit > 600:
                     self.audit_performance()
                     last_audit = time.time()
 
-                # 2. Fetch all open positions (Sentinel + legacy magic numbers)
                 sentinel_pos = mt5.positions_get(magic=MAGIC_NUMBER)  or []
                 legacy_pos   = mt5.positions_get(magic=MAGIC_LEGACY)  or []
                 all_positions = list(sentinel_pos) + list(legacy_pos)
 
                 if all_positions:
-                    # 3. Dynamic Regime Liquidation Audit (SRE Phase 6)
                     self._regime_liquidation_audit(all_positions)
 
-                    # 4. Telemetry heartbeat (PnL logging for dashboarding)
-                    for pos in all_positions:
-                        tick = mt5.symbol_info_tick(pos.symbol)
-                        if not tick:
-                            continue
-                        current = tick.bid if pos.type == 0 else tick.ask
-                        pnl_pct = (current - pos.price_open) / (pos.price_open + 1e-9)
-                        if pos.type == 1:  # SELL
-                            pnl_pct = -pnl_pct
-                        logger.debug(
-                            f"[{pos.symbol}] #{pos.ticket} | "
-                            f"PnL%: {pnl_pct:.3%} | Cash: {pos.profit:+.2f} USD"
-                        )
-
-                time.sleep(60)
+                time.sleep(1)
 
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
                 time.sleep(10)
 
-
 if __name__ == "__main__":
-    # Singleton guard
     try:
         _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         _lock.bind(("127.0.0.1", 65436))

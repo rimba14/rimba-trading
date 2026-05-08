@@ -39,7 +39,7 @@ LEVERAGE_WALL      = 10.0   # 10× notional margin limit
 # SYSTEM CONSTANTS (v19.2)
 STALENESS_THRESHOLD = 900   # Hard 900 s signal staleness gate
 ARCTIC_TIMEOUT      = 0.3   # Hard 300ms latency cap for ArcticDB (v19.1)
-EPISTEMIC_GATE      = 0.7000  # v19.2 SRE Override for London Climax
+EPISTEMIC_GATE      = 0.5000  # Temporarily lowered for live testing
 REASONING_TIMEOUT   = int(os.getenv("REASONING_TIMEOUT", 45))
 
 # PSR Reset Epoch (Phase 5 — SRE Reset v18.1)

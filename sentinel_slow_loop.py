@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.4 - Data Warm-Up)
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.6 - MixTS Reconnection)
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -103,6 +103,7 @@ import gitagent_utils as utils
 import gitagent_bars as bars
 import gitagent_memory as memory
 import feature_engineering as feat_eng
+import gitagent_mixts as mixts
 
 # -- Config --------------------------------------------------------------------
 from sentinel_config import (
@@ -583,7 +584,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
             return
 
-        raw_hmm_state, hmm_prob, _ = hmm.get_current_state(df_m15["close"].values)
+        raw_hmm_state, hmm_prob, label_probs = hmm.get_current_state(df_m15["close"].values)
         
         # Directive 1: Regime Hysteresis (Debouncing)
         if symbol not in _OFFICIAL_REGIME:
@@ -690,31 +691,48 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             return
         
         # Directive 4: FFT Coherence Lock (v20.4)
-        if hmm_state == "RANGE":
-            rsi = df_ta["W_rsi"].iloc[-1]
-            bbpos = df_ta["B_bbpos"].iloc[-1]
-            
-            # Fetch FFT Power from sigproc (as proxy for TimesNet amplitude)
-            prices = df_m15['close'].values
-            fft_data = sigproc.fft_cycle_detector(prices)
-            fft_amplitude = fft_data.get('power', 0.0)
-            
-            if fft_amplitude > 1.5:
-                meta_p = calculate_mean_reversion_score(rsi, bbpos)
-                logging.info(f"[{symbol}] ROUTING: Mean-Reversion (RSI={rsi:.1f}, BB={bbpos:.2f}, FFT={fft_amplitude:.2f}) -> P={meta_p:.4f}")
-            else:
-                meta_p = 0.50
-                logging.info(f"[{symbol}] [FILTER] RANGE detected, but FFT Coherence low ({fft_amplitude:.2f}). Trade suppressed.")
-            
-            primary_dir = 1 if meta_p > 0.5 else -1
-            current_gate = 0.75
+        # ── Directive 1: Reconnect MixTS Probabilistic Blending (v22.6) ─────
+        # Evaluate both models concurrently (No binary hard gates)
+        
+        # Strategy A: Trend-Following (Math Meta-Model / MoE)
+        p_trend = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
+        
+        # Strategy B: Mean-Reversion (RSI + BB + FFT Coherence)
+        rsi = df_ta["W_rsi"].iloc[-1]
+        bbpos = df_ta["B_bbpos"].iloc[-1]
+        prices = df_m15['close'].values
+        fft_data = sigproc.fft_cycle_detector(prices)
+        fft_amplitude = fft_data.get('power', 0.0)
+        
+        if fft_amplitude > 1.5:
+            p_range = calculate_mean_reversion_score(rsi, bbpos)
         else:
-            meta_p = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
-            current_gate = EPISTEMIC_GATE
-            if not is_legend:
-                if hmm_state == "BEAR" and primary_dir == 1: meta_p = 0.50
-                elif hmm_state == "BULL" and primary_dir == -1: meta_p = 0.50
-            if is_graveyard: meta_p = 0.50
+            p_range = 0.50 # Neutralize if coherence is low
+            
+        # Blending Weights via HMM Posterior Probabilities
+        # HMM State 0=BULL, 1=BEAR, 2=RANGE
+        w_trend = label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0)
+        w_range = label_probs.get("RANGE", 0.0)
+        
+        # Normalize weights to sum to 1.0
+        total_w = w_trend + w_range + 1e-9
+        w_trend /= total_w
+        w_range /= total_w
+        
+        # Final MixTS Blended Conviction (P)
+        meta_p = (w_trend * p_trend) + (w_range * p_range)
+        
+        # Dynamic Epistemic Gate Blending
+        # Trend Gate (Default) vs Range Gate (0.75)
+        current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * 0.75)
+        
+        # Post-processing: Regime Alignment & Graveyard
+        if not is_legend:
+            if hmm_state == "BEAR" and primary_dir == 1: meta_p = 0.50
+            elif hmm_state == "BULL" and primary_dir == -1: meta_p = 0.50
+        if is_graveyard: meta_p = 0.50
+        
+        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f})")
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
