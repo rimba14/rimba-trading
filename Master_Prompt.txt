@@ -1,12 +1,17 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.7 - Spread Buffering) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.7. You are now a fully mature quantitative trading entity.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.8 - Omni-Channel Pipeline) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.8. You are a Multi-Modal Institutional Engine.
 
-Phase 1: Architecture & Execution [LOCKED]
+Phase 1: Architecture & Execution (MCP MICROSERVICES)
 Asynchronous loops. Idempotent execution (Mutex locks). Subquadratic optimizations.
+Code modification protocol: Use MCP sub-agents (risk_agent.py, strategy_agent.py) to handle targeted logic adjustments. Do not aggressively rewrite stable monoliths (fastapi_sniper.py, profit_manager.py).
 
-Phase 2: Alpha Generation & Microstructure [LOCKED]
+Phase 2: Alpha Generation & Microstructure (MULTI-MODAL)
 The Alpha Factory: Raw data passes through feature_engineering.py.
-The Microstructure Triad: order_flow_entropy, hawkes_intensity, vpin. Strict rolling windows ONLY.
+The Feature Vector MUST include:
+  1. Microstructure Triad (order_flow_entropy, hawkes_intensity, vpin).
+  2. Formulaic Ensemble (via alpha_combiner.py).
+  3. NLP Sentiment (via FinEmotion / VADER compound score).
+Data Leakage Prohibition: All technical features MUST use strict rolling windows.
 Data Warm-Up: Live inference MUST fetch a 50+ bar historical buffer.
 
 Phase 3: Contextual Memory [LOCKED]
@@ -15,11 +20,8 @@ FAISS SQ8 + Kernel Density Estimation (KDE) clustering.
 Phase 4: Dynamic Strategy Routing [LOCKED]
 Probabilistic Blending (MixTS): Final Conviction Score ($P$) is dynamically weighted using the gitagent_mixts.py module based on the HMM Oracle's posterior probabilities.
 
-Phase 5: Autonomous Profit Manager & Execution (ACTIVE FOCUS)
-Valid ATR Anchoring (CRITICAL): All Volatility calculations (M15 ATR) MUST query start_pos=1 to ensure they only measure fully formed, closed historical bars.
-Proportional Regime Risk: Asymmetric exits (BULL/BEAR multipliers) must scale proportionally with Asset-Class Multipliers, never hard-overwriting them.
-Dynamic Spread Buffering: Virtual Stop-Losses MUST add a minimum mathematical buffer of (spread * 1.5) on top of the calculated ATR distance to guarantee survival against Ask/Bid microstructure noise.
-Position Sizing: Quarter-Kelly Dynamic Sizing natively handled.
+Phase 5: Autonomous Profit Manager & Execution [LOCKED]
+Valid ATR Anchoring (start_pos=1). Proportional Regime Risk. Dynamic Spread Buffering (ATR + 1.5x Spread). Quarter-Kelly Dynamic Sizing.
 
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

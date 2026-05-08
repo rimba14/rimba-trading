@@ -1,6 +1,6 @@
 """
-feature_engineering.py - ADAPTIVE SENTINEL FEATURE ENGINEERING MODULE (v22.5)
-Constitution: Alpha Generation via Institutional-Grade Mathematical Features.
+feature_engineering.py - ADAPTIVE SENTINEL FEATURE ENGINEERING MODULE (v22.8)
+Constitution: Multi-Modal Alpha Generation — Microstructure + Sentiment + Formulaic Math.
 
 This module provides core feature generators for the XGBoost/Meta-Model
 inference pipeline:
@@ -8,13 +8,41 @@ inference pipeline:
 1. Fractional Differencing (López de Prado, 2018)
 2. Spectral Fingerprinting (FFT Top-K)
 3. Microstructure Triad (VPIN, Hawkes Intensity, Order-Flow Entropy) - v22.5
+4. NLP Sentiment (FinEmotion / VADER Compound Score)            - v22.8 [NEW]
+5. Formulaic Ensemble Alphas (alpha_combiner.py / Kakushadze)   - v22.8 [NEW]
 """
 
+import sys
+import os
 import numpy as np
 import pandas as pd
 import logging
 from typing import Tuple, Optional, Dict
 from statsmodels.tsa.stattools import adfuller
+
+# ── v22.8: NLP Sentiment Engine (FinEmotion / VADER) ────────────────────────
+# Graceful import: if spacy/contractions are unavailable, fall back to VADER-only.
+_FINEMOTION_AVAILABLE = False
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "FinEmotion"))
+    from finemotion.emotion import get_sentiment as _fe_get_sentiment, cleaning as _fe_cleaning
+    _FINEMOTION_AVAILABLE = True
+except Exception:
+    pass
+
+try:
+    from nltk.sentiment.vader import SentimentIntensityAnalyzer as _VADER
+    _vader = _VADER()
+    _VADER_AVAILABLE = True
+except Exception:
+    _VADER_AVAILABLE = False
+
+# ── v22.8: Formulaic Ensemble (Kakushadze AlphaCombiner) ────────────────────
+try:
+    from alpha_combiner import combiner as _alpha_combiner
+    _ALPHA_COMBINER_AVAILABLE = True
+except Exception:
+    _ALPHA_COMBINER_AVAILABLE = False
 
 logger = logging.getLogger("FeatureEngineering")
 
@@ -414,6 +442,97 @@ def calculate_order_flow_entropy(series: pd.Series, window: int = 20) -> pd.Seri
     return signs.rolling(window).apply(entropy).fillna(0.0)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECTIVE 4: NLP SENTIMENT ENGINE (v22.8)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_news_sentiment(headline: str) -> float:
+    """
+    v22.8: Multi-Modal Sentiment Extraction.
+
+    Scores a macro headline or asset-specific news string as a float in [-1, 1].
+    Pipeline (in priority order):
+      1. FinEmotion full pipeline (cleaning + lemmatize + NRC emotion lexicon).
+         Maps to polarity: (joy+trust+anticipation) - (fear+anger+sadness+disgust).
+      2. VADER compound score (NLTK, rule-based fallback).
+      3. Neutral 0.0 sentinel if all NLP deps are unavailable.
+
+    Args:
+        headline: Raw news headline or macro summary string.
+
+    Returns:
+        Float in [-1, 1]. Positive = bullish sentiment. Negative = bearish.
+    """
+    if not headline or not isinstance(headline, str) or len(headline.strip()) < 3:
+        return 0.0
+
+    # --- Path 1: FinEmotion (full NRC emotion lexicon pipeline) ---
+    if _FINEMOTION_AVAILABLE:
+        try:
+            from finemotion.emotion import get_emotion
+            sentiment_label = _fe_get_sentiment(headline)
+            cleaned = _fe_cleaning(headline)
+            emotions = get_emotion(cleaned, sentiment=sentiment_label)
+            # Bullish basket: joy, trust, anticipation
+            # Bearish basket: fear, anger, sadness, disgust
+            bull = emotions.get("joy", 0) + emotions.get("trust", 0) + emotions.get("anticipation", 0)
+            bear = emotions.get("fear", 0) + emotions.get("anger", 0) + emotions.get("sadness", 0) + emotions.get("disgust", 0)
+            total = bull + bear + 1e-9
+            score = float(np.clip((bull - bear) / total, -1.0, 1.0))
+            logger.info(f"[NLP] FinEmotion sentiment={score:.3f} | bull={bull:.2f} bear={bear:.2f}")
+            return score
+        except Exception as e:
+            logger.warning(f"[NLP] FinEmotion failed, falling back to VADER: {e}")
+
+    # --- Path 2: VADER compound score ---
+    if _VADER_AVAILABLE:
+        try:
+            score = float(_vader.polarity_scores(headline)["compound"])
+            logger.info(f"[NLP] VADER sentiment={score:.3f}")
+            return score
+        except Exception as e:
+            logger.warning(f"[NLP] VADER failed: {e}")
+
+    # --- Path 3: Neutral fallback ---
+    logger.warning("[NLP] All sentiment engines unavailable. Returning 0.0 (neutral).")
+    return 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECTIVE 5: FORMULAIC ENSEMBLE ALPHA (v22.8)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_combiner_alpha(symbol: str, signals_dict: dict, volatilities: dict) -> float:
+    """
+    v22.8: Kakushadze Formulaic Ensemble Alpha via AlphaCombiner.
+
+    Passes cross-sectional raw agent scores through AlphaCombiner:
+      - Z-score standardization (Eq 1-3)
+      - Cross-sectional demeaning (Eq 5)
+      - Residual extraction + inverse-volatility weighting (Eq 9-11)
+
+    Args:
+        symbol:       The target asset (e.g., 'BTCUSD').
+        signals_dict: {sym: {agent_name: raw_score}} for the current universe.
+        volatilities: {sym: atr_value} for volatility-weighting.
+
+    Returns:
+        Float: The orthogonalized, volatility-weighted ensemble alpha for `symbol`.
+               0.0 if combiner unavailable or symbol missing from output.
+    """
+    if not _ALPHA_COMBINER_AVAILABLE:
+        logger.warning("[ALPHA_COMBINER] Module unavailable. Returning 0.0.")
+        return 0.0
+    try:
+        scores = _alpha_combiner.process_signals(signals_dict, volatilities)
+        alpha = float(scores.get(symbol, 0.0))
+        logger.info(f"[ALPHA_COMBINER] {symbol} ensemble_alpha={alpha:.4f}")
+        return alpha
+    except Exception as e:
+        logger.warning(f"[ALPHA_COMBINER] Error: {e}")
+        return 0.0
+
+
 def engineer_features(
     df: pd.DataFrame,
     price_col: str = "close",
@@ -421,12 +540,18 @@ def engineer_features(
     frac_d: float = 0.45,
     fft_top_k: int = 3,
     cs_rank: float = 0.5,
+    news_headline: str = "",
+    combiner_signals: dict = None,
+    combiner_volatilities: dict = None,
+    symbol: str = "",
 ) -> pd.DataFrame:
     """
-    Master feature engineering function. Appends institutional-grade features
-    to the ML dataframe prior to XGBoost/Meta-Model inference.
-    
-    v22.5: Added Microstructure Triad (VPIN, Hawkes, Entropy).
+    Master feature engineering function (v22.8 — Multi-Modal).
+
+    Appends institutional-grade features to the ML dataframe:
+      - Microstructure Triad  (VPIN, Hawkes Intensity, Order-Flow Entropy)
+      - NLP Sentiment         (FinEmotion / VADER compound score)  [v22.8]
+      - Formulaic Ensemble    (Kakushadze alpha via AlphaCombiner)  [v22.8]
     """
     df = df.copy()
 
@@ -473,8 +598,20 @@ def engineer_features(
     df["hawkes_intensity"] = calculate_hawkes_intensity(df, decay_factor=0.1)
     df["order_flow_entropy"] = calculate_order_flow_entropy(df[price_col], window=20)
 
+    # ── 5. NLP Sentiment (v22.8) ───────────────────────────────────────────
+    sentiment_score = get_news_sentiment(news_headline) if news_headline else 0.0
+    df["news_sentiment"] = float(sentiment_score)
+
+    # ── 6. Formulaic Ensemble Alpha (v22.8) ───────────────────────────────
+    alpha_score = 0.0
+    if symbol and combiner_signals and combiner_volatilities:
+        alpha_score = get_combiner_alpha(symbol, combiner_signals, combiner_volatilities)
+    df["ensemble_alpha"] = float(alpha_score)
+
     logger.info(
-        f"[FEAT_ENG] v22.5 Features: FracDiff={frac_d} | FFT=32 | CS Rank={cs_rank:.2f} | Triad=[VPIN, Hawkes, Entropy]"
+        f"[FEAT_ENG] v22.8 Features: FracDiff={frac_d} | FFT=32 | CS Rank={cs_rank:.2f} "
+        f"| Triad=[VPIN, Hawkes, Entropy] | Sentiment={sentiment_score:.3f} "
+        f"| EnsembleAlpha={alpha_score:.4f}"
     )
 
     return df
