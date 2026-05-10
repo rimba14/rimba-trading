@@ -180,6 +180,14 @@ def get_current_state(price_series: np.ndarray, lookback: int = 200):
 
     try:
         A, B, pi = baum_welch(obs)
+        
+        # Directive 1: Transition Penalty (v23.2 Hotfix)
+        # Anchor the diagonal to make regimes "sticky" and ignore micro-volatility.
+        penalty_factor = 0.20
+        for i in range(len(A)):
+            A[i, i] += penalty_factor
+        A = A / A.sum(axis=1, keepdims=True) # Re-normalize probabilities
+        
     except Exception:
         return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34}
 

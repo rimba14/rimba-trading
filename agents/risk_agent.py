@@ -33,13 +33,20 @@ class RiskAgent:
         self.high_water_mark       = 0.0
         self.circuit_breaker_active = False
 
-    def check_trade(self, symbol: str, size_usd: float, leverage: float) -> Tuple[bool, str]:
+    def check_trade(self, symbol: str, size_usd: float, leverage: float, xgb_p: float = 0.5, ddqn_p: float = 0.5) -> Tuple[bool, str]:
         """
         Final check before any order is allowed.
+        Includes v23.2 Dissonance Veto.
         Returns (allow: bool, reason: str).
         """
         if self.circuit_breaker_active:
             return False, "Circuit breaker active. Daily drawdown limit hit."
+
+        # Directive 2: Dissonance Veto Calibration (v23.2 Hotfix)
+        max_dissonance = 0.40 if symbol == 'XAUUSD' else 0.50
+        dissonance = abs(xgb_p - ddqn_p)
+        if dissonance > max_dissonance:
+            return False, f"Cognitive Dissonance Exceeded ({dissonance:.2f} > {max_dissonance:.2f}). XGB: {xgb_p:.2f} vs DDQN: {ddqn_p:.2f}"
 
         if leverage > self.max_leverage:
             return False, f"Leverage {leverage}x exceeds max allowed {self.max_leverage}x."
@@ -63,23 +70,25 @@ def _start_mcp_server():
     The Hermes Orchestrator calls /check_trade and /status via HTTP.
     """
     try:
-        from fastapi import FastAPI
+        from fastapi import FastAPI, HTTPException
         from pydantic import BaseModel
         import uvicorn
 
-        app = FastAPI(title="Sentinel Risk Agent MCP", version="22.8")
+        app = FastAPI(title="Sentinel Risk Agent MCP", version="23.2")
         _agent = RiskAgent()
 
         class TradeCheckRequest(BaseModel):
             symbol: str
             size_usd: float
             leverage: float
+            xgb_p: float = 0.5
+            ddqn_p: float = 0.5
 
         @app.get("/status")
         def status():
             return {
                 "agent": "risk_agent",
-                "version": "v22.8",
+                "version": "v23.2",
                 "circuit_breaker": _agent.circuit_breaker_active,
                 "max_leverage": _agent.max_leverage,
                 "max_position_usd": _agent.max_position_size_usd,
@@ -88,10 +97,13 @@ def _start_mcp_server():
 
         @app.post("/check_trade")
         def check_trade(req: TradeCheckRequest):
-            allow, reason = _agent.check_trade(req.symbol, req.size_usd, req.leverage)
+            allow, reason = _agent.check_trade(req.symbol, req.size_usd, req.leverage, req.xgb_p, req.ddqn_p)
+            if not allow and "Dissonance" in reason:
+                # User requested a 403 or specific VETO response
+                raise HTTPException(status_code=403, detail=reason)
             return {"allow": allow, "reason": reason, "symbol": req.symbol}
 
-        logger.info("[RISK_AGENT_MCP] Starting on port 8001...")
+        logger.info("[RISK_AGENT_MCP] Starting on port 8001 (Dissonance Veto Active)...")
         uvicorn.run(app, host="0.0.0.0", port=8001)
 
     except ImportError as e:

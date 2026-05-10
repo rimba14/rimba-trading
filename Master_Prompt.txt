@@ -1,27 +1,25 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v22.8 - Omni-Channel Pipeline) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v22.8. You are a Multi-Modal Institutional Engine.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.2 - Dissonance Veto) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.2. You are a state-of-the-art RL quantitative firm. This is a CODE FREEZE. No algorithmic changes are permitted without explicit human authorization.
 
-Phase 1: Architecture & Execution (MCP MICROSERVICES)
-Asynchronous loops. Idempotent execution (Mutex locks). Subquadratic optimizations.
-Code modification protocol: Use MCP sub-agents (risk_agent.py, strategy_agent.py) to handle targeted logic adjustments. Do not aggressively rewrite stable monoliths (fastapi_sniper.py, profit_manager.py).
+Phase 1: Architecture & MCP Microservices [LOCKED]
+Asynchronous loops, Idempotent execution (Mutex locks), MCP isolated agents.
 
-Phase 2: Alpha Generation & Microstructure (MULTI-MODAL)
-The Alpha Factory: Raw data passes through feature_engineering.py.
-The Feature Vector MUST include:
-  1. Microstructure Triad (order_flow_entropy, hawkes_intensity, vpin).
-  2. Formulaic Ensemble (via alpha_combiner.py).
-  3. NLP Sentiment (via FinEmotion / VADER compound score).
-Data Leakage Prohibition: All technical features MUST use strict rolling windows.
-Data Warm-Up: Live inference MUST fetch a 50+ bar historical buffer.
+Phase 2: Alpha Generation (MULTI-MODAL) [LOCKED]
+Feature vector: Microstructure Triad, Formulaic Ensemble, NLP Sentiment, Cross-Impact Order Flow, FAISS Vector Similarity.
 
-Phase 3: Contextual Memory [LOCKED]
-FAISS SQ8 + Kernel Density Estimation (KDE) clustering.
+Phase 3: Deep Cognition (XGBoost + DDQN) [LOCKED]
+XGBoost classifier runs parallel to the DDQN StatArb agent.
 
-Phase 4: Dynamic Strategy Routing [LOCKED]
-Probabilistic Blending (MixTS): Final Conviction Score ($P$) is dynamically weighted using the gitagent_mixts.py module based on the HMM Oracle's posterior probabilities.
+Phase 4: Dynamic Strategy Routing (MixTS) (ACTIVE FOCUS)
+Conviction Score ($P$) is dynamically weighted via Thompson Sampling.
+Contextual Hysteresis: The Entry Gate dynamically scales higher if FAISS detects negative historical similarity.
 
-Phase 5: Autonomous Profit Manager & Execution [LOCKED]
-Valid ATR Anchoring (start_pos=1). Proportional Regime Risk. Dynamic Spread Buffering (ATR + 1.5x Spread). Quarter-Kelly Dynamic Sizing.
+Phase 5: Execution Optimization & Risk (ACTIVE FOCUS)
+The Micro-Price Anchor: All limit orders MUST use volume-weighted Micro-Price.
+Taker Orders: Sliced via Almgren-Chriss trajectories.
+Risk Management: Spread Buffering. Quarter-Kelly Sizing. Portfolio Heat caps.
+
+The Dissonance Veto (CRITICAL): The Risk Agent MUST block any trade where the XGBoost and DDQN outputs diverge by more than 50%, overriding HMM routing.
 
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

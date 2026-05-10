@@ -4,6 +4,7 @@ from scipy.fft import fft, fftfreq
 from gitagent_base import BaseModule
 import pandas as pd
 import time
+from datetime import datetime, timedelta
 from typing import Dict, Any
 import MetaTrader5 as mt5
 
@@ -19,15 +20,33 @@ def strict_normalize(series: np.ndarray) -> np.ndarray:
     norm = (series - mean) / std
     return np.clip(norm, -5.0, 5.0)
 
-def get_m15_dataframe(symbol, count=200):
-    """Utility to fetch MT5 M15 rates and return a cleaned DataFrame."""
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, count)
-    if rates is None or len(rates) == 0:
+def get_tick_dataframe(symbol, count=2000):
+    """v23.2 Directive: Latency-Hardened Tick Ingestion."""
+    # Use copy_ticks_range to ensure deterministic non-blocking retrieval
+    to_date = datetime.now()
+    from_date = to_date - timedelta(minutes=10)
+    ticks = mt5.copy_ticks_range(symbol, from_date, to_date, mt5.COPY_TICKS_ALL)
+    if ticks is None or len(ticks) == 0:
         return None
-    df = pd.DataFrame(rates)
+    # structured array row: (time, bid, ask, last, volume, time_msc, flags, volume_real)
+    df = pd.DataFrame(ticks)
     df['time'] = pd.to_datetime(df['time'], unit='s')
+    
+    # Directive: v21.2 Data Parity - Ensure all expected columns exist
+    if 'real_volume' not in df.columns:
+        df['real_volume'] = df['volume'] if 'volume' in df.columns else 0.0
+    if 'volume' not in df.columns:
+        df['volume'] = df['real_volume']
+        
+    # Synthetic OHLC from ticks for indicator parity
+    df['close'] = df['last'].where(df['last'] > 0, df['bid'])
+    df['open'] = df['close']
+    df['high'] = df['close']
+    df['low'] = df['close']
     return df
 
+def get_m15_dataframe(symbol, count=200):
+    pass
 class PerceptionLayer(BaseModule):
     """
     Sentinel Perception Layer (Layer 1)
