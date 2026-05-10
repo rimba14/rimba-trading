@@ -50,6 +50,13 @@ def init_model():
         print(f"[KRONOS] Loading Pre-Quantized Model from {QUANT_PATH}...")
         _MODEL = torch.load(QUANT_PATH, weights_only=False)
         _MODEL.eval()
+
+        # Directive 3: TurboQuant (v23.3 Omni-Compression)
+        # Enable subquadratic attention and memory-efficient KV cache
+        if hasattr(_MODEL, 'configure_attention'):
+            _MODEL.configure_attention(mode="subquadratic", kv_quantization="4bit")
+            print("[KRONOS] Subquadratic Attention & 4-bit KV Cache Enabled.")
+
         print("[KRONOS] Pre-Quantized Model Loaded Successfully.")
     except Exception as e:
         print(f"[KRONOS] CRITICAL: Model Loading Failed: {e}")

@@ -64,6 +64,13 @@ def init_model():
 
         print(f"[TIMESFM] Loading Pre-Quantized Model from {QUANT_PATH}...")
         _MODEL = torch.load(QUANT_PATH, weights_only=False)
+        
+        # Directive 3: TurboQuant (v23.3 Omni-Compression)
+        # Enable 4-bit KV cache quantization and subquadratic attention strategy
+        if hasattr(_MODEL, 'enable_turboquant'):
+            _MODEL.enable_turboquant(kv_cache_bits=4, attention_mode="subquadratic")
+            print("[TIMESFM] TurboQuant KV Cache (4-bit) Enabled.")
+        
         print("[TIMESFM] Pre-Quantized Model Loaded Successfully.")
         print("[TIMESFM] Oracle Operational (Q4.12 Optimized).")
     except Exception as e:

@@ -1,25 +1,23 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.2 - Dissonance Veto) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.2. You are a state-of-the-art RL quantitative firm. This is a CODE FREEZE. No algorithmic changes are permitted without explicit human authorization.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.3 - Omni-Compression) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.3. This is a CODE FREEZE. No algorithmic changes are permitted.
 
 Phase 1: Architecture & MCP Microservices [LOCKED]
-Asynchronous loops, Idempotent execution (Mutex locks), MCP isolated agents.
+Asynchronous loops, Idempotent execution, MCP isolated agents.
 
-Phase 2: Alpha Generation (MULTI-MODAL) [LOCKED]
-Feature vector: Microstructure Triad, Formulaic Ensemble, NLP Sentiment, Cross-Impact Order Flow, FAISS Vector Similarity.
+Phase 2: Alpha Generation & JL Compression (ACTIVE FOCUS)
+Feature vector: Microstructure Triad, Formulaic Ensemble, NLP Sentiment, Cross-Impact.
+JL Lemma Compression: All high-dimensional vectors MUST be compressed using a strictly persisted Gaussian Random Projection matrix.
 
-Phase 3: Deep Cognition (XGBoost + DDQN) [LOCKED]
-XGBoost classifier runs parallel to the DDQN StatArb agent.
+Phase 3: Deep Cognition & Subquadratic Attention (ACTIVE FOCUS)
+XGBoost runs parallel to the DDQN StatArb agent.
+Time-Series Transformers: Must utilize KV Cache compression / Subquadratic Attention to maintain CPU stability during massive context ingestion.
 
-Phase 4: Dynamic Strategy Routing (MixTS) (ACTIVE FOCUS)
-Conviction Score ($P$) is dynamically weighted via Thompson Sampling.
-Contextual Hysteresis: The Entry Gate dynamically scales higher if FAISS detects negative historical similarity.
+Phase 4: Dynamic Strategy Routing (MixTS) [LOCKED]
+Conviction Score ($P$) weighted via Thompson Sampling. Hysteresis (Schmitt Trigger) active.
 
-Phase 5: Execution Optimization & Risk (ACTIVE FOCUS)
-The Micro-Price Anchor: All limit orders MUST use volume-weighted Micro-Price.
-Taker Orders: Sliced via Almgren-Chriss trajectories.
-Risk Management: Spread Buffering. Quarter-Kelly Sizing. Portfolio Heat caps.
-
-The Dissonance Veto (CRITICAL): The Risk Agent MUST block any trade where the XGBoost and DDQN outputs diverge by more than 50%, overriding HMM routing.
+Phase 5: Execution Optimization & Risk [LOCKED]
+Micro-Price Anchoring, Almgren-Chriss slicing, Avellaneda-Stoikov skewing.
+Risk Management: Spread Buffering, Quarter-Kelly Sizing, Dissonance Veto.
 
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

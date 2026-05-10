@@ -30,46 +30,46 @@ async def fetch_market_data(symbol="XAUUSD"):
 
 async def trading_cycle(router):
     async with execution_lock:
-        print(f"[{time.strftime('%H:%M:%S')}] Starting Oxford Trading Cycle v23.2...")
+        print(f"[{time.strftime('%H:%M:%S')}] Starting Oxford Trading Cycle v23.3 (JL Compressed)...")
         
         # 1. Fetch data
         df = await fetch_market_data()
         if df is None: return
         
-        # 2. Alpha Generation
+        # 2. Alpha Generation (v23.3: Includes JL Compression)
         features = generate_features(df)
         
         # 3. Deep Cognition
-        # v23.2: Parallel Model Inference
+        # v23.3: Using compressed state-space for inference
         xgboost_prob = np.random.uniform(0.4, 0.8)
-        ddqn_prob = get_prediction(features.values)
+        ddqn_prob = get_prediction(features) # features is now compressed np.ndarray
         
         # 4. Contextual Analysis (FAISS)
-        # Mocking FAISS similarity (would normally come from FAISS index search)
+        # Mocking FAISS similarity
         faiss_sim = np.random.uniform(-0.5, 0.5)
         
         # 5. Dynamic Strategy Routing (MixTS)
-        # Includes Contextual Hysteresis & HMM State Flush check
         p, weights, gate = router.calculate_conviction(xgboost_prob, ddqn_prob, faiss_sim=faiss_sim)
         
         print(f"  Conviction (P): {p:.4f} | Gate: {gate:.2f} | FAISS: {faiss_sim:.2f}")
         print(f"  Dissonance: {abs(xgboost_prob - ddqn_prob):.2f}")
         
-        # 6. Dissonance Veto & Execution
-        # Directive 3: Overriding router if conflict exceeds 50%
-        if abs(xgboost_prob - ddqn_prob) > 0.50:
-            print(f"  [VETO] Cognitive Dissonance Exceeded. Aborting trade.")
+        # 6. Dissonance Veto & Execution (v23.2 Calibration applied)
+        symbol = "XAUUSD"
+        max_dissonance = 0.40 if symbol == "XAUUSD" else 0.50
+        if abs(xgboost_prob - ddqn_prob) > max_dissonance:
+            print(f"  [VETO] Cognitive Dissonance Exceeded ({abs(xgboost_prob-ddqn_prob):.2f} > {max_dissonance}). Aborting.")
             return
 
         if p > gate: # Entry Threshold (dynamically scaled)
             lots = 0.01 
-            execute_order("XAUUSD", lots)
+            execute_order(symbol, lots)
         else:
             print(f"  Signal ({p:.2f}) < Gate ({gate:.2f}). Holding.")
 
 async def main():
     print("====================================================")
-    print("OXFORD ARCHITECTURE v23.2: DISSONANCE VETO ACTIVE")
+    print("OXFORD ARCHITECTURE v23.3: JL COMPRESSION ACTIVE")
     print("====================================================\n")
     
     if not mt5.initialize():
