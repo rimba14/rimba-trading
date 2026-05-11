@@ -13,6 +13,7 @@ import os
 import time
 import logging
 import sys
+import MetaTrader5 as mt5
 from typing import Tuple
 
 logger = logging.getLogger("RiskAgent")
@@ -24,10 +25,11 @@ class RiskAgent:
         self.address = account_address
 
         # Risk Parameters (MT5 production calibrated)
-        self.max_position_size_usd = 50.0    # Cap per trade
-        self.max_leverage          = 5       # 5x isolated max
-        self.daily_drawdown_limit  = 0.05    # 5% max daily loss
-        self.total_portfolio_limit = 500.0   # Max total notional exposure
+        self.max_position_size_usd = 10000.0  # Increased for v23.6 Autopsy
+        self.max_leverage          = 50       # 50x max leverage
+        self.daily_drawdown_limit  = 0.05     # 5% max daily loss
+        self.total_portfolio_limit = 50000.0  # Max total exposure
+        self.max_symbol_exposure_usd = 20000.0 # Per symbol cap
 
         # State tracking
         self.high_water_mark       = 0.0
@@ -52,7 +54,22 @@ class RiskAgent:
             return False, f"Leverage {leverage}x exceeds max allowed {self.max_leverage}x."
 
         if size_usd > self.max_position_size_usd:
-            return False, f"Position size ${size_usd} exceeds cap ${self.max_position_size_usd}."
+            return False, f"Position size ${size_usd:.2f} exceeds cap ${self.max_position_size_usd}"
+
+        # Directive 2: Stateful Cumulative Risk (v23.3)
+        if not mt5.initialize():
+            logger.error("[RISK_AGENT] MT5 Init failed during check_trade. Failing safe.")
+            return False, "MT5 connection failure in Risk Agent."
+
+        positions = mt5.positions_get()
+        cumulative_notional = 0.0
+        if positions:
+            # Substring match to catch suffixed symbols (e.g., XAUUSD vs XAUUSD.m)
+            # Formula: Sum (volume * open_price)
+            cumulative_notional = sum([p.volume * p.price_open for p in positions if symbol in p.symbol])
+        
+        if (cumulative_notional + size_usd) > self.max_symbol_exposure_usd:
+            return False, f"Cumulative Exposure Cap Reached: ${cumulative_notional:.2f} + ${size_usd:.2f} > ${self.max_symbol_exposure_usd}"
 
         return True, "Risk check passed."
 
@@ -98,8 +115,8 @@ def _start_mcp_server():
         @app.post("/check_trade")
         def check_trade(req: TradeCheckRequest):
             allow, reason = _agent.check_trade(req.symbol, req.size_usd, req.leverage, req.xgb_p, req.ddqn_p)
-            if not allow and "Dissonance" in reason:
-                # User requested a 403 or specific VETO response
+            if not allow and ("Dissonance" in reason or "Exposure" in reason):
+                # User requested a 403 or specific VETO response for critical breaches
                 raise HTTPException(status_code=403, detail=reason)
             return {"allow": allow, "reason": reason, "symbol": req.symbol}
 

@@ -1,49 +1,68 @@
 """
 fastapi_sniper.py - Adaptive Sentinel Direct HTTP Execution Bridge (Machine B)
-Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v20.4)
-
-Exposes a REST API via FastAPI to receive signals from the Oracle VPS Brain.
-Replaces the unstable Discord WebSocket bridge to eliminate 'Amnesia Locks'.
+Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v23.1 Oxford Apex)
+Concurrency: Idempotent Execution & Mutex Locking Active.
+v23.1: Upgraded baseline to Volume-Weighted Micro-Price.
 """
 
 import os
 import json
+import math
 import time
 import logging
 import sys
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 import uvicorn
 import MetaTrader5 as mt5
 from dotenv import load_dotenv
+import requests
 
+risk_session = requests.Session()
 # Load constitution/config
 sys.path.append(r"C:\Sentinel_Project")
 from sentinel_config import (
     WATCHLIST, KELLY_FRACTION, PORTFOLIO_HEAT_CAP, 
     LEVERAGE_WALL, STALENESS_THRESHOLD, EPISTEMIC_GATE, 
-    MAGIC_NUMBER, HARD_RISK_CAP
+    MAGIC_NUMBER, HARD_RISK_CAP, AC_LARGE_ORDER_THRESHOLD
 )
 
 load_dotenv()
 
 # Configure Logging
+LOG_FILE = r"C:\sentinel_logs\fastapi_sniper_v2.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [HTTP_SNIPER] %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE)
+    ]
 )
 logger = logging.getLogger("HttpSniper")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    # Avoid duplicate handlers if the file is re-imported
+    fh = logging.FileHandler(LOG_FILE)
+    fh.setFormatter(logging.Formatter('%(asctime)s [HTTP_SNIPER] %(message)s'))
+    logger.addHandler(fh)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
 
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
+
+# Directive 1: In-Memory Mutex Lock (v21.1)
+active_liquidations = set()
+entry_cooldowns = {}  # v23.3: 60s Entry Mutex Lock
 
 class TradeSignal(BaseModel):
     symbol: str
     direction: str
     conviction: float
+    xgb_p: float = 0.5
+    ddqn_p: float = 0.5
     hmm_state: str = "RANGE"
     timestamp: int
     reasoning: str = ""
@@ -53,12 +72,27 @@ def startup_event():
     if not mt5.initialize():
         logger.critical("MT5 Initialization failed. Sniper cannot proceed.")
         sys.exit(1)
+    
+    # Directive 2: Terminal Status Check (v23.6)
+    info = mt5.terminal_info()
+    logger.info(f"[BOOT] MT5 Terminal Info: Connected={info.connected} | TradeAllowed={info.trade_allowed}")
+    if not info.trade_allowed:
+        logger.warning("CRITICAL: MT5 'Algo Trading' button is DISABLED. Enable it in the UI.")
     logger.info("MT5 Initialized. HTTP Sniper online.")
 
 @app.on_event("shutdown")
 def shutdown_event():
     mt5.shutdown()
     logger.info("MT5 Shutdown. Sniper offline.")
+
+@app.get("/status")
+def status():
+    return {
+        "status": "online",
+        "mt5_connected": mt5.terminal_info() is not None,
+        "timestamp": int(time.time()),
+        "watchlist_sync": len(WATCHLIST)
+    }
 
 @app.post("/execute_trade")
 async def execute_trade_endpoint(signal: TradeSignal):
@@ -77,18 +111,32 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
         raise HTTPException(status_code=400, detail="Epistemic gate block")
 
-    # 3. Risk Gates
-    if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state):
-        raise HTTPException(status_code=403, detail="Risk gate block")
+    # 2b. Entry Cooldown (60s Mutex)
+    now = time.time()
+    last_time = entry_cooldowns.get(signal.symbol, 0.0)
+    if now - last_time < 60:
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: Entry Cooldown Active ({60 - (now - last_time):.1f}s remaining)")
+        raise HTTPException(status_code=429, detail="Entry cooldown active")
 
-    # 4. Sizing & Execution
+    # 3. Sizing (Calculate before Risk Gates for accurate validation)
     lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
     if lot_size <= 0:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Lot size <= 0")
         raise HTTPException(status_code=400, detail="Invalid lot size")
 
+    # 4. Risk Gates (Now with accurate size)
+    tick = mt5.symbol_info_tick(signal.symbol)
+    price = tick.ask if signal.direction == "BUY" else tick.bid
+    incoming_notional = lot_size * price
+
+    # check_risk_gates now handles its own HTTPException raises for specific reasons
+    if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p):
+        return {"status": "rejected", "detail": "Risk gate block"}
+
+    # 5. Execution
     success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction)
     if success:
+        entry_cooldowns[signal.symbol] = time.time()
         return {"status": "success", "symbol": signal.symbol, "lot": lot_size}
     else:
         raise HTTPException(status_code=500, detail="MT5 execution failed")
@@ -109,15 +157,26 @@ async def liquidate_endpoint(request: Request):
         return {"status": "global_liquidation_complete"}
     
     ticket = data.get("ticket")
-    logger.info(f"Received EXIT Signal: {symbol} Ticket {ticket} Reason: {reason}")
-    if execute_exit(ticket, symbol, reason):
-        return {"status": "exited", "ticket": ticket}
-    else:
-        raise HTTPException(status_code=500, detail="Liquidation failed")
+    
+    # Concurrency Lock: Check if ticket is already being processed
+    if ticket in active_liquidations:
+        logger.info(f"[IDEMPOTENT] Ticket {ticket} is currently locked for liquidation. Ignoring redundant request.")
+        return {"status": "ignored", "message": "Ticket currently locked for liquidation"}
+
+    active_liquidations.add(ticket)
+    try:
+        logger.info(f"Received EXIT Signal: {symbol} Ticket {ticket} Reason: {reason}")
+        if execute_exit(ticket, symbol, reason):
+            return {"status": "exited", "ticket": ticket}
+        else:
+            raise HTTPException(status_code=500, detail="Liquidation failed")
+    finally:
+        if ticket in active_liquidations:
+            active_liquidations.remove(ticket)
 
 # -- Helper Logic (Ported from v17.9) ---------------------------------------- 
 
-def check_risk_gates(symbol, direction, hmm_state):
+def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5):
     # A. Weekend Blackout
     if is_weekend_blackout(symbol):
         logger.warning(f"[{symbol}] Signal REJECTED: Weekend Blackout")
@@ -136,7 +195,35 @@ def check_risk_gates(symbol, direction, hmm_state):
         logger.warning(f"[{symbol}] Signal REJECTED: Amnesia Lock Active")
         return False
 
-    # D. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
+    # D. MCP Risk Agent Check (v22.8)
+    try:
+        risk_url = "http://localhost:8001/check_trade"
+        payload = {
+            "symbol": symbol,
+            "size_usd": incoming_notional,
+            "leverage": 5,
+            "xgb_p": xgb_p,
+            "ddqn_p": ddqn_p
+        }
+        resp = risk_session.post(risk_url, json=payload, timeout=0.5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if not data.get("allow"):
+                logger.warning(f"[{symbol}] Signal REJECTED by MCP Risk Agent: {data.get('reason')}")
+                return False
+            logger.info(f"[{symbol}] MCP Risk Agent Authorized Trade.")
+        elif resp.status_code == 403:
+            err_reason = resp.json().get("detail", "Risk Agent Veto")
+            logger.warning(f"[{symbol}] Risk Agent 403 VETO: {err_reason}")
+            return False
+        else:
+            logger.error(f"[{symbol}] MCP Risk Agent unavailable (Status {resp.status_code}). Failing safe.")
+            return False
+    except Exception as e:
+        logger.error(f"[{symbol}] MCP Risk Agent Connection Error: {e}. Failing safe.")
+        return False
+
+    # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
     acc = mt5.account_info()
     if acc:
         if acc.margin_level > 0 and acc.margin_level < 200:
@@ -171,37 +258,56 @@ def is_weekend_blackout(symbol):
     return False
 
 def has_active_position_same_direction(symbol, direction):
-    positions = mt5.positions_get(symbol=symbol)
-    if positions:
-        for p in positions:
-            if p.magic == MAGIC_NUMBER:
-                pos_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
-                if pos_dir == direction:
-                    return True
-                else:
-                    logger.warning(f"[{symbol}] Mutual Exclusion Triggered: Liquidating opposite {pos_dir} position #{p.ticket}")
-                    execute_exit(p.ticket, symbol, "Mutual Exclusion")
+    # v23.3 Amnesia Patch: Use substring match on all positions to handle broker suffixes
+    all_positions = mt5.positions_get()
+    if all_positions:
+        for p in all_positions:
+            # Substring match: 'XAUUSD' matches 'XAUUSD.m', 'XAUUSD+', etc.
+            if symbol in p.symbol:
+                if p.magic == MAGIC_NUMBER:
+                    pos_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
+                    if pos_dir == direction:
+                        return True
+                    else:
+                        logger.warning(f"[{p.symbol}] Mutual Exclusion Triggered: Liquidating opposite {pos_dir} position #{p.ticket}")
+                        execute_exit(p.ticket, p.symbol, "Mutual Exclusion")
     return False
+
+def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float) -> float:
+    """Oxford Micro-Price (v23.1). Volume-weighted mid-price."""
+    total_vol = bid_vol + ask_vol
+    if total_vol <= 0: return (bid + ask) / 2.0
+    return (bid * ask_vol + ask * bid_vol) / total_vol
 
 def calculate_kelly_lot(symbol, conviction):
     info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
     acc = mt5.account_info()
-    if not info or not acc: return 0.0
+    if not info or not tick or not acc: return 0.0
+
+    # ── v23.1: Micro-Price Baseline ──
+    bid_vol = getattr(tick, 'bid_volume', 0.0)
+    ask_vol = getattr(tick, 'ask_volume', 0.0)
+    micro_price = calculate_micro_price(tick.bid, tick.ask, bid_vol, ask_vol)
+    
     p = abs(conviction - 0.5) + 0.5
     q = 1.0 - p
     f_star = p - (q / 1.5)
-    # v19.1 Directive: Hard Risk Cap (<= 2.0%)
     f_final = min(max(0, f_star * KELLY_FRACTION), HARD_RISK_CAP) 
     risk_usd = acc.equity * f_final
     
-    # Lot calc based on 1% price move (proxy)
-    sl_dist_points = (info.ask * 0.01) / (info.point + 1e-12)
+    # ── v23.1: 1.5x Spread Buffer ──
+    spread = tick.ask - tick.bid
+    spread_buffer = spread * 1.5
+    
+    # Dynamic SL distance: 1% volatility proxy + Spread Buffer
+    sl_dist_price = (micro_price * 0.01) + spread_buffer
+    sl_dist_points = sl_dist_price / (info.point + 1e-12)
+    
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
     raw_vol = risk_usd / (sl_dist_points * point_val + 1e-12)
     lot = round(raw_vol / info.volume_step) * info.volume_step
     
-    # v19.1 Directive: Small Account Execution Bypass
-    # If lot < 0.01 but > 0, round up to 0.01
     if 0.0 < lot < 0.01:
         logger.info(f"[{symbol}] Small Account Bypass: Rounding {lot} up to 0.01")
         lot = 0.01
@@ -209,28 +315,92 @@ def calculate_kelly_lot(symbol, conviction):
     lot = max(min(lot, info.volume_max), 0.0) 
     return lot
 
-def perform_mt5_trade(symbol, direction, lot, p):
-    tick = mt5.symbol_info_tick(symbol)
-    if not tick: return False
-    order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
-    price = tick.ask if direction == "BUY" else tick.bid
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": float(lot),
-        "type": order_type,
-        "price": price,
-        "magic": MAGIC_NUMBER,
-        "comment": f"SENTINEL_v20.4_P{p:.2f}",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
-    res = mt5.order_send(request)
-    if res.retcode == mt5.TRADE_RETCODE_DONE:
-        logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price}")
-        return True
-    else:
-        logger.error(f"[FAIL] [FAILED] {symbol} {direction} Error: {res.retcode} - {res.comment}")
+def perform_mt5_trade(symbol, direction, lot, conviction):
+    try:
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick: 
+            logger.error(f"[{symbol}] Failed to get tick for execution.")
+            return False
+        
+        # v23.1 Micro-Price Audit Trail
+        bid_vol = getattr(tick, 'bid_volume', 0.0)
+        ask_vol = getattr(tick, 'ask_volume', 0.0)
+        micro_price = calculate_micro_price(tick.bid, tick.ask, bid_vol, ask_vol)
+        logger.info(f"[{symbol}] Execution Baseline: Micro-Price={micro_price:.5f} | Mid-Price={(tick.bid+tick.ask)/2:.5f}")
+
+        order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+        price = tick.ask if direction == "BUY" else tick.bid
+
+        # ── v23.0: Almgren-Chriss Trajectory Gate ─────────────────────────────────
+        if lot >= AC_LARGE_ORDER_THRESHOLD:
+            info = mt5.symbol_info(symbol)
+            atr_proxy = (info.trade_contract_size * info.point * 100) if info else 0.0001
+            trajectory = calculate_ac_trajectory(
+                total_size=lot,
+                risk_aversion=0.1,
+                volatility=atr_proxy,
+                n_slices=5,
+            )
+            logger.info(
+                f"[AC_EXECUTION] {symbol} LARGE ORDER {lot} lots -> slicing into "
+                f"{len(trajectory)} child orders: {trajectory}"
+            )
+            success = True
+            for i, child_lot in enumerate(trajectory):
+                child_lot_rounded = round(child_lot / (info.volume_step if info else 0.01)) * (info.volume_step if info else 0.01)
+                child_lot_rounded = max(child_lot_rounded, 0.01)
+                child_request = {
+                    "action":       mt5.TRADE_ACTION_DEAL,
+                    "symbol":       symbol,
+                    "volume":       float(child_lot_rounded),
+                    "type":         order_type,
+                    "price":        price,
+                    "magic":        MAGIC_NUMBER,
+                    "comment":      f"SENTINEL_AC_{i+1}of{len(trajectory)}_P{conviction:.2f}",
+                    "type_time":    mt5.ORDER_TIME_GTC,
+                    "type_filling": mt5.ORDER_FILLING_IOC,
+                }
+                res = mt5.order_send(child_request)
+                if res is None:
+                    logger.error(f"[AC] Child order {i+1} FAILED (API None)")
+                    success = False
+                elif res.retcode == mt5.TRADE_RETCODE_DONE:
+                    logger.info(f"[AC] Child order {i+1}/{len(trajectory)}: {child_lot_rounded} lots @ {price} -> OK")
+                else:
+                    logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
+                    success = False
+                time.sleep(0.05)
+            return success
+
+        # ── Standard single market order (small lot) ────────────────────────────────
+        request = {
+            "action":       mt5.TRADE_ACTION_DEAL,
+            "symbol":       symbol,
+            "volume":       float(lot),
+            "type":         order_type,
+            "price":        price,
+            "magic":        MAGIC_NUMBER,
+            "comment":      f"SENTINEL_v23.1_P{conviction:.2f}",
+            "type_time":    mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        res = mt5.order_send(request)
+        if res is None:
+            err = mt5.last_error()
+            logger.critical(f"[FAIL] [CRITICAL_API_ERROR] {symbol} {direction} | mt5.order_send returned None. Last error: {err}")
+            return False
+
+        if res.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price}")
+            return True
+        else:
+            # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)
+            logger.critical(f"[FAIL] [BROKER_REJECTION] {symbol} {direction} | Retcode: {res.retcode} | Comment: {res.comment}")
+            return False
+            
+    except Exception as e:
+        import traceback
+        logger.critical(f"[FATAL_EXECUTION_CRASH] {symbol} {direction} | Error: {e}\n{traceback.format_exc()}")
         return False
 
 def execute_exit(ticket, symbol, reason):
@@ -257,8 +427,185 @@ def execute_exit(ticket, symbol, reason):
     if res.retcode == mt5.TRADE_RETCODE_DONE:
         logger.info(f"[OK] [EXITED] {symbol} Ticket {ticket} Reason: {reason}")
         return True
+    
+    # Directive 2: Graceful 10013 Error Handling (Idempotency)
+    if res.retcode == 10013:
+        # Check if the position exists
+        if mt5.positions_get(ticket=ticket) is None:
+            logger.info(f"[SUCCESS/IDEMPOTENT] Ticket {ticket} already closed by prior process (MT5 10013).")
+            return True
+
+    logger.error(f"[FAIL] [EXIT_FAILED] {symbol} Ticket {ticket} Error: {res.retcode} - {res.comment}")
     return False
 
 if __name__ == "__main__":
     # Standard run on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECTIVE 3: AVELLANEDA-STOIKOV MARKET MAKING (v23.1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float) -> float:
+    """
+    Oxford Micro-Price (v23.1).
+    Volume-weighted mid-price to prevent adverse selection.
+    """
+    total_vol = bid_vol + ask_vol
+    if total_vol <= 0:
+        return (bid + ask) / 2.0
+    return (bid * ask_vol + ask * bid_vol) / total_vol
+
+def calculate_as_quotes(
+    micro_price: float,
+    inventory: float,
+    volatility: float,
+    risk_aversion: float = 0.1,
+    time_remaining: float = 1.0,
+    spread_factor: float = 1.0,
+) -> Tuple[float, float]:
+    """
+    Avellaneda-Stoikov Optimal Market Making Quotes (v23.1 Oxford Apex).
+
+    Computes the optimal bid and ask limit order prices for a market maker
+    who must manage inventory risk while capturing the spread.
+
+    v23.1 Upgrade: Anchored to Micro-Price to account for order book imbalance.
+
+    The AS model provides two key formulas:
+
+    1. Reservation Price (indifference price, inventory-adjusted):
+       r = S - q * gamma * sigma^2 * T
+       Where:
+         S     = current MICRO-PRICE (volume-weighted)
+         q     = current inventory (signed: +long, -short)
+         gamma = risk aversion parameter
+         sigma = volatility (e.g., ATR proxy)
+         T     = time remaining in the trading session (normalized [0,1])
+
+    2. Optimal Spread:
+       delta = gamma * sigma^2 * T + (2/gamma) * ln(1 + gamma/kappa)
+       Simplified here as: delta = gamma * sigma^2 * T + spread_factor
+
+    Args:
+        micro_price:    Current volume-weighted Micro-Price (S).
+        inventory:      Current signed inventory in lots (+long, -short).
+        volatility:     Price volatility proxy (e.g., ATR). Units: price.
+        risk_aversion:  Gamma parameter [0.01, 1.0]. Higher = tighter quotes.
+        time_remaining: Normalized time in session [0, 1]. Lower = more urgent.
+        spread_factor:  Minimum half-spread (e.g., 1.5x bid-ask spread).
+
+    Returns:
+        Tuple (bid_price, ask_price) — the optimal limit order prices.
+    """
+    # Reservation price: skew Micro-Price away from inventory direction
+    reservation_price = micro_price - inventory * risk_aversion * (volatility ** 2) * time_remaining
+
+    # Optimal half-spread
+    half_spread = 0.5 * (risk_aversion * (volatility ** 2) * time_remaining + spread_factor)
+    half_spread = max(half_spread, spread_factor)  # Floor at minimum spread
+
+    bid = reservation_price - half_spread
+    ask = reservation_price + half_spread
+
+    logger.info(
+        f"[AS_QUOTES] MicroPrice={micro_price:.5f} | Inventory={inventory:.2f} lots "
+        f"| Reservation={reservation_price:.5f} | Bid={bid:.5f} | Ask={ask:.5f} "
+        f"| HalfSpread={half_spread:.5f}"
+    )
+    return bid, ask
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECTIVE 4: ALMGREN-CHRISS OPTIMAL EXECUTION SLICING (v23.0)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Threshold above which AC slicing is mandatory (in lots)
+AC_LARGE_ORDER_THRESHOLD = float(os.getenv("AC_LARGE_ORDER_THRESHOLD", "10.0"))
+
+
+def calculate_ac_trajectory(
+    total_size: float,
+    risk_aversion: float = 0.1,
+    volatility: float = 0.0001,
+    n_slices: int = 5,
+    impact_params: Optional[Dict] = None,
+) -> List[float]:
+    """
+    Almgren-Chriss Optimal Execution Trajectory (v23.0 Oxford).
+
+    Computes the optimal time-schedule for liquidating/acquiring a large order
+    to minimize the expected implementation shortfall (IS), which has two
+    competing components:
+
+    1. Market Impact Cost (Temporary + Permanent):
+       - Permanent impact: eta * v_k  (moves the mid permanently)
+       - Temporary impact: epsilon * v_k (slippage per trade, recovers)
+
+    2. Price Risk (Variance of execution cost over time T):
+       - Larger positions executed over longer periods have more price risk.
+
+    The AC optimal strategy is to trade according to a linear-in-time
+    trajectory (TWAP) under risk-neutrality, or front-load execution when
+    risk aversion is high (to minimize price variance at the cost of more
+    immediate impact).
+
+    The trajectory formula:
+       x_k = X * sinh(kappa * (T - t_k)) / sinh(kappa * T)
+    Where:
+       kappa = sqrt(lambda * sigma^2 / eta_tilde)
+       lambda = risk aversion (higher = front-load)
+       eta_tilde = effective temporary impact coefficient
+
+    Args:
+        total_size:    Total parent order size in lots.
+        risk_aversion: Lambda parameter [0.01, 1.0]. Higher = more front-loading.
+        volatility:    Per-bar price sigma. Used to compute execution risk.
+        n_slices:      Number of child orders to split into.
+        impact_params: Dict with keys 'eta' (temp. impact) and 'sigma' (vol).
+                       If None, uses conservative defaults.
+
+    Returns:
+        List[float] of child order sizes in lots (length = n_slices).
+        All child sizes sum to approximately total_size.
+    """
+    if n_slices <= 1:
+        return [total_size]
+
+    params = impact_params or {}
+    eta    = params.get("eta", 0.01)   # Temporary impact coefficient
+    sigma  = params.get("sigma", volatility) or volatility
+
+    # kappa: the decay rate of the optimal trajectory
+    # Higher kappa -> more front-loading (aggressive execution)
+    eta_tilde = eta * (n_slices / max(1.0, total_size))
+    kappa_sq  = (risk_aversion * (sigma ** 2)) / (eta_tilde + 1e-9)
+    kappa     = math.sqrt(abs(kappa_sq)) if kappa_sq > 0 else 0.0
+
+    # Compute inventory trajectory x(t_k): remaining inventory at each step k
+    T         = float(n_slices)
+    time_steps = [k * (T / n_slices) for k in range(n_slices + 1)]  # 0 to T
+
+    if kappa > 1e-9:
+        # AC hyperbolic trajectory: risk-averse front-loading
+        denom  = math.sinh(kappa * T) + 1e-9
+        x_traj = [total_size * math.sinh(kappa * (T - t)) / denom for t in time_steps]
+    else:
+        # Risk-neutral limit: uniform TWAP
+        x_traj = [total_size * (1.0 - t / T) for t in time_steps]
+
+    # Trade sizes v_k = x_{k-1} - x_k (delta inventory per step)
+    child_sizes = [x_traj[k] - x_traj[k + 1] for k in range(n_slices)]
+    child_sizes = [max(c, 0.0) for c in child_sizes]  # No negative lots
+
+    # Normalize to ensure sum == total_size exactly
+    total_computed = sum(child_sizes) + 1e-9
+    child_sizes    = [c * total_size / total_computed for c in child_sizes]
+    child_sizes    = [round(c, 2) for c in child_sizes]
+
+    logger.info(
+        f"[AC_TRAJECTORY] Parent={total_size} lots | Slices={n_slices} | "
+        f"kappa={kappa:.4f} | Trajectory={child_sizes} | Sum={sum(child_sizes):.2f}"
+    )
+    return child_sizes

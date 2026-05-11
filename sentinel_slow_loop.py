@@ -85,12 +85,16 @@ import requests
 import copy
 from statsmodels.tsa.stattools import adfuller
 
-# Windows Hybrid Initialization
+# Windows Hybrid Initialization (v23.6 Heartbeat)
+import mt5_bridge
+from sentinel_config import BASE_WATCHLIST
+
 if os.name == 'nt':
-    if not mt5.initialize():
-        logging.error("[BOOT] Failed to initialize MT5 for local data streaming.")
-    else:
-        logging.info("[BOOT] MT5 initialized for local Hybrid-Brain mode.")
+    success, WATCHLIST = mt5_bridge.initialize_mt5_with_heartbeat(BASE_WATCHLIST)
+    if not success:
+        logging.critical("[BOOT] Heartbeat or MT5 Initialization FAILED. SRE HALT.")
+        sys.exit(1)
+    logging.info(f"[BOOT] v23.6 Heartbeat PASS. Active Watchlist size: {len(WATCHLIST)}")
 
 sys.path.append(r"C:\Sentinel_Project")
 
@@ -98,6 +102,7 @@ import git_arctic
 import gitagent_hmm as hmm
 import gitagent_sigproc as sigproc
 import kronos_bridge
+import rl_agents.oxford_ddqn as ddqn_bridge
 import timesfm_bridge
 import gitagent_utils as utils
 import gitagent_bars as bars
@@ -143,16 +148,52 @@ logging.basicConfig(
         logging.FileHandler(str(LOG_DIR / "slow_loop_v17_9.log")),
     ],
 )
+
+# -- XGBoost Resurrection (v23.6) -----------------------------------------------
+XGB_MODEL_PATH = PROJECT_ROOT / "data" / "sentinel_xgb_model.json"
+_XGB_MODEL = None
+if XGB_MODEL_PATH.exists():
+    try:
+        _XGB_MODEL = xgb.Booster()
+        _XGB_MODEL.load_model(str(XGB_MODEL_PATH))
+        logging.info(f"[BOOT] XGBoost Model loaded from {XGB_MODEL_PATH.name}")
+    except Exception as e:
+        logging.error(f"[BOOT] Failed to load XGBoost model: {e}")
+else:
+    logging.warning(f"[BOOT] XGBoost model {XGB_MODEL_PATH} not found. Using fallback inference.")
+
+def get_xgb_prediction(features_df):
+    """v23.6: Executes live XGBoost inference on the current feature matrix."""
+    if _XGB_MODEL is None:
+        return 0.500000
+    try:
+        # Prepare DMatrix from the last row of the feature-engineered dataframe
+        # We use a 128-dim compressed vector if available, otherwise raw features
+        latest_features = features_df.tail(1).select_dtypes(include=[np.number])
+        dmat = xgb.DMatrix(latest_features)
+        pred = _XGB_MODEL.predict(dmat)[0]
+        return float(pred)
+    except Exception as e:
+        logging.error(f"[XGB_INFERENCE] Error: {e}. Falling back to 0.500.")
+        return 0.500000
 # -- Contextual Routing - Phase 2 Constitution (v17.9) ------------------
 # CONSTITUTION DIRECTIVE: Route HIGH-VOLATILITY CRYPTO -> Groq (Gemma)
 #                         Route FOREX + INDICES + METALS -> Gemini (macro-synthesis)
-# ONLY BTC and ETH are crypto in the 13-asset watchlist.
-CRYPTO_ASSETS  = {"BTCUSD", "ETHUSD"}
-FOREX_MACRO_ASSETS = {
-    "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCHF", "NZDUSD",  # Forex
-    "GER40", "SP500", "NAS100",                                     # Indices
-    "XAUUSD", "XAGUSD",                                             # Metals
-}
+from sentinel_config import CRYPTO_BASE_SYMBOLS
+
+def _get_engine_for_symbol(symbol: str) -> str:
+    """Dynamically routes symbol to either Groq or Gemini based on config."""
+    # Check if base symbol is in CRYPTO_BASE_SYMBOLS
+    base = symbol
+    for suffix in [".m", ".pro", ".t", "+", "-", ".r", ".c", ".x"]:
+        if symbol.endswith(suffix):
+            base = symbol[:-len(suffix)]
+            break
+    
+    if base in CRYPTO_BASE_SYMBOLS:
+        return "GROQ"
+    return "GEMINI"
+
 
 try:
     from math_meta_model import MathMetaModel
@@ -609,15 +650,19 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "timestamp": utils.get_utc_epoch(),
         }]))
 
+        # 2. Resurrect XGBoost (Directive 1)
         kronos_bridge.update_cognition_cache(symbol, df_ml)
         k_item = _arctic_read(f"{symbol}_kronos")
         if k_item is None:
             return
 
         _k_data = k_item.data.iloc[-1]
+        x_prob = get_xgb_prediction(df_ml)
         k_prob = float(_k_data["kronos_prob"])
-        x_prob = float(_k_data.get("xgboost_prob", 0.50))
 
+        # Update cache with dynamic XGB probability
+        kronos_bridge.commit_to_cache(symbol, k_prob, xgboost_prob=x_prob)
+        
         p_blend = (k_prob * 0.70) + (x_prob * 0.30)
         
         if _OBSERVER:
@@ -723,7 +768,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         meta_p = (w_trend * p_trend) + (w_range * p_range)
         
         # Dynamic Epistemic Gate Blending
-        # Trend Gate (Default) vs Range Gate (0.75)
+        # Trend Gate (Default) vs Range Gate (0.75 override)
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * 0.75)
         
         # Post-processing: Regime Alignment & Graveyard
@@ -746,18 +791,28 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
         norm_p = 0.5 if meta_p == 0.0 else abs(meta_p - 0.5) + 0.5
         
+        # 3. Resurrect DDQN (Directive 3)
+        # We call this BEFORE the gate to ensure ddqn_p is available for the payload
+        # Ensure we only pass numeric values to avoid Timestamp errors
+        ddqn_agent = ddqn_bridge.get_ddqn_agent()
+        feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
+        ddqn_p = ddqn_agent.infer_probability(feature_vec)
+
         if norm_p >= current_gate and primary_dir != 0:
             signal_dir = "BUY" if primary_dir == 1 else "SELL"
+            
             push_to_orchestrator({
                 "symbol": symbol,
                 "direction": signal_dir,
                 "conviction": round(float(meta_p), 6),
+                "xgb_p": float(x_prob),
+                "ddqn_p": float(ddqn_p),
                 "hmm_state": hmm_state,
                 "atr": float(atr),
                 "timestamp": int(time.time()),
-                "version": "v22.1-ALPHA-FACTORY",
+                "version": "v23.6-AUTOPSY-DDQN",
             })
-            logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | HMM={hmm_state}")
+            logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
         else:
             if hmm_state == "RANGE":
                 logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
@@ -820,13 +875,16 @@ def execute_historical_backfill(watchlist: list):
 
 def main():
     global _LAST_CS_REFRESH
-    logging.info("=" * 60)
-    logging.info("  ADAPTIVE SENTINEL SLOW LOOP v22.1 - Alpha Factory")
-    logging.info("  Machine A (Oracle VPS - Brain) | NEVER touches broker directly")
-    logging.info("  Rate-limit: tenacity jittered backoff | ASCII Logging: True")
-    logging.info("=" * 60)
-
+    # v23.6 RAM Audit
+    print("=" * 60)
+    print(f"  ACTIVE MATRIX SIZE: {len(WATCHLIST)} ASSETS")
+    print("=" * 60)
+    
     watchlist = WATCHLIST
+    if len(watchlist) < 10:
+        logging.critical(f"[RAM_AUDIT] Watchlist size {len(watchlist)} is suspiciously small. SRE HALT.")
+        sys.exit(1)
+        
     execute_historical_backfill(watchlist)
     logging.info("[SYSTEM] Cache warm-up (parallel, force_refresh=True)...")
     asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
