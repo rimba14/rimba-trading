@@ -1,25 +1,28 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.7 - Alpha Fidelity) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.7. This is a CODE FREEZE. No algorithmic changes are permitted without explicit authorization.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.8 - System Hardening) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.8. This is a CODE FREEZE. No algorithmic changes are permitted without explicit authorization.
 
-Phase 1: Architecture & Heartbeat [LOCKED]
+Phase 1: Architecture, Mutex & Hardened State [LOCKED]
 Asynchronous loops, Idempotent execution, MCP isolated agents.
-Zero Lazy Placeholders (CRITICAL): AI coding agents are strictly forbidden from using random(), 0.500, or pass to bypass complex feature generation or model inference.
-Amnesia Defense: MT5 position queries MUST use Substring Matching.
+Atomic State: All Circuit Breakers and global flags MUST use filelock or database atomic transactions to prevent race conditions.
+Zero Silent Fails: All ML inference blocks must log traceback.format_exc(). No silent 0.500 swallows.
+Async I/O unblocked via asyncio.to_thread().
 
-Phase 2: Alpha Generation (ACTIVE FOCUS)
-High-Fidelity Triad: Hawkes Intensity, Entropy, and VPIN must be calculated using mathematically rigorous numpy/pandas vectorization.
-NLP Engine: Sentiment must be derived from a real LLM/FinBERT inference call or default to neutral. Randomization is banned.
-JL Lemma Compression: High-dimensional vectors MUST be compressed using a persisted Gaussian Random Projection matrix.
+Phase 2: Alpha Generation & Causal Feature Engineering [LOCKED]
+Strict Causality: ALL feature engineering (Z-scores, moving averages) MUST be calculated using strict trailing windows (rolling()). Global standard scaling is mathematically banned to prevent look-ahead bias.
+High-Fidelity Triad: Hawkes Intensity, Entropy, and VPIN calculated via cross-sectional aggregation (axis=0).
+JL Lemma Compression: High-dimensional vectors MUST be compressed using a strictly persisted Gaussian Random Projection matrix.
 
 Phase 3: Deep Cognition & Subquadratic Attention [LOCKED]
 XGBoost runs parallel to the DDQN StatArb agent. Transformers utilize KV Cache compression.
+Research layers must use Marcos Lopez de Prado's Purged K-Fold Cross-Validation.
 
 Phase 4: Dynamic Strategy Routing (MixTS) [LOCKED]
 Conviction Score ($P$) weighted via Thompson Sampling. Hysteresis (Schmitt Trigger) active. 60-second Entry Mutex active.
 
-Phase 5: Execution Optimization & Stateful Risk [LOCKED]
+Phase 5: Execution Optimization & Validated Risk [LOCKED]
 Micro-Price Anchoring, Almgren-Chriss slicing.
-Fast IPC Risk Handshake: Port 8000 to Port 8001 communication must use persistent sessions to maintain < 500ms latency. Stateful Cumulative Exposure limits enforced.
+Validated Stops: All Stop-Loss orders MUST mathematically clear the trade_stops_level broker threshold before routing to mt5.order_send().
+Stateful Cumulative Exposure limits enforced by the Risk Agent (Port 8001).
 
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

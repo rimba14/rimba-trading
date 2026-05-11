@@ -34,3 +34,9 @@ arctic_db/
 # Large ledgers
 trades_ledger.csv
 orders_ledger.csv
+
+# Windows Boot Files (Security Hygiene)
+BOOTNXT
+bootTel.dat
+BOOTSECT.BAK
+$WINDOWS.~BT/

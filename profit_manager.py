@@ -1,5 +1,5 @@
 """
-profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v21.3)
+profit_manager.py - ADAPTIVE SENTINEL PROFIT MANAGER & PSR AUDITOR (v23.2)
 Constitution: Decoupled Volatility, Spread Guard, Virtual Stop monitoring,
               Dynamic Regime Liquidation (Phase 5 Constitution + Phase 6 SRE Patch).
 """
@@ -15,6 +15,7 @@ import numpy as np
 from scipy import stats
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 from dotenv import load_dotenv
 import io
 
@@ -23,7 +24,7 @@ load_dotenv()
 MAGIC_NUMBER       = 142
 MAGIC_LEGACY       = 17300
 PSR_THRESHOLD      = 0.80
-PSR_EPOCH          = 1746090457 # v19.2 Phase 5 SRE Reset
+PSR_EPOCH          = 1778483123 # v19.2 Phase 5 SRE Reset
 WEBHOOK_URL        = os.getenv("DISCORD_WEBHOOK_URL")
 DIAG_DIR           = Path("C:/Sentinel_Project/pending_diagnostics")
 LOG_DIR            = Path(r"C:\sentinel_logs")
@@ -179,7 +180,8 @@ class SentinelProfitManager:
             logger.critical("[FATAL] MT5 init failed.")
             sys.exit(1)
         self._last_regime_check: dict[str, float] = {}
-        logger.info("Profit Manager v21.4 online — Theta Decay & Spread Guard ACTIVE.")
+        self._regime_persistence_counter: dict[int, int] = defaultdict(int)
+        logger.info("Profit Manager v23.2 online — Regime Persistence Gate ACTIVE.")
 
     # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
     def calculate_psr(self, returns: list) -> float:
@@ -225,8 +227,11 @@ class SentinelProfitManager:
             "reason":     f"Live PSR {psr_val:.4f} below {PSR_THRESHOLD}",
         }
         ticket = DIAG_DIR / f"psr_fail_{int(time.time())}.json"
-        with open(ticket, "w") as fh:
-            json.dump(payload, fh, indent=2)
+        from filelock import FileLock
+        lock_path = str(ticket) + ".lock"
+        with FileLock(lock_path):
+            with open(ticket, "w") as fh:
+                json.dump(payload, fh, indent=2)
         logger.info(f"[SRE_HALT] Ticket dropped: {ticket.name}")
         _notify(f"⚠️ **PSR_DEGRADATION**\nLive PSR = {psr_val:.4f} < {PSR_THRESHOLD}\nSRE halt triggered.")
 
@@ -321,12 +326,20 @@ class SentinelProfitManager:
             is_sl_hit = (pos.type == 0 and current_price <= sl_level) or (pos.type == 1 and current_price >= sl_level)
             is_tp_hit = (pos.type == 0 and current_price >= tp_level) or (pos.type == 1 and current_price <= tp_level)
 
-            # Directive 3: Consolidation Tolerance (v20.4)
+            # Directive 2: Persistence Gate (v23.2)
             is_regime_conflict = False
             if pos_direction == "BUY" and hmm_state == "BEAR":
                 is_regime_conflict = True
             elif pos_direction == "SELL" and hmm_state == "BULL":
                 is_regime_conflict = True
+
+            if is_regime_conflict:
+                self._regime_persistence_counter[pos.ticket] += 1
+                if self._regime_persistence_counter[pos.ticket] < 3:
+                    logger.info(f"[PERSISTENCE_GATE] {symbol} #{pos.ticket}: Regime Conflict detected ({hmm_state}), but pending persistence (Count: {self._regime_persistence_counter[pos.ticket]}/3)")
+                    is_regime_conflict = False # Defer liquidation
+            else:
+                self._regime_persistence_counter[pos.ticket] = 0
 
             is_thesis_decay = False
             if hmm_state != "RANGE":
@@ -376,8 +389,11 @@ class SentinelProfitManager:
                         "version":    "v21.3-PROD",
                     }
                     diag_path = DIAG_DIR / f"regime_liq_{symbol}_{int(now)}.json"
-                    with open(diag_path, "w") as fh:
-                        json.dump(diag, fh, indent=2)
+                    from filelock import FileLock
+                    lock_path = str(diag_path) + ".lock"
+                    with FileLock(lock_path):
+                        with open(diag_path, "w") as fh:
+                            json.dump(diag, fh, indent=2)
                     logger.info(f"[DIAG] SRE ticket written: {diag_path.name}")
             else:
                 logger.debug(f"[REGIME_OK] {symbol} #{pos.ticket}: {pos_direction} | HMM={hmm_state} — aligned.")

@@ -19,6 +19,7 @@ import uvicorn
 import MetaTrader5 as mt5
 from dotenv import load_dotenv
 import requests
+import numpy as np
 
 risk_session = requests.Session()
 # Load constitution/config
@@ -315,6 +316,33 @@ def calculate_kelly_lot(symbol, conviction):
     lot = max(min(lot, info.volume_max), 0.0) 
     return lot
 
+
+def calculate_ac_trajectory(
+    total_size: float,
+    risk_aversion: float = 0.1,
+    volatility: float = 0.0001,
+    n_slices: int = 5,
+    impact_params: Optional[Dict] = None,
+) -> List[float]:
+    if n_slices <= 1:
+        return [total_size]
+
+    params = impact_params or {}
+    eta    = params.get("eta", 0.01)
+    sigma  = params.get("sigma", volatility) or volatility
+
+    eta_tilde = eta * (n_slices / max(1.0, total_size))
+    kappa_sq  = (risk_aversion * (sigma ** 2)) / (eta_tilde + 1e-9)
+    kappa     = np.sqrt(kappa_sq)
+
+    T = float(n_slices)
+    time_steps = [k * (T / n_slices) for k in range(n_slices + 1)]
+    
+    x_traj = [total_size * np.sinh(kappa * (T - t)) / (np.sinh(kappa * T) + 1e-9) for t in time_steps]
+    child_sizes = [x_traj[k] - x_traj[k + 1] for k in range(n_slices)]
+    
+    return [max(0.0, float(s)) for s in child_sizes]
+
 def perform_mt5_trade(symbol, direction, lot, conviction):
     try:
         tick = mt5.symbol_info_tick(symbol)
@@ -330,6 +358,18 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
 
         order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
         price = tick.ask if direction == "BUY" else tick.bid
+
+        info = mt5.symbol_info(symbol)
+        
+        # Directive 2: SL Validation & Integrity Checks
+        asset_multiplier = 6.0 if len(symbol) == 6 and "USD" in symbol else 4.0
+        calculated_atr_sl = ((micro_price * 0.01) + (tick.ask - tick.bid) * 1.5) * asset_multiplier
+        broker_minimum_sl = info.trade_stops_level * info.point
+        final_sl_dist = max(calculated_atr_sl, broker_minimum_sl)
+        
+        logger.info(f"[{symbol}] SL Validation: Calculated={calculated_atr_sl:.5f} | BrokerMin={broker_minimum_sl:.5f} | Final={final_sl_dist:.5f}")
+        
+        sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
 
         # ── v23.0: Almgren-Chriss Trajectory Gate ─────────────────────────────────
         if lot >= AC_LARGE_ORDER_THRESHOLD:
@@ -355,6 +395,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     "volume":       float(child_lot_rounded),
                     "type":         order_type,
                     "price":        price,
+                    "sl":           sl_price,
                     "magic":        MAGIC_NUMBER,
                     "comment":      f"SENTINEL_AC_{i+1}of{len(trajectory)}_P{conviction:.2f}",
                     "type_time":    mt5.ORDER_TIME_GTC,
@@ -364,11 +405,13 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                 if res is None:
                     logger.error(f"[AC] Child order {i+1} FAILED (API None)")
                     success = False
-                elif res.retcode == mt5.TRADE_RETCODE_DONE:
-                    logger.info(f"[AC] Child order {i+1}/{len(trajectory)}: {child_lot_rounded} lots @ {price} -> OK")
                 else:
-                    logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
-                    success = False
+                    logger.info(f"[{symbol}] [AC_{i+1}] Broker Response: Retcode={res.retcode} | Comment={res.comment}")
+                    if res.retcode == mt5.TRADE_RETCODE_DONE:
+                        logger.info(f"[AC] Child order {i+1}/{len(trajectory)}: {child_lot_rounded} lots @ {price} -> OK")
+                    else:
+                        logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
+                        success = False
                 time.sleep(0.05)
             return success
 
@@ -379,6 +422,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             "volume":       float(lot),
             "type":         order_type,
             "price":        price,
+            "sl":           sl_price,
             "magic":        MAGIC_NUMBER,
             "comment":      f"SENTINEL_v23.1_P{conviction:.2f}",
             "type_time":    mt5.ORDER_TIME_GTC,
@@ -390,6 +434,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             logger.critical(f"[FAIL] [CRITICAL_API_ERROR] {symbol} {direction} | mt5.order_send returned None. Last error: {err}")
             return False
 
+        logger.info(f"[{symbol}] Broker Response: Retcode={res.retcode} | Comment={res.comment}")
         if res.retcode == mt5.TRADE_RETCODE_DONE:
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price}")
             return True
@@ -524,88 +569,3 @@ def calculate_as_quotes(
 # Threshold above which AC slicing is mandatory (in lots)
 AC_LARGE_ORDER_THRESHOLD = float(os.getenv("AC_LARGE_ORDER_THRESHOLD", "10.0"))
 
-
-def calculate_ac_trajectory(
-    total_size: float,
-    risk_aversion: float = 0.1,
-    volatility: float = 0.0001,
-    n_slices: int = 5,
-    impact_params: Optional[Dict] = None,
-) -> List[float]:
-    """
-    Almgren-Chriss Optimal Execution Trajectory (v23.0 Oxford).
-
-    Computes the optimal time-schedule for liquidating/acquiring a large order
-    to minimize the expected implementation shortfall (IS), which has two
-    competing components:
-
-    1. Market Impact Cost (Temporary + Permanent):
-       - Permanent impact: eta * v_k  (moves the mid permanently)
-       - Temporary impact: epsilon * v_k (slippage per trade, recovers)
-
-    2. Price Risk (Variance of execution cost over time T):
-       - Larger positions executed over longer periods have more price risk.
-
-    The AC optimal strategy is to trade according to a linear-in-time
-    trajectory (TWAP) under risk-neutrality, or front-load execution when
-    risk aversion is high (to minimize price variance at the cost of more
-    immediate impact).
-
-    The trajectory formula:
-       x_k = X * sinh(kappa * (T - t_k)) / sinh(kappa * T)
-    Where:
-       kappa = sqrt(lambda * sigma^2 / eta_tilde)
-       lambda = risk aversion (higher = front-load)
-       eta_tilde = effective temporary impact coefficient
-
-    Args:
-        total_size:    Total parent order size in lots.
-        risk_aversion: Lambda parameter [0.01, 1.0]. Higher = more front-loading.
-        volatility:    Per-bar price sigma. Used to compute execution risk.
-        n_slices:      Number of child orders to split into.
-        impact_params: Dict with keys 'eta' (temp. impact) and 'sigma' (vol).
-                       If None, uses conservative defaults.
-
-    Returns:
-        List[float] of child order sizes in lots (length = n_slices).
-        All child sizes sum to approximately total_size.
-    """
-    if n_slices <= 1:
-        return [total_size]
-
-    params = impact_params or {}
-    eta    = params.get("eta", 0.01)   # Temporary impact coefficient
-    sigma  = params.get("sigma", volatility) or volatility
-
-    # kappa: the decay rate of the optimal trajectory
-    # Higher kappa -> more front-loading (aggressive execution)
-    eta_tilde = eta * (n_slices / max(1.0, total_size))
-    kappa_sq  = (risk_aversion * (sigma ** 2)) / (eta_tilde + 1e-9)
-    kappa     = math.sqrt(abs(kappa_sq)) if kappa_sq > 0 else 0.0
-
-    # Compute inventory trajectory x(t_k): remaining inventory at each step k
-    T         = float(n_slices)
-    time_steps = [k * (T / n_slices) for k in range(n_slices + 1)]  # 0 to T
-
-    if kappa > 1e-9:
-        # AC hyperbolic trajectory: risk-averse front-loading
-        denom  = math.sinh(kappa * T) + 1e-9
-        x_traj = [total_size * math.sinh(kappa * (T - t)) / denom for t in time_steps]
-    else:
-        # Risk-neutral limit: uniform TWAP
-        x_traj = [total_size * (1.0 - t / T) for t in time_steps]
-
-    # Trade sizes v_k = x_{k-1} - x_k (delta inventory per step)
-    child_sizes = [x_traj[k] - x_traj[k + 1] for k in range(n_slices)]
-    child_sizes = [max(c, 0.0) for c in child_sizes]  # No negative lots
-
-    # Normalize to ensure sum == total_size exactly
-    total_computed = sum(child_sizes) + 1e-9
-    child_sizes    = [c * total_size / total_computed for c in child_sizes]
-    child_sizes    = [round(c, 2) for c in child_sizes]
-
-    logger.info(
-        f"[AC_TRAJECTORY] Parent={total_size} lots | Slices={n_slices} | "
-        f"kappa={kappa:.4f} | Trajectory={child_sizes} | Sum={sum(child_sizes):.2f}"
-    )
-    return child_sizes
