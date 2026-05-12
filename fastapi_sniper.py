@@ -97,12 +97,13 @@ active_liquidations = set()
 class TradeSignal(BaseModel):
     symbol: str
     direction: str
-    conviction: float
+    conviction: Optional[float] = 0.80
     xgb_p: float = 0.5
     ddqn_p: float = 0.5
     hmm_state: str = "RANGE"
     timestamp: int
     reasoning: str = ""
+    vpin: float = 0.0
 
 @app.on_event("startup")
 def startup_event():
@@ -155,6 +156,21 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Entry Cooldown Active ({60 - (now - last_time):.1f}s remaining)")
         raise HTTPException(status_code=429, detail="Entry cooldown active")
 
+    # 2c. Pre-Trade Toxicity Gating (VPIN)
+    vpin_val = getattr(signal, 'vpin', 0.0)
+    if vpin_val <= 0.0:
+        try:
+            vpin_file = Path(f"C:/Sentinel_Project/data/vpin_{signal.symbol}.json")
+            if vpin_file.exists():
+                with open(vpin_file, "r") as vf:
+                    vpin_val = float(json.load(vf).get("vpin", 0.0))
+        except Exception:
+            pass
+            
+    if vpin_val > 0.750:
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: Order-Flow Toxicity Breached (VPIN={vpin_val:.3f} > 0.750). Embargoing entry.")
+        raise HTTPException(status_code=429, detail="Order-flow toxicity threshold breached (VPIN > 0.750)")
+
     # 3. Sizing (Calculate before Risk Gates for accurate validation)
     lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
     if lot_size <= 0:
@@ -170,14 +186,28 @@ async def execute_trade_endpoint(signal: TradeSignal):
     if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
         return {"status": "rejected", "detail": "Risk gate block"}
 
-    # v23.12 Directive: Pre-Validation Gating / Mutual Exclusion Execution
-    # After passing ALL downstream checks, liquidate opposing active positions
+    # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
+    # Logic flows strictly: Signal Received -> Delta P Gate (ΔP) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
     all_positions = mt5.positions_get()
     if all_positions:
+        account_info = mt5.account_info()
         for p in all_positions:
             if signal.symbol in p.symbol and p.magic == MAGIC_NUMBER:
                 p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
                 if p_dir != signal.direction:
+                    # Estimate margin required for the incoming trade
+                    action_type = mt5.ORDER_TYPE_BUY if signal.direction == "BUY" else mt5.ORDER_TYPE_SELL
+                    est_margin = mt5.order_calc_margin(action_type, signal.symbol, lot_size, price)
+                    if est_margin is None:
+                        est_margin = incoming_notional / 5.0
+                        
+                    if account_info:
+                        margin_free = account_info.margin_free
+                        margin_level = account_info.margin_level
+                        if (margin_level > 0 and margin_level < 205.0) or est_margin > margin_free:
+                            logger.warning(f"[{signal.symbol}] [MARGIN VETO] Mutual Exclusion vetoed: Margin Level ({margin_level:.1f}%) < 205.0% OR Est Margin (${est_margin:.2f}) > Margin Free (${margin_free:.2f}). Blocking inline liquidation.")
+                            return {"status": "rejected", "detail": "Mutual Exclusion vetoed by Margin Shield"}
+                            
                     logger.info(f"[{signal.symbol}] Triggering Pre-Validated Mutual Exclusion exit for ticket #{p.ticket}")
                     execute_exit(p.ticket, p.symbol, "Mutual Excl")
 
@@ -280,10 +310,11 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
             
             incoming_delta = abs(conviction - 0.5)
             old_delta = abs(p_old - 0.5)
-            if incoming_delta < old_delta:
-                logger.warning(f"[{symbol}] Signal REJECTED by Conviction Delta Gate: Incoming |P-0.5| ({incoming_delta:.4f}) < Active |P-0.5| ({old_delta:.4f})")
+            # Enforce a mandatory minimum threshold buffer (+0.05) to prevent high-frequency amnesia chatter sweeps
+            if incoming_delta < old_delta + 0.05:
+                logger.warning(f"[{symbol}] Signal REJECTED by Conviction Delta Gate: Incoming |P-0.5| ({incoming_delta:.4f}) < Active |P-0.5| + 0.05 ({old_delta + 0.05:.4f})")
                 return False
-            logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| ({old_delta:.4f}). Authorized for Mutual Exclusion.")
+            logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| + 0.05 ({old_delta + 0.05:.4f}). Authorized for Mutual Exclusion.")
 
     # D. MCP Risk Agent Check (v22.8)
     try:
@@ -488,9 +519,17 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
 
-        # Conviction-Scaled TP: tp_dist = ATR * (2.0 + 4.0 * ((P - 0.60) / 0.40))
-        p_entry = max(0.60, min(1.0, conviction if direction == "BUY" else (1.0 - conviction)))
+        # Directive 1: Ensure Conviction score (P) is correctly extracted. Default to 0.80 if missing.
+        conv_val = conviction if conviction is not None and conviction > 0 else 0.80
+        # If conviction is already absolute directional confidence, use directly, otherwise normalize
+        p_entry = conv_val if direction == "BUY" else (1.0 - conv_val)
+        if p_entry < 0.5:
+            p_entry = abs(conv_val - 0.5) + 0.5
+        p_entry = max(p_entry, 0.60)
+        
+        # Verify the Conviction-Scaled TP formula: tp_dist = current_atr * (2.0 + 4.0 * ((max(P, 0.60) - 0.60) / 0.40))
         tp_dist = current_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+        # Directional Math: BUY = entry + tp_dist, SELL = entry - tp_dist
         tp_price = price + tp_dist if direction == "BUY" else price - tp_dist
         tp_price = round(tp_price, digits)
         
@@ -544,19 +583,83 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     if res.retcode == mt5.TRADE_RETCODE_DONE:
                         ticket = getattr(res, 'order', getattr(res, 'deal', 0))
                         logger.info(f"[AC] Child order {i+1}/{len(valid_slices)} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
-                        if ticket:
-                            mod_req = {
-                                "action": mt5.TRADE_ACTION_SLTP,
-                                "symbol": symbol,
-                                "sl": float(sl_price),
-                                "tp": float(tp_price),
-                                "position": ticket
-                            }
-                            mod_res = mt5.order_send(mod_req)
-                            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
-                                logger.info(f"[{symbol}] [AC_{i+1}] Attached SL={sl_price} | TP={tp_price} successfully.")
-                            else:
-                                logger.warning(f"[{symbol}] [AC_{i+1}] Failed to attach SL/TP: retcode={mod_res.retcode if mod_res else 'None'}")
+                        positions = mt5.positions_get(ticket=ticket)
+                        if positions:
+                            pos = positions[0]
+                            alpha_features = {}
+                            info = mt5.symbol_info(pos.symbol)
+                            if info:
+                                # Directive 1: Implement the Dynamic ATR Floor
+                                raw_atr = float(alpha_features.get('atr', current_atr))
+                                # Fallback to 0.25% of the open price if raw_atr is dangerously small
+                                price_based_min = pos.price_open * 0.0025 
+                                # Check against the broker's legally required minimum stop level
+                                broker_min = info.trade_stops_level * info.point
+                                
+                                # The True ATR is the largest of the three
+                                true_atr = max(raw_atr, price_based_min, broker_min)
+                                
+                                # Directive 2: Apply the True ATR to the CADES Math
+                                sl_dist = 1.2 * true_atr
+                                # Secure TP Calculation
+                                try:
+                                    p_val = float(alpha_features.get('P', conviction))
+                                except (ValueError, TypeError):
+                                    p_val = 0.80
+
+                                tp_multiplier = 2.0 + 4.0 * ((max(p_val, 0.60) - 0.60) / 0.40)
+                                tp_dist = tp_multiplier * true_atr # true_atr uses the 0.25% floor
+                                
+                                # 2. Directional Math (CRITICAL)
+                                if pos.type == mt5.ORDER_TYPE_BUY:
+                                    new_sl = pos.price_open - sl_dist
+                                    new_tp = pos.price_open + tp_dist
+                                elif pos.type == mt5.ORDER_TYPE_SELL:
+                                    new_sl = pos.price_open + sl_dist
+                                    new_tp = pos.price_open - tp_dist
+                                else:
+                                    new_sl = sl_price
+                                    new_tp = tp_price
+                                
+                                # 3. Universal Tick Size Normalization
+                                tick_size = info.trade_tick_size
+                                if tick_size > 0:
+                                    new_tp = round(new_tp / tick_size) * tick_size
+                                    if new_sl > 0:
+                                        new_sl = round(new_sl / tick_size) * tick_size
+
+                                new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
+                                new_tp = round(new_tp, info.digits)
+                                
+                                # 4. MT5 Payload Architecture
+                                request = {
+                                    "action": mt5.TRADE_ACTION_SLTP,
+                                    "symbol": pos.symbol,
+                                    "position": pos.ticket,
+                                    "sl": new_sl,
+                                    "tp": new_tp
+                                }
+                                
+                                # 5. Execution & Loud Logging with Exponential Backoff Retry Loop
+                                max_retries = 3
+                                attempt = 0
+                                result = None
+                                while attempt < max_retries:
+                                    result = mt5.order_send(request)
+                                    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                                        break
+                                    attempt += 1
+                                    if attempt < max_retries:
+                                        backoff_time = 0.1 * (2 ** attempt)
+                                        logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in {backoff_time:.2f}s (Attempt {attempt}/{max_retries})...")
+                                        time.sleep(backoff_time)
+                                        
+                                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                                    error_code = mt5.last_error()
+                                    logger.critical(f"🚨 [PAGER ALERT] Ticket {pos.ticket} Exhausted 3 retries. Failed to attach SL/TP. Result: {result.retcode if result else 'None'}, MT5 Error: {error_code}")
+                                    print(f"   -> Attempted SL: {new_sl}, Attempted TP: {new_tp}, Open Price: {pos.price_open}")
+                                else:
+                                    print(f"✅ [MT5 SUCCESS] Ticket {pos.ticket} SL/TP attached flawlessly.")
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
                         success = False
@@ -587,19 +690,83 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         if res.retcode == mt5.TRADE_RETCODE_DONE:
             ticket = getattr(res, 'order', getattr(res, 'deal', 0))
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
-            if ticket:
-                mod_req = {
-                    "action": mt5.TRADE_ACTION_SLTP,
-                    "symbol": symbol,
-                    "sl": float(sl_price),
-                    "tp": float(tp_price),
-                    "position": ticket
-                }
-                mod_res = mt5.order_send(mod_req)
-                if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
-                    logger.info(f"[{symbol}] Attached SL={sl_price} | TP={tp_price} successfully.")
-                else:
-                    logger.warning(f"[{symbol}] Failed to attach SL/TP: retcode={mod_res.retcode if mod_res else 'None'}")
+            positions = mt5.positions_get(ticket=ticket)
+            if positions:
+                pos = positions[0]
+                alpha_features = {}
+                info = mt5.symbol_info(pos.symbol)
+                if info:
+                    # Directive 1: Implement the Dynamic ATR Floor
+                    raw_atr = float(alpha_features.get('atr', current_atr))
+                    # Fallback to 0.25% of the open price if raw_atr is dangerously small
+                    price_based_min = pos.price_open * 0.0025 
+                    # Check against the broker's legally required minimum stop level
+                    broker_min = info.trade_stops_level * info.point
+                    
+                    # The True ATR is the largest of the three
+                    true_atr = max(raw_atr, price_based_min, broker_min)
+                    
+                    # Directive 2: Apply the True ATR to the CADES Math
+                    sl_dist = 1.2 * true_atr
+                    # Secure TP Calculation
+                    try:
+                        p_val = float(alpha_features.get('P', conviction))
+                    except (ValueError, TypeError):
+                        p_val = 0.80
+
+                    tp_multiplier = 2.0 + 4.0 * ((max(p_val, 0.60) - 0.60) / 0.40)
+                    tp_dist = tp_multiplier * true_atr # true_atr uses the 0.25% floor
+                    
+                    # 2. Directional Math (CRITICAL)
+                    if pos.type == mt5.ORDER_TYPE_BUY:
+                        new_sl = pos.price_open - sl_dist
+                        new_tp = pos.price_open + tp_dist
+                    elif pos.type == mt5.ORDER_TYPE_SELL:
+                        new_sl = pos.price_open + sl_dist
+                        new_tp = pos.price_open - tp_dist
+                    else:
+                        new_sl = sl_price
+                        new_tp = tp_price
+                    
+                    # 3. Universal Tick Size Normalization
+                    tick_size = info.trade_tick_size
+                    if tick_size > 0:
+                        new_tp = round(new_tp / tick_size) * tick_size
+                        if new_sl > 0:
+                            new_sl = round(new_sl / tick_size) * tick_size
+
+                    new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
+                    new_tp = round(new_tp, info.digits)
+                    
+                    # 4. MT5 Payload Architecture
+                    request = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "symbol": pos.symbol,
+                        "position": pos.ticket,
+                        "sl": new_sl,
+                        "tp": new_tp
+                    }
+                    
+                    # 5. Execution & Loud Logging with Exponential Backoff Retry Loop
+                    max_retries = 3
+                    attempt = 0
+                    result = None
+                    while attempt < max_retries:
+                        result = mt5.order_send(request)
+                        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                            break
+                        attempt += 1
+                        if attempt < max_retries:
+                            backoff_time = 0.1 * (2 ** attempt)
+                            logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in {backoff_time:.2f}s (Attempt {attempt}/{max_retries})...")
+                            time.sleep(backoff_time)
+                            
+                    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                        error_code = mt5.last_error()
+                        logger.critical(f"🚨 [PAGER ALERT] Ticket {pos.ticket} Exhausted 3 retries. Failed to attach SL/TP. Result: {result.retcode if result else 'None'}, MT5 Error: {error_code}")
+                        print(f"   -> Attempted SL: {new_sl}, Attempted TP: {new_tp}, Open Price: {pos.price_open}")
+                    else:
+                        print(f"✅ [MT5 SUCCESS] Ticket {pos.ticket} SL/TP attached flawlessly.")
             return True
         else:
             # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)

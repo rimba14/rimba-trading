@@ -1,25 +1,15 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.14 - CADES Architecture) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.14. This is a CODE FREEZE.
-
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.15 - Pre-Validation) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.15. This is a CODE FREEZE.
 Phase 1: Architecture, Mutex & Atomic State [LOCKED]
-Atomic State via filelock. Double Mutex Lock (60s Entry, 300s Post-Exit Embargo). Pure Validation. ECN-safe 2-step executions required.
-
+Atomic State via filelock. Double Mutex Lock (60s Entry, 300s Post-Exit Embargo). ECN-safe 2-step executions required.
 Phase 2 & 3: Causal Features & Subquadratic Cognition [LOCKED]
 Strict Causality (trailing windows). XGBoost + DDQN + Kronos KV Cache.
-
-Phase 4: Dynamic Strategy Routing & Delta Gating [LOCKED]
+Phase 4: Dynamic Strategy Routing & Gating (ACTIVE FOCUS)
 Sealed Hysteresis ($0.40 \le P \le 0.60$ HARD BLOCKED).
-Mutual Exclusion exits require $\Delta P$ Conviction Gating and pre-validation of margin levels.
-
-Phase 5: Execution Optimization & CADES (ACTIVE FOCUS)
-Outer Walls: MT5 SL = max(1.2 ATR, Swing). MT5 TP = Conviction-Scaled (2x to 6x ATR).
-Fluid Trailing: Zone 1 (Risk Halve at +1.2 ATR to -0.4 ATR), Zone 2 (Fee-Paid BE at +1.75 ATR), Zone 3 (Parabolic Trail at 1.5 ATR lag after +2.0 ATR).
-Cognitive Exits: 
-    1. 100-Tick Data Density Grace Period.
-    2. Dynamic Thesis Decay: Threshold drops from 0.45 to 0.15 as price nears TP. Requires 3-tick EMA persistence.
-    3. Velocity Kill: Instant exit if $dP/dt < -0.30$.
-    4. Dead-Money Stop: Exit if ticks > 300 and profit < 0.25 ATR.
-    5. Scale-Out: 50% volume closed at +2.5 ATR if $P < 0.65$.
-
+Mutual Exclusion Exits: Opposing signals MUST clear the \Delta P Conviction Gate AND the Margin Pre-Validation Shield (Margin Level \ge 205\%) before any active positions are liquidated.
+Phase 5: Execution Optimization & CADES [LOCKED]
+MT5 SL = max(1.2 ATR, Swing). MT5 TP = Conviction-Scaled (2x to 6x ATR).
+Fluid Trailing: Risk Halve (+1.2 ATR), Fee-Paid BE (+1.75 ATR), Parabolic Trail (+2.0 ATR).
+Cognitive Exits: 100-Tick Data Density Grace Period, Dynamic Thesis Decay, Velocity Kill, Dead-Money Stop.
 Phase 6: Constitution Maintenance
 Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.

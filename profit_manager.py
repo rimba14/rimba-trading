@@ -187,67 +187,7 @@ class SentinelProfitManager:
             sys.exit(1)
         self._last_regime_check: dict[str, float] = {}
         self._regime_persistence_counter: dict[int, int] = defaultdict(int)
-        logger.info("Profit Manager v23.14 online — CADES Architecture ACTIVE.")
-        self._run_grandfather_sweep()
-
-    def _run_grandfather_sweep(self):
-        """Directive 4: Instantly overwrite old static stops with new CADES boundaries."""
-        logger.info("Running Grandfather Retroactive Sweep to apply CADES boundaries...")
-        positions = mt5.positions_get()
-        if not positions:
-            logger.info("No active open positions to grandfather.")
-            return
-            
-        count = 0
-        for pos in positions:
-            info = mt5.symbol_info(pos.symbol)
-            if not info: continue
-            digits = info.digits
-            
-            oracle_data = _get_live_oracle_meta(pos.symbol)
-            p_val = oracle_data["conviction"] if oracle_data else 0.80
-            direction = "BUY" if pos.type == 0 else "SELL"
-            p_entry = max(0.60, min(1.0, p_val if direction == "BUY" else (1.0 - p_val)))
-            
-            macro_atr = _calculate_macroscopic_atr(pos.symbol)
-            if macro_atr <= 0:
-                macro_atr = oracle_data["atr"] if oracle_data else (info.ask - info.bid) * 2.0
-                
-            rates = mt5.copy_rates_from_pos(pos.symbol, mt5.TIMEFRAME_M15, 0, 21)
-            price_open = pos.price_open
-            
-            if rates is not None and len(rates) > 0:
-                if direction == "BUY":
-                    swing_dist = max(0.0, price_open - float(np.min(rates['low'])))
-                else:
-                    swing_dist = max(0.0, float(np.max(rates['high'])) - price_open)
-            else:
-                swing_dist = macro_atr * 2.0
-                
-            sl_dist = max(1.2 * macro_atr, swing_dist)
-            target_sl = price_open - sl_dist if direction == "BUY" else price_open + sl_dist
-            target_sl = round(target_sl, digits)
-            
-            tp_dist = macro_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
-            target_tp = price_open + tp_dist if direction == "BUY" else price_open - tp_dist
-            target_tp = round(target_tp, digits)
-            
-            logger.info(f"[GRANDFATHER] {pos.symbol} #{pos.ticket} applying CADES: Assumed/Live P={p_entry:.2f} -> SL={target_sl} | TP={target_tp}")
-            mod_req = {
-                "action": mt5.TRADE_ACTION_SLTP,
-                "symbol": pos.symbol,
-                "sl": float(target_sl),
-                "tp": float(target_tp),
-                "position": pos.ticket
-            }
-            mod_res = mt5.order_send(mod_req)
-            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
-                count += 1
-                logger.info(f"[GRANDFATHER_OK] Successfully grandfathered #{pos.ticket}.")
-            else:
-                logger.warning(f"[GRANDFATHER_FAIL] Failed on #{pos.ticket}: retcode={mod_res.retcode if mod_res else 'None'}")
-                
-        logger.info(f"Grandfather sweep complete. Updated {count}/{len(positions)} positions.")
+        logger.info("Profit Manager v23.14 online — Continuous CADES Naked Sweep ACTIVE.")
 
     # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
     def calculate_psr(self, returns: list) -> float:
@@ -443,9 +383,9 @@ class SentinelProfitManager:
                 mod_req = {
                     "action": mt5.TRADE_ACTION_SLTP,
                     "symbol": symbol,
+                    "position": pos.ticket,
                     "sl": float(target_sl),
-                    "tp": float(current_tp),
-                    "position": pos.ticket
+                    "tp": float(pos.tp if pos.tp != 0.0 else current_tp)
                 }
                 mod_res = mt5.order_send(mod_req)
                 if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
@@ -620,35 +560,68 @@ class SentinelProfitManager:
                 all_positions = list(sentinel_pos) + list(legacy_pos)
 
                 if all_positions:
-                    # Directive 2: Naked Trade Sweep (Retroactive TP Enforcement)
+                    # Directive 3: Continuous Loop Naked Sweep (CADES TP Enforcement)
                     for pos in all_positions:
                         if pos.tp == 0.0:
-                            info = mt5.symbol_info(pos.symbol)
-                            digits = info.digits if info else 5
-                            macro_atr = _calculate_macroscopic_atr(pos.symbol)
-                            if macro_atr <= 0:
-                                tick = mt5.symbol_info_tick(pos.symbol)
-                                spread = (tick.ask - tick.bid) if tick else 0.0001
-                                macro_atr = spread * 2.0
-                            
-                            tp_dist = macro_atr * 3.0
-                            target_tp = pos.price_open + tp_dist if pos.type == 0 else pos.price_open - tp_dist
-                            target_tp = round(target_tp, digits)
-                            
-                            logger.info(f"[NAKED_SWEEP] {pos.symbol} #{pos.ticket} has TP=0.0. Forcing retroactive Take-Profit to {target_tp}...")
-                            mod_req = {
-                                "action": mt5.TRADE_ACTION_SLTP,
-                                "symbol": pos.symbol,
-                                "sl": float(pos.sl),
-                                "tp": float(target_tp),
-                                "position": pos.ticket,
-                                "magic": pos.magic
-                            }
-                            mod_res = mt5.order_send(mod_req)
-                            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
-                                logger.info(f"[TP_ENFORCED] Retroactively attached TP={target_tp} to #{pos.ticket} successfully.")
-                            else:
-                                logger.warning(f"[TP_ENFORCED_FAIL] Failed to attach TP to #{pos.ticket}: retcode={mod_res.retcode if mod_res else 'None'}")
+                            try:
+                                info = mt5.symbol_info(pos.symbol)
+                                if info is None:
+                                    continue
+                                    
+                                # 1. Force the ATR Magnitude Floor
+                                raw_atr = 0.0010 # Fallback baseline
+                                price_based_min = pos.price_open * 0.0025 # 0.25% of absolute price
+                                broker_min = info.trade_stops_level * info.point
+                                true_atr = max(raw_atr, price_based_min, broker_min)
+                                
+                                # 2. Calculate CADES TP Distance (Defaulting to 3x if P not in memory)
+                                tp_dist = 3.0 * true_atr
+                                
+                                # 3. Directional Math
+                                if pos.type == mt5.ORDER_TYPE_BUY:
+                                    new_tp = pos.price_open + tp_dist
+                                elif pos.type == mt5.ORDER_TYPE_SELL:
+                                    new_tp = pos.price_open - tp_dist
+                                else:
+                                    continue
+                                    
+                                # 1. Get the precise tick size from the broker
+                                tick_size = info.trade_tick_size
+
+                                # 2. Normalize TP to the nearest tick step
+                                if tick_size > 0:
+                                    new_tp = round(new_tp / tick_size) * tick_size
+
+                                # 3. Ensure SL is also normalized if we are sending it
+                                current_sl = pos.sl
+                                if current_sl > 0 and tick_size > 0:
+                                    current_sl = round(current_sl / tick_size) * tick_size
+
+                                # 4. Truncate floating-point drift (e.g., 61666.50000000001 -> 61666.50)
+                                new_tp = round(new_tp, info.digits)
+                                current_sl = round(current_sl, info.digits) if current_sl > 0 else 0.0
+
+                                # Now build the payload...
+                                request = {
+                                    "action": mt5.TRADE_ACTION_SLTP,
+                                    "symbol": pos.symbol,
+                                    "position": pos.ticket,
+                                    "sl": current_sl,
+                                    "tp": new_tp
+                                }
+                                
+                                # 5. Dispatch and Scream on Failure
+                                result = mt5.order_send(request)
+                                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                                    err = mt5.last_error()
+                                    print(f"🚨 [SWEEP REJECTION] Ticket {pos.ticket} ({pos.symbol}) failed TP attach.")
+                                    print(f"   -> Retcode: {result.retcode if result else 'None'}, MT5 Error: {err}")
+                                    print(f"   -> Attempted TP: {new_tp}, Open: {pos.price_open}, True ATR: {true_atr}")
+                                else:
+                                    print(f"✅ [SWEEP SUCCESS] Ticket {pos.ticket} ({pos.symbol}) TP forcefully attached at {new_tp}.")
+                                    
+                            except Exception as e:
+                                print(f"🚨 [SWEEP CRASH] Python error during naked sweep for {pos.ticket}: {str(e)}")
 
                     self._regime_liquidation_audit(all_positions)
 
