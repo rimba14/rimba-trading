@@ -54,9 +54,45 @@ if not logger.handlers:
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
 
-# Directive 1: In-Memory Mutex Lock (v21.1)
+# Directive 1: Atomic Persistent Mutex Lock (v23.8 Autopsy Fix)
+from filelock import FileLock
+import json
+from pathlib import Path
+
+MUTEX_FILE = Path("C:/Sentinel_Project/data/cooldown_mutex.json")
+MUTEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def get_cooldown_time(symbol: str) -> float:
+    if not MUTEX_FILE.exists():
+        return 0.0
+    try:
+        with FileLock(str(MUTEX_FILE) + ".lock", timeout=1):
+            with open(MUTEX_FILE, "r") as f:
+                data = json.load(f)
+                return float(data.get(symbol, 0.0))
+    except Exception as e:
+        import traceback
+        logger.error(f"Mutex read error: {e}\n{traceback.format_exc()}")
+        return 0.0
+
+def set_cooldown_time(symbol: str, timestamp: float):
+    try:
+        with FileLock(str(MUTEX_FILE) + ".lock", timeout=1):
+            data = {}
+            if MUTEX_FILE.exists():
+                try:
+                    with open(MUTEX_FILE, "r") as f:
+                        data = json.load(f)
+                except Exception:
+                    pass
+            data[symbol] = float(timestamp)
+            with open(MUTEX_FILE, "w") as f:
+                json.dump(data, f)
+    except Exception as e:
+        import traceback
+        logger.error(f"Mutex write error: {e}\n{traceback.format_exc()}")
+
 active_liquidations = set()
-entry_cooldowns = {}  # v23.3: 60s Entry Mutex Lock
 
 class TradeSignal(BaseModel):
     symbol: str
@@ -112,9 +148,9 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
         raise HTTPException(status_code=400, detail="Epistemic gate block")
 
-    # 2b. Entry Cooldown (60s Mutex)
+    # 2b. Entry Cooldown (60s Persistent Mutex)
     now = time.time()
-    last_time = entry_cooldowns.get(signal.symbol, 0.0)
+    last_time = get_cooldown_time(signal.symbol)
     if now - last_time < 60:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Entry Cooldown Active ({60 - (now - last_time):.1f}s remaining)")
         raise HTTPException(status_code=429, detail="Entry cooldown active")
@@ -131,13 +167,24 @@ async def execute_trade_endpoint(signal: TradeSignal):
     incoming_notional = lot_size * price
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
-    if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p):
+    if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
         return {"status": "rejected", "detail": "Risk gate block"}
+
+    # v23.12 Directive: Pre-Validation Gating / Mutual Exclusion Execution
+    # After passing ALL downstream checks, liquidate opposing active positions
+    all_positions = mt5.positions_get()
+    if all_positions:
+        for p in all_positions:
+            if signal.symbol in p.symbol and p.magic == MAGIC_NUMBER:
+                p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
+                if p_dir != signal.direction:
+                    logger.info(f"[{signal.symbol}] Triggering Pre-Validated Mutual Exclusion exit for ticket #{p.ticket}")
+                    execute_exit(p.ticket, p.symbol, "Mutual Excl")
 
     # 5. Execution
     success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction)
     if success:
-        entry_cooldowns[signal.symbol] = time.time()
+        set_cooldown_time(signal.symbol, time.time())
         return {"status": "success", "symbol": signal.symbol, "lot": lot_size}
     else:
         raise HTTPException(status_code=500, detail="MT5 execution failed")
@@ -177,7 +224,26 @@ async def liquidate_endpoint(request: Request):
 
 # -- Helper Logic (Ported from v17.9) ---------------------------------------- 
 
-def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5):
+def extract_conviction_from_comment(comment: str) -> float:
+    if not comment:
+        return 0.5
+    try:
+        idx = comment.rfind("_P")
+        if idx != -1:
+            val_str = comment[idx+2:]
+            clean_str = ""
+            for c in val_str:
+                if c.isdigit() or c == '.':
+                    clean_str += c
+                else:
+                    break
+            if clean_str:
+                return float(clean_str)
+    except Exception:
+        pass
+    return 0.5
+
+def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5):
     # A. Weekend Blackout
     if is_weekend_blackout(symbol):
         logger.warning(f"[{symbol}] Signal REJECTED: Weekend Blackout")
@@ -191,10 +257,33 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
         logger.warning(f"[{symbol}] Signal REJECTED: Regime/Direction Mismatch (BULL/SELL)")
         return False
 
-    # C. Amnesia Lock
-    if has_active_position_same_direction(symbol, direction):
-        logger.warning(f"[{symbol}] Signal REJECTED: Amnesia Lock Active")
-        return False
+    # C. Active Position / Delta Gating Check
+    all_positions = mt5.positions_get()
+    if all_positions:
+        opposing_positions = []
+        for p in all_positions:
+            if symbol in p.symbol and p.magic == MAGIC_NUMBER:
+                p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
+                if p_dir == direction:
+                    logger.warning(f"[{symbol}] Signal REJECTED: Amnesia Lock Active (Same-Direction Position Exists)")
+                    return False
+                else:
+                    opposing_positions.append(p)
+        
+        if opposing_positions:
+            # v23.12 Directive: Conviction Delta Gating (ΔP)
+            p_old = 0.5
+            for p in opposing_positions:
+                extracted = extract_conviction_from_comment(p.comment)
+                if abs(extracted - 0.5) > abs(p_old - 0.5):
+                    p_old = extracted
+            
+            incoming_delta = abs(conviction - 0.5)
+            old_delta = abs(p_old - 0.5)
+            if incoming_delta < old_delta:
+                logger.warning(f"[{symbol}] Signal REJECTED by Conviction Delta Gate: Incoming |P-0.5| ({incoming_delta:.4f}) < Active |P-0.5| ({old_delta:.4f})")
+                return False
+            logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| ({old_delta:.4f}). Authorized for Mutual Exclusion.")
 
     # D. MCP Risk Agent Check (v22.8)
     try:
@@ -258,20 +347,14 @@ def is_weekend_blackout(symbol):
         return True
     return False
 
-def has_active_position_same_direction(symbol, direction):
-    # v23.3 Amnesia Patch: Use substring match on all positions to handle broker suffixes
+def has_active_position(symbol):
+    # v23.9 Pure Validation: Use substring match on all positions to handle broker suffixes
+    # CRITICAL: No execution side-effects permitted in state validation.
     all_positions = mt5.positions_get()
     if all_positions:
         for p in all_positions:
-            # Substring match: 'XAUUSD' matches 'XAUUSD.m', 'XAUUSD+', etc.
-            if symbol in p.symbol:
-                if p.magic == MAGIC_NUMBER:
-                    pos_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
-                    if pos_dir == direction:
-                        return True
-                    else:
-                        logger.warning(f"[{p.symbol}] Mutual Exclusion Triggered: Liquidating opposite {pos_dir} position #{p.ticket}")
-                        execute_exit(p.ticket, p.symbol, "Mutual Exclusion")
+            if symbol in p.symbol and p.magic == MAGIC_NUMBER:
+                return True
     return False
 
 def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float) -> float:
@@ -343,6 +426,39 @@ def calculate_ac_trajectory(
     
     return [max(0.0, float(s)) for s in child_sizes]
 
+def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> Tuple[float, float]:
+    """Calculates live macroscopic ATR and distance to recent Swing High/Low."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, lookback + 1)
+    if rates is None or len(rates) < lookback + 1:
+        tick = mt5.symbol_info_tick(symbol)
+        spread = (tick.ask - tick.bid) if tick else 0.0001
+        est_atr = spread * 3.0
+        return est_atr, est_atr * 2.0
+    
+    high = rates['high']
+    low = rates['low']
+    close = rates['close']
+    
+    tr = np.zeros(lookback)
+    for i in range(lookback):
+        h_l = high[i+1] - low[i+1]
+        h_pc = abs(high[i+1] - close[i])
+        l_pc = abs(low[i+1] - close[i])
+        tr[i] = max(h_l, h_pc, l_pc)
+    current_atr = float(np.mean(tr))
+    
+    tick = mt5.symbol_info_tick(symbol)
+    current_price = tick.ask if direction == "BUY" else tick.bid
+    
+    if direction == "BUY":
+        swing_low = float(np.min(low))
+        distance_to_swing = max(0.0, current_price - swing_low)
+    else:
+        swing_high = float(np.max(high))
+        distance_to_swing = max(0.0, swing_high - current_price)
+        
+    return current_atr, distance_to_swing
+
 def perform_mt5_trade(symbol, direction, lot, conviction):
     try:
         tick = mt5.symbol_info_tick(symbol)
@@ -357,23 +473,31 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         logger.info(f"[{symbol}] Execution Baseline: Micro-Price={micro_price:.5f} | Mid-Price={(tick.bid+tick.ask)/2:.5f}")
 
         order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
-        price = tick.ask if direction == "BUY" else tick.bid
-
         info = mt5.symbol_info(symbol)
+        digits = info.digits if info else 5
+        price = round(tick.ask if direction == "BUY" else tick.bid, digits)
+
+        # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
+        current_atr, distance_to_swing = calculate_atr_and_swing(symbol, direction, lookback=20)
+        calculated_sl_dist = max(1.2 * current_atr, distance_to_swing)
+        broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
+        final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        # Directive 2: SL Validation & Integrity Checks
-        asset_multiplier = 6.0 if len(symbol) == 6 and "USD" in symbol else 4.0
-        calculated_atr_sl = ((micro_price * 0.01) + (tick.ask - tick.bid) * 1.5) * asset_multiplier
-        broker_minimum_sl = info.trade_stops_level * info.point
-        final_sl_dist = max(calculated_atr_sl, broker_minimum_sl)
-        
-        logger.info(f"[{symbol}] SL Validation: Calculated={calculated_atr_sl:.5f} | BrokerMin={broker_minimum_sl:.5f} | Final={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | SwingDist={distance_to_swing:.5f} | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
+        sl_price = round(sl_price, digits)
+
+        # Conviction-Scaled TP: tp_dist = ATR * (2.0 + 4.0 * ((P - 0.60) / 0.40))
+        p_entry = max(0.60, min(1.0, conviction if direction == "BUY" else (1.0 - conviction)))
+        tp_dist = current_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+        tp_price = price + tp_dist if direction == "BUY" else price - tp_dist
+        tp_price = round(tp_price, digits)
+        
+        logger.info(f"[{symbol}] CADES TP Scaled: P={p_entry:.4f} -> TP Dist={tp_dist/current_atr:.2f}x ATR")
 
         # ── v23.0: Almgren-Chriss Trajectory Gate ─────────────────────────────────
         if lot >= AC_LARGE_ORDER_THRESHOLD:
-            info = mt5.symbol_info(symbol)
             atr_proxy = (info.trade_contract_size * info.point * 100) if info else 0.0001
             trajectory = calculate_ac_trajectory(
                 total_size=lot,
@@ -381,23 +505,33 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                 volatility=atr_proxy,
                 n_slices=5,
             )
+            # Apply strict broker volume step floor to prevent 10014 Invalid Volume rejections
+            valid_slices = []
+            vol_step = info.volume_step if info else 0.01
+            for child_lot in trajectory:
+                r_lot = round(child_lot / vol_step) * vol_step
+                if r_lot >= vol_step:
+                    valid_slices.append(r_lot)
+                elif valid_slices:
+                    valid_slices[-1] += r_lot
+                    valid_slices[-1] = round(valid_slices[-1] / vol_step) * vol_step
+            
             logger.info(
                 f"[AC_EXECUTION] {symbol} LARGE ORDER {lot} lots -> slicing into "
-                f"{len(trajectory)} child orders: {trajectory}"
+                f"{len(valid_slices)} valid child orders: {valid_slices}"
             )
             success = True
-            for i, child_lot in enumerate(trajectory):
-                child_lot_rounded = round(child_lot / (info.volume_step if info else 0.01)) * (info.volume_step if info else 0.01)
-                child_lot_rounded = max(child_lot_rounded, 0.01)
+            for i, child_lot_rounded in enumerate(valid_slices):
                 child_request = {
                     "action":       mt5.TRADE_ACTION_DEAL,
                     "symbol":       symbol,
                     "volume":       float(child_lot_rounded),
                     "type":         order_type,
                     "price":        price,
-                    "sl":           sl_price,
+                    "sl":           0.0,
+                    "tp":           0.0,
                     "magic":        MAGIC_NUMBER,
-                    "comment":      f"SENTINEL_AC_{i+1}of{len(trajectory)}_P{conviction:.2f}",
+                    "comment":      f"SENTINEL_AC_{i+1}of{len(valid_slices)}_P{conviction:.2f}",
                     "type_time":    mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,
                 }
@@ -408,7 +542,21 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                 else:
                     logger.info(f"[{symbol}] [AC_{i+1}] Broker Response: Retcode={res.retcode} | Comment={res.comment}")
                     if res.retcode == mt5.TRADE_RETCODE_DONE:
-                        logger.info(f"[AC] Child order {i+1}/{len(trajectory)}: {child_lot_rounded} lots @ {price} -> OK")
+                        ticket = getattr(res, 'order', getattr(res, 'deal', 0))
+                        logger.info(f"[AC] Child order {i+1}/{len(valid_slices)} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
+                        if ticket:
+                            mod_req = {
+                                "action": mt5.TRADE_ACTION_SLTP,
+                                "symbol": symbol,
+                                "sl": float(sl_price),
+                                "tp": float(tp_price),
+                                "position": ticket
+                            }
+                            mod_res = mt5.order_send(mod_req)
+                            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
+                                logger.info(f"[{symbol}] [AC_{i+1}] Attached SL={sl_price} | TP={tp_price} successfully.")
+                            else:
+                                logger.warning(f"[{symbol}] [AC_{i+1}] Failed to attach SL/TP: retcode={mod_res.retcode if mod_res else 'None'}")
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
                         success = False
@@ -422,9 +570,10 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             "volume":       float(lot),
             "type":         order_type,
             "price":        price,
-            "sl":           sl_price,
+            "sl":           0.0,
+            "tp":           0.0,
             "magic":        MAGIC_NUMBER,
-            "comment":      f"SENTINEL_v23.1_P{conviction:.2f}",
+            "comment":      f"SENTINEL_v23.11_P{conviction:.2f}",
             "type_time":    mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
@@ -436,7 +585,21 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
 
         logger.info(f"[{symbol}] Broker Response: Retcode={res.retcode} | Comment={res.comment}")
         if res.retcode == mt5.TRADE_RETCODE_DONE:
-            logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price}")
+            ticket = getattr(res, 'order', getattr(res, 'deal', 0))
+            logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
+            if ticket:
+                mod_req = {
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": symbol,
+                    "sl": float(sl_price),
+                    "tp": float(tp_price),
+                    "position": ticket
+                }
+                mod_res = mt5.order_send(mod_req)
+                if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
+                    logger.info(f"[{symbol}] Attached SL={sl_price} | TP={tp_price} successfully.")
+                else:
+                    logger.warning(f"[{symbol}] Failed to attach SL/TP: retcode={mod_res.retcode if mod_res else 'None'}")
             return True
         else:
             # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)
@@ -449,39 +612,52 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         return False
 
 def execute_exit(ticket, symbol, reason):
-    positions = mt5.positions_get(ticket=ticket)
-    if not positions: return False
-    pos = positions[0]
-    tick = mt5.symbol_info_tick(symbol)
-    if not tick: return False
-    order_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
-    price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": pos.volume,
-        "type": order_type,
-        "position": ticket,
-        "price": price,
-        "magic": MAGIC_NUMBER,
-        "comment": f"EXIT_{reason[:15]}",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
-    res = mt5.order_send(request)
-    if res.retcode == mt5.TRADE_RETCODE_DONE:
-        logger.info(f"[OK] [EXITED] {symbol} Ticket {ticket} Reason: {reason}")
-        return True
-    
-    # Directive 2: Graceful 10013 Error Handling (Idempotency)
-    if res.retcode == 10013:
-        # Check if the position exists
-        if mt5.positions_get(ticket=ticket) is None:
-            logger.info(f"[SUCCESS/IDEMPOTENT] Ticket {ticket} already closed by prior process (MT5 10013).")
-            return True
+    try:
+        positions = mt5.positions_get(ticket=ticket)
+        if not positions: return False
+        pos = positions[0]
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick: return False
+        order_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+        price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": pos.volume,
+            "type": order_type,
+            "position": ticket,
+            "price": price,
+            "magic": MAGIC_NUMBER,
+            "comment": f"EXIT_{reason[:15]}",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        res = mt5.order_send(request)
+        if res is None:
+            err = mt5.last_error()
+            logger.critical(f"[FAIL] [EXIT_FAILED] {symbol} Ticket {ticket} | mt5.order_send returned None. Last error: {err}")
+            return False
 
-    logger.error(f"[FAIL] [EXIT_FAILED] {symbol} Ticket {ticket} Error: {res.retcode} - {res.comment}")
-    return False
+        if res.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(f"[OK] [EXITED] {symbol} Ticket {ticket} Reason: {reason}")
+            # Double Mutex Lock: 300-second Post-Exit Embargo post-liquidation (v23.10)
+            set_cooldown_time(symbol, time.time() + 300)
+            return True
+        
+        # Directive 2: Graceful 10013 Error Handling (Idempotency)
+        if res.retcode == 10013:
+            # Check if the position exists
+            if mt5.positions_get(ticket=ticket) is None:
+                logger.info(f"[SUCCESS/IDEMPOTENT] Ticket {ticket} already closed by prior process (MT5 10013).")
+                set_cooldown_time(symbol, time.time() + 300)
+                return True
+
+        logger.error(f"[FAIL] [EXIT_FAILED] {symbol} Ticket {ticket} Error: {res.retcode} - {res.comment}")
+        return False
+    except Exception as e:
+        import traceback
+        logger.critical(f"[FATAL_EXIT_CRASH] {symbol} Ticket {ticket} | Error: {e}\n{traceback.format_exc()}")
+        return False
 
 if __name__ == "__main__":
     # Standard run on port 8000

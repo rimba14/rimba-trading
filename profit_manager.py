@@ -77,7 +77,8 @@ def _get_live_oracle_meta(symbol: str) -> dict | None:
             "atr": float(row["atr"])
         }
     except Exception as e:
-        logger.warning(f"[ORACLE_READ_ERR] {symbol}: {e}")
+        import traceback
+        logger.warning(f"[ORACLE_READ_ERR] {symbol}: {e}\n{traceback.format_exc()}")
         return None
 
 def _push_exit_signal(pos, reason: str):
@@ -107,7 +108,8 @@ def _push_exit_signal(pos, reason: str):
         else:
             logger.error(f"[EXIT_SIGNAL] [FAIL] Execution Node rejected exit: {resp.status_code}")
     except Exception as e:
-        logger.error(f"[EXIT_SIGNAL] [FAIL] Failed to push exit to HTTP Bridge: {e}")
+        import traceback
+        logger.error(f"[EXIT_SIGNAL] [FAIL] Failed to push exit to HTTP Bridge: {e}\n{traceback.format_exc()}")
 
 
 # ── Immediate Market Close ────────────────────────────────────────────────────
@@ -162,6 +164,10 @@ def _notify(msg: str):
 
 
 _LIQUIDATION_COOLDOWN = {}
+_POSITION_EXTREMES: dict[int, float] = {}
+_CONVICTION_HISTORY: dict[int, list[float]] = defaultdict(list)
+_THESIS_DECAY_STREAK: dict[int, int] = defaultdict(int)
+_SCALED_OUT_POSITIONS: set[int] = set()
 LIQUIDATION_COOLDOWN_S = 60.0
 REGIME_POLL_INTERVAL = 5.0
 
@@ -181,7 +187,67 @@ class SentinelProfitManager:
             sys.exit(1)
         self._last_regime_check: dict[str, float] = {}
         self._regime_persistence_counter: dict[int, int] = defaultdict(int)
-        logger.info("Profit Manager v23.2 online — Regime Persistence Gate ACTIVE.")
+        logger.info("Profit Manager v23.14 online — CADES Architecture ACTIVE.")
+        self._run_grandfather_sweep()
+
+    def _run_grandfather_sweep(self):
+        """Directive 4: Instantly overwrite old static stops with new CADES boundaries."""
+        logger.info("Running Grandfather Retroactive Sweep to apply CADES boundaries...")
+        positions = mt5.positions_get()
+        if not positions:
+            logger.info("No active open positions to grandfather.")
+            return
+            
+        count = 0
+        for pos in positions:
+            info = mt5.symbol_info(pos.symbol)
+            if not info: continue
+            digits = info.digits
+            
+            oracle_data = _get_live_oracle_meta(pos.symbol)
+            p_val = oracle_data["conviction"] if oracle_data else 0.80
+            direction = "BUY" if pos.type == 0 else "SELL"
+            p_entry = max(0.60, min(1.0, p_val if direction == "BUY" else (1.0 - p_val)))
+            
+            macro_atr = _calculate_macroscopic_atr(pos.symbol)
+            if macro_atr <= 0:
+                macro_atr = oracle_data["atr"] if oracle_data else (info.ask - info.bid) * 2.0
+                
+            rates = mt5.copy_rates_from_pos(pos.symbol, mt5.TIMEFRAME_M15, 0, 21)
+            price_open = pos.price_open
+            
+            if rates is not None and len(rates) > 0:
+                if direction == "BUY":
+                    swing_dist = max(0.0, price_open - float(np.min(rates['low'])))
+                else:
+                    swing_dist = max(0.0, float(np.max(rates['high'])) - price_open)
+            else:
+                swing_dist = macro_atr * 2.0
+                
+            sl_dist = max(1.2 * macro_atr, swing_dist)
+            target_sl = price_open - sl_dist if direction == "BUY" else price_open + sl_dist
+            target_sl = round(target_sl, digits)
+            
+            tp_dist = macro_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+            target_tp = price_open + tp_dist if direction == "BUY" else price_open - tp_dist
+            target_tp = round(target_tp, digits)
+            
+            logger.info(f"[GRANDFATHER] {pos.symbol} #{pos.ticket} applying CADES: Assumed/Live P={p_entry:.2f} -> SL={target_sl} | TP={target_tp}")
+            mod_req = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "symbol": pos.symbol,
+                "sl": float(target_sl),
+                "tp": float(target_tp),
+                "position": pos.ticket
+            }
+            mod_res = mt5.order_send(mod_req)
+            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
+                count += 1
+                logger.info(f"[GRANDFATHER_OK] Successfully grandfathered #{pos.ticket}.")
+            else:
+                logger.warning(f"[GRANDFATHER_FAIL] Failed on #{pos.ticket}: retcode={mod_res.retcode if mod_res else 'None'}")
+                
+        logger.info(f"Grandfather sweep complete. Updated {count}/{len(positions)} positions.")
 
     # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
     def calculate_psr(self, returns: list) -> float:
@@ -318,10 +384,127 @@ class SentinelProfitManager:
             sl_level = price_open - sl_distance if pos.type == 0 else price_open + sl_distance
             tp_level = price_open + (TP_ATR_MULT * macro_atr) if pos.type == 0 else price_open - (TP_ATR_MULT * macro_atr)
             
-            # Time-Weighted Conviction Decay
-            days_open = (now - pos.time) / 86400.0
-            adjusted_p = live_p - (days_open * 0.01) if pos_direction == "BUY" else live_p + (days_open * 0.01)
+            # Track position price extreme since entry
+            pos_ext = _POSITION_EXTREMES.get(pos.ticket, price_open)
+            if pos.type == 0:
+                pos_ext = max(pos_ext, current_price)
+            else:
+                pos_ext = min(pos_ext, current_price)
+            _POSITION_EXTREMES[pos.ticket] = pos_ext
+            
+            # ── Mechanical Profit Locking (v23.13 Fluid Mechanics) ─────────────────────
+            profit_price_delta = current_price - price_open if pos.type == 0 else price_open - current_price
+            digits = info.digits if info else 5
+            
+            # Fat Tail Capture: Hardcode initial physical MT5 Take-Profit to 5.0 * ATR
+            target_tp = price_open + (5.0 * macro_atr) if pos.type == 0 else price_open - (5.0 * macro_atr)
+            target_tp = round(target_tp, digits)
+            
+            target_sl = pos.sl
+            modify_needed = False
+            
+            if profit_price_delta >= 2.0 * macro_atr:
+                # Zone 3: Parabolic Trail (Current_Price - 1.5 ATR)
+                trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
+                trail_sl = round(trail_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
+            elif profit_price_delta >= 1.75 * macro_atr:
+                # Zone 2: Fee-Paid Break-Even (+0.2 ATR)
+                be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
+                be_sl = round(be_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
+                    target_sl = be_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
+                    target_sl = be_sl
+                    modify_needed = True
+            elif profit_price_delta >= 1.2 * macro_atr:
+                # Zone 1: Risk Halving (-0.4 ATR from entry)
+                half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
+                half_sl = round(half_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
+                    target_sl = half_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
+                    target_sl = half_sl
+                    modify_needed = True
+                    
+            current_tp = round(pos.tp, digits)
+            if current_tp == 0.0 or abs(current_tp - target_tp) > (info.point * 10 if info else 0.0001):
+                current_tp = target_tp
+                modify_needed = True
+                
+            if modify_needed:
+                mod_req = {
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": symbol,
+                    "sl": float(target_sl),
+                    "tp": float(current_tp),
+                    "position": pos.ticket
+                }
+                mod_res = mt5.order_send(mod_req)
+                if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
+                    logger.info(f"[PROFIT_LOCK] {symbol} #{pos.ticket} physically modified: SL={target_sl} | TP={current_tp} (Profit: {profit_price_delta/macro_atr:.2f} ATR)")
+                else:
+                    logger.warning(f"[PROFIT_LOCK_FAIL] {symbol} #{pos.ticket}: retcode={mod_res.retcode if mod_res else 'None'} | {mod_res.comment if mod_res else ''}")
+            
+            # Compute absolute thesis agreement conviction score (thesis_p)
+            thesis_p = live_p if pos_direction == "BUY" else (1.0 - live_p)
+            hist = _CONVICTION_HISTORY[pos.ticket]
+            hist.append(thesis_p)
+            if len(hist) > 50:
+                hist.pop(0)
+                
+            # Compute 10-period EMA of thesis_p
+            ema_p = hist[0]
+            alpha = 2.0 / (10.0 + 1.0)
+            for val in hist[1:]:
+                ema_p = alpha * val + (1.0 - alpha) * ema_p
+                
+            # Directive 3: Velocity Override (dP/dt)
+            is_velocity_kill = False
+            if len(hist) >= 3:
+                delta_p = hist[-1] - hist[-3]
+                if delta_p < -0.30:
+                    is_velocity_kill = True
+                    logger.warning(f"[{symbol}] Violent Conviction Velocity Drop detected: dP={delta_p:.2f} over last 3 ticks. Triggering immediate [VELOCITY KILL].")
+            
+            # Fetch ticks transacted since entry for Data Density logic
+            rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, int(pos.time), int(now) + 60)
+            trade_ticks = int(np.sum(rates_since['tick_volume'])) if rates_since is not None else 101
 
+            # Directive 3: Divergence Scale-Out
+            if pos.ticket not in _SCALED_OUT_POSITIONS:
+                if profit_price_delta >= 2.5 * macro_atr and thesis_p < 0.65:
+                    logger.info(f"[SCALE_OUT] {symbol} #{pos.ticket} profit >= 2.5 ATR and conviction weakened ({thesis_p:.2f} < 0.65). Scaling out 50% volume.")
+                    _SCALED_OUT_POSITIONS.add(pos.ticket)
+                    close_vol = round(pos.volume * 0.5 / info.volume_step) * info.volume_step if info else pos.volume * 0.5
+                    if close_vol >= (info.volume_step if info else 0.01):
+                        close_type = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
+                        close_price = tick.bid if pos.type == 0 else tick.ask
+                        scale_req = {
+                            "action": mt5.TRADE_ACTION_DEAL,
+                            "symbol": symbol,
+                            "volume": float(close_vol),
+                            "type": close_type,
+                            "position": pos.ticket,
+                            "price": close_price,
+                            "deviation": 30,
+                            "comment": "DIVERGENCE_SCALE_OUT_50%",
+                            "type_time": mt5.ORDER_TIME_GTC,
+                            "type_filling": mt5.ORDER_FILLING_IOC,
+                        }
+                        scale_res = mt5.order_send(scale_req)
+                        if scale_res and scale_res.retcode == mt5.TRADE_RETCODE_DONE:
+                            logger.info(f"[SCALE_OUT_OK] Successfully closed {close_vol} lots of #{pos.ticket}.")
+                        else:
+                            logger.warning(f"[SCALE_OUT_FAIL] Failed to scale out #{pos.ticket}: {scale_res.comment if scale_res else 'None'}")
+            
             # Check Virtual Stop Breaches
             is_sl_hit = (pos.type == 0 and current_price <= sl_level) or (pos.type == 1 and current_price >= sl_level)
             is_tp_hit = (pos.type == 0 and current_price >= tp_level) or (pos.type == 1 and current_price <= tp_level)
@@ -341,25 +524,47 @@ class SentinelProfitManager:
             else:
                 self._regime_persistence_counter[pos.ticket] = 0
 
-            is_thesis_decay = False
-            if hmm_state != "RANGE":
-                if pos_direction == "BUY" and adjusted_p <= 0.48:
-                    is_thesis_decay = True
-                elif pos_direction == "SELL" and adjusted_p >= 0.52:
-                    is_thesis_decay = True
+            # Directive 3: Dynamic Thesis Decay
+            tp_atr_dist = abs(pos.tp - price_open) / macro_atr if pos.tp > 0.0 else 4.0
+            profit_atr = profit_price_delta / macro_atr
+            dynamic_threshold = max(0.15, 0.45 - (max(0.0, profit_atr) / max(0.1, tp_atr_dist)) * 0.30)
+            
+            if ema_p < dynamic_threshold:
+                _THESIS_DECAY_STREAK[pos.ticket] += 1
+            else:
+                _THESIS_DECAY_STREAK[pos.ticket] = 0
+                
+            is_thesis_decay = _THESIS_DECAY_STREAK[pos.ticket] >= 3
+            
+            # Directive 3: Dead-Money Time Stop
+            is_dead_money = (trade_ticks > 300) and (abs(profit_atr) < 0.25)
             
             # Directive 1: Time Stop (Theta Decay) - v21.4
             MAX_HOLDING_SECONDS = 6 * 3600
             elapsed_seconds = now - pos.time
             is_theta_decay = (elapsed_seconds > MAX_HOLDING_SECONDS) and (pos.profit <= 0)
             
-            if is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit or is_theta_decay:
-                if is_regime_conflict:
+            # Directive 3: Data Density Grace Period Blindfold logic
+            if trade_ticks < 100 and (now - pos.time < 600):
+                if is_regime_conflict or is_thesis_decay or is_dead_money:
+                    logger.info(f"[DATA_DENSITY_GRACE] {symbol} #{pos.ticket} data density low ({trade_ticks} < 100 ticks). Suppressing cognitive exits.")
+                    is_regime_conflict = False
+                    is_thesis_decay = False
+                    is_dead_money = False
+            
+            if is_velocity_kill or is_dead_money or is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit or is_theta_decay:
+                if is_velocity_kill:
+                    reason_type = "[VELOCITY KILL]"
+                    trigger_desc = f"dP/dt drop < -0.30 in 3 ticks"
+                elif is_dead_money:
+                    reason_type = "[DEAD-MONEY STOP]"
+                    trigger_desc = f"Ticks={trade_ticks} > 300 | PnL={profit_atr:.2f} ATR"
+                elif is_regime_conflict:
                     reason_type = "[REGIME CONFLICT]"
                     trigger_desc = f"{pos_direction} vs {hmm_state}"
                 elif is_thesis_decay:
-                    reason_type = "[TIME STOP / THESIS DECAY]"
-                    trigger_desc = f"Adj_P={adjusted_p:.4f} (Raw={live_p:.4f})"
+                    reason_type = "[THESIS DECAY]"
+                    trigger_desc = f"EMA(P)={ema_p:.4f} < Threshold={dynamic_threshold:.4f}"
                 elif is_theta_decay:
                     reason_type = "[TIME STOP / THETA DECAY]"
                     trigger_desc = f"Held {elapsed_seconds/3600:.1f}h | PnL={pos.profit:.2f}"
@@ -415,12 +620,43 @@ class SentinelProfitManager:
                 all_positions = list(sentinel_pos) + list(legacy_pos)
 
                 if all_positions:
+                    # Directive 2: Naked Trade Sweep (Retroactive TP Enforcement)
+                    for pos in all_positions:
+                        if pos.tp == 0.0:
+                            info = mt5.symbol_info(pos.symbol)
+                            digits = info.digits if info else 5
+                            macro_atr = _calculate_macroscopic_atr(pos.symbol)
+                            if macro_atr <= 0:
+                                tick = mt5.symbol_info_tick(pos.symbol)
+                                spread = (tick.ask - tick.bid) if tick else 0.0001
+                                macro_atr = spread * 2.0
+                            
+                            tp_dist = macro_atr * 3.0
+                            target_tp = pos.price_open + tp_dist if pos.type == 0 else pos.price_open - tp_dist
+                            target_tp = round(target_tp, digits)
+                            
+                            logger.info(f"[NAKED_SWEEP] {pos.symbol} #{pos.ticket} has TP=0.0. Forcing retroactive Take-Profit to {target_tp}...")
+                            mod_req = {
+                                "action": mt5.TRADE_ACTION_SLTP,
+                                "symbol": pos.symbol,
+                                "sl": float(pos.sl),
+                                "tp": float(target_tp),
+                                "position": pos.ticket,
+                                "magic": pos.magic
+                            }
+                            mod_res = mt5.order_send(mod_req)
+                            if mod_res and mod_res.retcode == mt5.TRADE_RETCODE_DONE:
+                                logger.info(f"[TP_ENFORCED] Retroactively attached TP={target_tp} to #{pos.ticket} successfully.")
+                            else:
+                                logger.warning(f"[TP_ENFORCED_FAIL] Failed to attach TP to #{pos.ticket}: retcode={mod_res.retcode if mod_res else 'None'}")
+
                     self._regime_liquidation_audit(all_positions)
 
                 time.sleep(1)
 
             except Exception as e:
-                logger.error(f"Monitor loop error: {e}")
+                import traceback
+                logger.error(f"Monitor loop error: {e}\n{traceback.format_exc()}")
                 time.sleep(10)
 
 if __name__ == "__main__":
