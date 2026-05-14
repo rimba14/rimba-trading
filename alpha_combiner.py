@@ -24,8 +24,8 @@ class AlphaCombiner:
         
         for agent in agents:
             raw_scores = [signals_dict[s][agent] for s in signals_dict]
-            mean_a = np.mean(raw_scores)
-            std_a = np.std(raw_scores) + 1e-9
+            mean_a = np.nanmean(raw_scores)
+            std_a = np.nanstd(raw_scores) + 1e-9
             
             for sym in signals_dict:
                 # Equation 3: Y(i,s) = X(i,s) / sigma
@@ -34,10 +34,14 @@ class AlphaCombiner:
         # 2. Cross-Sectional Demeaning (Eq 5)
         # Removes market-wide bias from normalized signals
         final_scores = {}
-        for sym in standardized_signals:
+        
+        signals_matrix = np.array([list(standardized_signals[s].values()) for s in standardized_signals])
+        cross_means = np.nanmean(signals_matrix, axis=1)
+        
+        for i, sym in enumerate(standardized_signals):
             sym_scores = list(standardized_signals[sym].values())
             # Equation 5: Lambda(i,s) = Y(i,s) - (1/N Sum Y(j,s))
-            cross_mean = np.mean([list(standardized_signals[s].values()) for s in standardized_signals])
+            cross_mean = cross_means[i]
             
             # 3. Residual Extraction (Eq 9) - Orthogonalize against the Cross-Sectional Average
             # Combined Signal = Sum(w(i) * Si) where w is based on residual

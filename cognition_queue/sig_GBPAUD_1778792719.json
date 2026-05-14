@@ -1,0 +1,11 @@
+{
+  "symbol": "GBPAUD",
+  "direction": "BUY",
+  "conviction": 0.720713,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0026307142857142957,
+  "timestamp": 1778792702,
+  "version": "v24.3-UNCHAINED"
+}

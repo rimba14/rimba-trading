@@ -58,9 +58,7 @@ def init_model():
         # Directive 3: Hard-Lock the Bridge Loader
         # Ensure file exists and is greater than 1MB (1,000,000 bytes)
         if not os.path.exists(QUANT_PATH) or os.path.getsize(QUANT_PATH) < 1000000:
-            print(f"CRITICAL ERROR: Quantized TimesFM artifact missing or corrupted at {QUANT_PATH}")
-            print("Please run 'python compile_quantized_models.py' first to generate valid model artifacts.")
-            sys.exit(1)
+            raise FileNotFoundError(f"TimesFM artifact missing at {QUANT_PATH}")
 
         print(f"[TIMESFM] Loading Pre-Quantized Model from {QUANT_PATH}...")
         _MODEL = torch.load(QUANT_PATH, weights_only=False)
@@ -77,7 +75,7 @@ def init_model():
         print(f"[TIMESFM] CRITICAL: Model Loading Failed: {e}")
         import traceback
         print(traceback.format_exc())
-        sys.exit(1)
+        raise Exception(f"Failed to load TimesFM model: {e}")
     return _MODEL
 
 def update_risk_cache(symbol: str, ohlcv_df: pd.DataFrame):

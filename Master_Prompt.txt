@@ -1,15 +1,46 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v23.15 - Pre-Validation) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v23.15. This is a CODE FREEZE.
-Phase 1: Architecture, Mutex & Atomic State [LOCKED]
-Atomic State via filelock. Double Mutex Lock (60s Entry, 300s Post-Exit Embargo). ECN-safe 2-step executions required.
-Phase 2 & 3: Causal Features & Subquadratic Cognition [LOCKED]
-Strict Causality (trailing windows). XGBoost + DDQN + Kronos KV Cache.
-Phase 4: Dynamic Strategy Routing & Gating (ACTIVE FOCUS)
-Sealed Hysteresis ($0.40 \le P \le 0.60$ HARD BLOCKED).
-Mutual Exclusion Exits: Opposing signals MUST clear the \Delta P Conviction Gate AND the Margin Pre-Validation Shield (Margin Level \ge 205\%) before any active positions are liquidated.
-Phase 5: Execution Optimization & CADES [LOCKED]
-MT5 SL = max(1.2 ATR, Swing). MT5 TP = Conviction-Scaled (2x to 6x ATR).
-Fluid Trailing: Risk Halve (+1.2 ATR), Fee-Paid BE (+1.75 ATR), Parabolic Trail (+2.0 ATR).
-Cognitive Exits: 100-Tick Data Density Grace Period, Dynamic Thesis Decay, Velocity Kill, Dead-Money Stop.
-Phase 6: Constitution Maintenance
-Autonomously DELETE older versions of this prompt. ONE Master_Prompt.txt.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v26.4 - Ironclad CADES - Clean Features) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v26.4. This is a CODE FREEZE. Do not modify core logic without explicit user authorization.
+
+Phase 0: Pre-Flight Environment Exorcism [LOCKED]
+* Rule 1: Singular RAM Dominance. Before any Sentinel microservice (Slow Loop, FastAPI Sniper, Risk Agent, Profit Manager) is launched, the Orchestrator MUST perform an OS-level sweep (via `psutil`, `tasklist`, or `pkill`).
+* Rule 2: The Ruthless Purge. Any existing Python process matching the names of the Sentinel daemons MUST be forcefully terminated (`SIGKILL`). 
+* Rule 3: Port Liberation. The system must verify that Ports 8000 and 8001 are strictly unbound before initiating the Cold Boot sequence. Orphaned "Zombie" processes are considered a critical systemic threat and must be eradicated prior to trading.
+
+Phase 1: Architecture & Atomic State [LOCKED]
+* Atomic State: Double Mutex Lock via native MT5 Ledger history (86,400s Post-Exit Embargo - 24 Hours). Legacy JSON mutexes are STRICTLY FORBIDDEN.
+* Data Ingestion: H1/H4 OHLCV Structures (100 bars each) are the PRIMARY data source. The Anti-Starvation M1 fallback is reserved for thin-market conditions only. All dataframes MUST undergo strict `NaN` and `inf` scrubbing (`ffill().fillna(0)`) prior to inference.
+
+Phase 2 & 3: Causal Features & Swing Alpha Factory [LOCKED]
+* Strict Causality: Trailing windows only. No future-leak.
+* Multi-Agent Ensemble: XGBoost + DDQN + Kronos KV Cache. 
+* Smart Fallback: If DDQN weights are uninitialized, dynamically reallocate ensemble weighting to prevent score dilution.
+* Swing Alpha Setups (3 Authorized):
+  - Mean Reversion: RSI(14) < 35 AND Order-Flow Entropy > 0.85 (prevents falling knife).
+  - Trend Continuation: BB Width at 20-bar low + Price on 20 EMA (Volatility Contraction Squeeze).
+  - Catalyst Momentum: Gap% > 1% AND RVOL > 2.0 (identifies high-relative-volume gap breaks).
+
+Phase 4: Dynamic Strategy Routing & Gating [LOCKED]
+* Sealed Hysteresis: $0.40 \le P \le 0.60$ is HARD BLOCKED.
+* Absolute Conviction Mapping: Signal dispatch must evaluate absolute divergence from neutral: `abs(P - 0.5) + 0.5 >= EPISTEMIC_GATE` to ensure high-conviction SELL signals are properly routed.
+* Cognitive Dissonance: Veto threshold is locked at `0.55`.
+* Mutual Exclusion: Opposing signals MUST clear the Conviction Gate AND the Margin Pre-Validation Shield (Margin Level $\ge 205\%$) before active positions are liquidated.
+
+Phase 5: Absolute SL/TP Mandate & CADES Execution [ACTIVE FOCUS]
+* Rule 1: ZERO NAKED TRADES. All entries MUST use ECN 2-Step Execution (Market Order -> Instant TRADE_ACTION_SLTP modification). Events with extreme conviction ($P>0.85$) must route as Passive Maker Limit orders.
+* Rule 2: Mathematical Failsafes, Stoplevel & Spread Armor. 
+  - The system MUST calculate real-time spread: `current_spread = ask - bid`.
+  - The baseline risk distance must enforce a Spread-Aware Safety Floor: `true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread)`.
+  - MT5 SL = `max(1.2 * true_atr, Swing_Distance)`. 
+  - CRITICAL: NO stop-loss or take-profit may be dispatched without passing through a strict normalization wrapper that actively queries and enforces `info.trade_stops_level` (the broker's freeze zone) and `info.trade_tick_size` (perfect float rounding). Attempting to send un-normalized floats or stops inside the freeze zone or the bid/ask spread will result in fatal 10016 orphaned trades and is strictly forbidden. This applies to both standard routing and Almgren-Chriss sliced execution.
+* Rule 3: Regime-Aware TP Squashing & Logarithmic Scaling. Take-Profit distance must scale logarithmically, NOT linearly. If regime is RANGE: Apply a $0.15\times$ compression scalar to capture mean-reverting alpha.
+* Rule 4: Ironclad Retention. Every `TRADE_ACTION_SLTP` must include BOTH `sl` and `tp`. Continuous Naked Sweep must run at 1Hz without causing `10025 NO_CHANGES` broker spam.
+* Rule 5: CADES Fluid Mechanics (Swing-Calibrated Zones):
+  - Zone 1 (Risk Halving): Trigger at +2.5 ATR. Move SL to -0.4 ATR from entry.
+  - Zone 2 (Scale-Out / Fee-Paid BE): Trigger at +4.0 ATR (with 15% Entropy Discount to +3.4 ATR if Sent > 0.90).
+  - Zone 3 (Parabolic Trail): Trigger at +5.0 ATR. STRICTLY DISABLED during RANGE regimes.
+  - Dead-Money Time Stop: Eject if > 12 H1 candles elapsed AND PnL variance < 0.25 ATR.
+  - Theta Decay Stop: Maximum hold time is 10 Days (swing positions).
+  - Macro Sentiment Shock ($\ge \pm 0.60$) triggers immediate Virtual Exits.
+* Rule 6: Ex-Ante Macro Blackouts. The Risk Agent must query upcoming earnings/macro calendars. No new trades may be opened within 24 hours of a Tier-1 event. Active trades within 12 hours of an event must automatically scale out 50% and move stops to breakeven.
+* Rule 7: ATR-Adjusted Position Sizing. Raw fractional Kelly sizing MUST be overridden by an ATR-Adjusted Dollar Risk Model. The final lot size is the MINIMUM of the Kelly lot and `max_dollar_risk (2% of balance) / (required_points * tick_value)`.
+* Rule 8: Negative Carry Veto (Swap Filter). The Risk Agent must evaluate `swap_long` and `swap_short`. If the projected daily carry cost represents a >10% drag on the expected Zone 2 take-profit over a 7-day hold, the trade MUST be rejected (Retcode: 403 Negative Carry).

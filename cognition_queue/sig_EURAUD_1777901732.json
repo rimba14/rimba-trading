@@ -1,9 +1,0 @@
-{
-  "symbol": "EURAUD",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "RANGE",
-  "atr": 0.0008335714285714493,
-  "timestamp": 1777901703,
-  "version": "v19.5-AUDIT"
-}

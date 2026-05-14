@@ -1,0 +1,11 @@
+{
+  "symbol": "SOLUSD",
+  "direction": "SELL",
+  "conviction": 0.29018,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.8378571428571411,
+  "timestamp": 1778792426,
+  "version": "v24.3-UNCHAINED"
+}

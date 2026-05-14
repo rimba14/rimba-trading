@@ -1,9 +1,0 @@
-{
-  "symbol": "SP500",
-  "direction": "SELL",
-  "conviction": 0.295229,
-  "hmm_state": "BEAR",
-  "atr": 6.144285714285745,
-  "timestamp": 1777901756,
-  "version": "v19.5-AUDIT"
-}

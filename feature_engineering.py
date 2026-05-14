@@ -73,9 +73,9 @@ def generate_features(ticks_df, other_asset_df=None):
     }).bfill().fillna(0)
     
     # v23.3 Directive: Include high-dimensional NLP Embeddings (768d)
-    # Mocking high-dim sentiment vector (e.g. from FinBERT)
+    # v26.4 SRE Fix: Zero-fill dummy embeddings to prevent stochastic noise injection
     batch_size = len(ticks_df)
-    nlp_embeddings = np.random.randn(batch_size, 768).astype('float32')
+    nlp_embeddings = np.zeros((batch_size, 768), dtype='float32')
     
     # Concatenate: (batch, 6) + (batch, 768) -> (batch, 774)
     full_vector = np.hstack([base_features.values, nlp_embeddings])
@@ -113,15 +113,14 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     buy_vol = np.where(returns > 0, df[volume_col], 0)
     sell_vol = np.where(returns < 0, df[volume_col], 0)
     
-    # 1. VPIN (Volume-Synchronized Probability of Informed Trading)
-    rolling_buy = pd.Series(buy_vol).rolling(window=20, min_periods=1).sum()
-    rolling_sell = pd.Series(sell_vol).rolling(window=20, min_periods=1).sum()
-    rolling_total = pd.Series(df[volume_col]).rolling(window=20, min_periods=1).sum()
-    df['vpin'] = (np.abs(rolling_buy - rolling_sell) / (rolling_total + 1e-9)).fillna(0.5)
+    # v26.4 SRE Purge: VPIN and Hawkes Intensity removed (Invalid on H1/H4 Swing)
+    # rolling_buy = pd.Series(buy_vol).rolling(window=20, min_periods=1).sum()
+    # rolling_sell = pd.Series(sell_vol).rolling(window=20, min_periods=1).sum()
+    # rolling_total = pd.Series(df[volume_col]).rolling(window=20, min_periods=1).sum()
+    # df['vpin'] = (np.abs(rolling_buy - rolling_sell) / (rolling_total + 1e-9)).fillna(0.5)
     
-    # 2. Hawkes Intensity Proxy (EMA of absolute jump magnitudes)
-    jumps = np.abs(returns)
-    df['hawkes_intensity'] = jumps.ewm(span=10, min_periods=1).mean().fillna(0)
+    # jumps = np.abs(returns)
+    # df['hawkes_intensity'] = jumps.ewm(span=10, min_periods=1).mean().fillna(0)
     
     # 3. Order Flow Entropy (Shannon Entropy of directional probabilities)
     pos_p = (returns > 0).rolling(window=20, min_periods=1).mean() + 1e-9
@@ -129,6 +128,92 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     df['order_flow_entropy'] = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
     
     return df
+
+# ============================================================
+# v26.0 SWING ALPHA FACTORY (Level 31 SRE)
+# ============================================================
+
+import MetaTrader5 as mt5
+
+def ingest_mtf_ohlcv(symbol):
+    """
+    v26.0: Multi-Timeframe OHLCV Ingestion.
+    Fetches 100 H1 bars (primary signal) and 100 H4 bars (macro trend).
+    Applies Phase 1 NaN/inf scrubbing protocol.
+    Returns (df_h1, df_h4) as pandas DataFrames.
+    """
+    def _fetch_and_scrub(symbol, timeframe, count=100):
+        rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+        if rates is None or len(rates) == 0:
+            return None
+        df = pd.DataFrame(rates)
+        df['time'] = pd.to_datetime(df['time'], unit='s')
+        df.set_index('time', inplace=True)
+        # Phase 1 Constitutional NaN/inf scrubbing
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df.ffill(inplace=True)
+        df.fillna(0, inplace=True)
+        return df
+
+    df_h1 = _fetch_and_scrub(symbol, mt5.TIMEFRAME_H1)
+    df_h4 = _fetch_and_scrub(symbol, mt5.TIMEFRAME_H4)
+    return df_h1, df_h4
+
+
+def compute_swing_alpha(df, df_h4=None):
+    """
+    v26.0 Swing Alpha Factory - 3 Setup Logic:
+    1. Mean Reversion: RSI(14) + Order-Flow Entropy
+    2. Trend Continuation: 20 EMA + 50 SMA + Bollinger Band Squeeze
+    3. Catalyst Momentum: Gap% + Relative Volume (RVOL)
+    Returns a dict of alpha signals.
+    """
+    close = df['close']
+    volume = df['tick_volume']
+
+    # --- Setup 1: Mean Reversion (RSI + Order-Flow Entropy) ---
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / (loss + 1e-9)
+    rsi = 100 - (100 / (1 + rs))
+    returns = close.pct_change().fillna(0)
+    pos_p = (returns > 0).rolling(20).mean() + 1e-9
+    neg_p = (returns < 0).rolling(20).mean() + 1e-9
+    entropy = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p))
+    mean_reversion_signal = (rsi < 35) & (entropy > 0.85)
+
+    # --- Setup 2: Trend Continuation (EMA/SMA + BB Squeeze) ---
+    ema_20 = close.ewm(span=20, adjust=False).mean()
+    sma_50 = close.rolling(50).mean()
+    bb_mid = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_width = (2 * bb_std) / (bb_mid + 1e-9)
+    bb_squeeze = bb_width <= bb_width.rolling(20).min().shift(1)  # current BB at 20-bar low
+    price_on_ema = np.abs(close - ema_20) < (bb_std * 0.3)
+    trend_continuation_signal = bb_squeeze & price_on_ema
+
+    # --- Setup 3: Catalyst Momentum (Gap% + RVOL) ---
+    gap_pct = (df['open'] - df['close'].shift(1)) / (df['close'].shift(1) + 1e-9) * 100
+    avg_volume = volume.rolling(20).mean()
+    rvol = volume / (avg_volume + 1e-9)
+    catalyst_momentum_signal = (gap_pct.abs() > 1.0) & (rvol > 2.0)
+
+    alpha = pd.DataFrame({
+        'rsi': rsi,
+        'entropy': entropy,
+        'ema_20': ema_20,
+        'sma_50': sma_50,
+        'bb_width': bb_width,
+        'gap_pct': gap_pct,
+        'rvol': rvol,
+        'mean_reversion_signal': mean_reversion_signal.astype(float),
+        'trend_continuation_signal': trend_continuation_signal.astype(float),
+        'catalyst_momentum_signal': catalyst_momentum_signal.astype(float),
+    }).replace([np.inf, -np.inf], np.nan).ffill().fillna(0)
+
+    return alpha
+
 
 if __name__ == "__main__":
     # Generate 2,000 dummy ticks for diagnostic

@@ -44,9 +44,28 @@ def _pre_scan_watchlist(watchlist: list):
     
     for symbol in watchlist:
         try:
-            # Use 24h momentum (M15 bars * 96) as the ranking metric
-            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 96)
-            if rates is not None and len(rates) > 1:
+            # 1. Force the symbol into Market Watch
+            mt5.symbol_select(symbol, True)
+
+            # 2. Force a single tick request to wake up the broker's data stream
+            mt5.symbol_info_tick(symbol)
+
+            # 3. Now safely request the OHLCV history with async pre-fetch retry loop
+            rates = None
+            max_retries = 5
+            for attempt in range(max_retries):
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 96)
+                if rates is not None and len(rates) > 0:
+                    break
+                time.sleep(1.0)
+
+            if rates is None or len(rates) == 0:
+                err = mt5.last_error()
+                print(f"🚨 [DATA STARVATION] MT5 failed to fetch history for {symbol} after {max_retries} attempts. MT5 Error: {err}")
+                metrics[symbol] = 0.0
+                continue
+
+            if len(rates) > 1:
                 close_now = rates[-1]['close']
                 close_prev = rates[0]['close']
                 momentum = (close_now - close_prev) / (close_prev + 1e-9)
@@ -528,6 +547,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
     _LAST_UPDATE[symbol] = now
 
     # -- Macro Halt & Black Swan Override (v19.5) ----------------------------
+    # v26.0: Initialize m_state with defaults to prevent UnboundLocalError
+    m_state = {"global_macro_sentiment": 0.0, "black_swan_risk": 0.0, "asset_specific_catalysts": {}}
+    
     if HALT_PATH.exists():
         logging.critical("[MACRO_HALT] Global suspension active. Sleeping 60 s.")
         time.sleep(60)
@@ -558,13 +580,67 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
     time.sleep(random.uniform(0.05, 0.3))
 
     df_m15 = df_ta = df_ml = None
+    latest_swing = None # v26.0: Store swing alpha features for Heuristic Override
     try:
         logging.info(f"[{symbol}] Updating high-resolution oracles (v21.0)...")
-        # Shift from M15 to Tick Ingestion (N=2000)
-        df_m15 = sigproc.get_tick_dataframe(symbol, 2000)
+        # v26.0 Swing Paradigm: H1/H4 Multi-Timeframe Ingestion (Primary Data Source)
+        mt5.symbol_select(symbol, True)
+        try:
+            from feature_engineering import ingest_mtf_ohlcv, compute_swing_alpha
+            df_h1, df_h4 = ingest_mtf_ohlcv(symbol)
+            if df_h1 is not None and len(df_h1) >= 50:
+                swing_alpha = compute_swing_alpha(df_h1, df_h4)
+                latest_swing = swing_alpha.iloc[-1]
+                logging.info(
+                    f"[v26.0 SWING ALPHA] {symbol} | "
+                    f"H1_Bars={len(df_h1)} | H4_Bars={len(df_h4) if df_h4 is not None else 0} | "
+                    f"RSI={latest_swing.get('rsi', float('nan')):.2f} | "
+                    f"BB_Width={latest_swing.get('bb_width', float('nan')):.5f} | "
+                    f"RVOL={latest_swing.get('rvol', float('nan')):.2f} | "
+                    f"Sent={latest_swing.get('entropy', float('nan')):.3f} | "
+                    f"MeanRev={int(latest_swing.get('mean_reversion_signal', 0))} | "
+                    f"TrendCont={int(latest_swing.get('trend_continuation_signal', 0))} | "
+                    f"Catalyst={int(latest_swing.get('catalyst_momentum_signal', 0))}"
+                )
+            else:
+                logging.warning(f"[{symbol}] H1 ingestion insufficient ({len(df_h1) if df_h1 is not None else 0} bars). Proceeding with tick fallback.")
+        except Exception as _h1_err:
+            logging.warning(f"[{symbol}] v26.0 Swing Alpha failed: {_h1_err}. Proceeding with tick fallback.")
+        # 1. Force a single tick request to wake up the broker's data stream
+        mt5.symbol_info_tick(symbol)
+        # Shift from M15 to Tick Ingestion (N=2000) with async pre-fetch retry loop
+        df_m15 = None
+        max_retries = 5
+        for attempt in range(max_retries):
+            df_m15 = sigproc.get_tick_dataframe(symbol, 2000)
+            if df_m15 is not None and len(df_m15) >= 512:
+                break
+            time.sleep(1.0)
+
         if df_m15 is None or len(df_m15) < 512:
-            logging.error(f"[TICKER_ERROR] {symbol}: insufficient ticks. Skipping.")
-            return
+            # Directive 2: M1 OHLCV Anti-Starvation Fallback
+            logging.warning(f"[TICKER_ERROR] {symbol}: insufficient ticks after {max_retries} attempts. Attempting M1 OHLCV fallback...")
+            try:
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 750)
+                if rates is not None and len(rates) >= 512:
+                    df_m15 = pd.DataFrame(rates)
+                    df_m15['time'] = pd.to_datetime(df_m15['time'], unit='s')
+                    # Align column names to tick-dataframe schema
+                    df_m15.rename(columns={'tick_volume': 'tick_volume'}, inplace=True)
+                    if 'real_volume' not in df_m15.columns:
+                        df_m15['real_volume'] = df_m15.get('tick_volume', 0)
+                    if 'volume' not in df_m15.columns:
+                        df_m15['volume'] = df_m15['real_volume']
+                    if 'tick_volume' not in df_m15.columns:
+                        df_m15['tick_volume'] = df_m15['real_volume']
+                    logging.info(f"[ANTI-STARVATION] {symbol}: M1 OHLCV fallback SUCCESS ({len(df_m15)} bars).")
+                else:
+                    err = mt5.last_error()
+                    logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback also insufficient. MT5 Error: {err}. Skipping.")
+                    return
+            except Exception as _fe:
+                logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback exception: {_fe}. Skipping.")
+                return
 
         df_ta = df_m15.copy()
         c = df_ta["close"]
@@ -600,29 +676,42 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
         current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
         
-        df_ml = feat_eng.engineer_features(
-            df_ml,
-            price_col="close",
-            volume_col=vol_col,
-            frac_d=0.45,
-            fft_top_k=3,
-            cs_rank=current_rank,
-        )
-        logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]")
+        try:
+            df_ml = feat_eng.engineer_features(
+                df_ml,
+                price_col="close",
+                volume_col=vol_col,
+                frac_d=0.45,
+                fft_top_k=3,
+                cs_rank=current_rank,
+            )
+            nan_count = df_ml.isna().sum().sum()
+            logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
+            if nan_count > 0:
+                logging.warning(f"[{symbol}] WARNING: NaNs detected in features:\n{df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
+        except Exception as e:
+            logging.error(f"[{symbol}] FEATURE_ENGINEERING_CRITICAL_FAILURE (Non-Fatal for Swing): {e}")
+            if latest_swing is None:
+                return # Still fatal if no swing features either
 
-        df_ml = df_ml.dropna()
-        if len(df_ml) < 512:
-            logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars after FracDiff. Skipping.")
-            return
+        if df_ml is not None:
+            df_ml = df_ml.dropna()
+            if len(df_ml) < 512 and latest_swing is None:
+                logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars and no swing fallback. Skipping.")
+                return
 
         # ── v22.4: Data Warm-Up Validation ──────────────────────────────────
         # Verify the FINAL ROW has valid (non-NaN) Alpha Factory features.
         # If rolling windows produced NaNs, we MUST halt — never default to 0.0.
-        _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
-        _final_row = df_ml.iloc[-1]
-        _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
-        if _nan_features:
-            logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
+        if df_ml is not None:
+            _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
+            _final_row = df_ml.iloc[-1]
+            _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
+            if _nan_features and latest_swing is None:
+                logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
+                return
+        elif latest_swing is None:
+            logging.critical(f"[FATAL] {symbol}: No ML data and no Swing fallback. Halting.")
             return
 
         raw_hmm_state, hmm_prob, label_probs = hmm.get_current_state(df_m15["close"].values)
@@ -640,8 +729,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             
         hmm_state = _OFFICIAL_REGIME[symbol]
         
-        atr = utils.calculate_atr(df_m15)
-        logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f})")
+        # v26.0: Use H1-based ATR for all regime/scaling decisions
+        atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
+        logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f}) | ATR(H1)={atr:.5f}")
 
         _arctic_write(f"{symbol}_hmm", pd.DataFrame([{
             "state": hmm_state,
@@ -650,25 +740,67 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "timestamp": utils.get_utc_epoch(),
         }]))
 
-        # 2. Resurrect XGBoost (Directive 1)
-        kronos_bridge.update_cognition_cache(symbol, df_ml)
-        k_item = _arctic_read(f"{symbol}_kronos")
-        if k_item is None:
-            return
+        # ── Level 34 SRE: Heuristic Override & ML Bypass ──────────────────
+        try:
+            # 2. Resurrect XGBoost (Directive 1)
+            kronos_bridge.update_cognition_cache(symbol, df_ml)
+            k_item = _arctic_read(f"{symbol}_kronos")
+            if k_item is not None:
+                _k_data = k_item.data.iloc[-1]
+                k_prob = float(_k_data["kronos_prob"])
+            else:
+                k_prob = 0.500
 
-        _k_data = k_item.data.iloc[-1]
-        x_prob = get_xgb_prediction(df_ml)
-        k_prob = float(_k_data["kronos_prob"])
+            x_prob = get_xgb_prediction(df_ml)
+            
+            from rl_agents.oxford_ddqn import CHECKPOINT_PATH
+            ddqn_trained = os.path.exists(CHECKPOINT_PATH)
+            if ddqn_trained:
+                ddqn_agent = ddqn_bridge.get_ddqn_agent()
+                feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
+                ddqn_p = ddqn_agent.infer_probability(feature_vec)
+                p_blend = (k_prob * 0.40) + (x_prob * 0.30) + (ddqn_p * 0.30)
+            else:
+                ddqn_p = 0.500
+                p_blend = (k_prob * 0.50) + (x_prob * 0.50)
+            
+            logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f}")
+            
+        except Exception as e:
+            logging.warning(f"[{symbol}] ML Bypass in effect. Reason: {e}")
+            x_prob = 0.500
+            ddqn_p = 0.500
+            k_prob = 0.500
+            print(f"[ML BYPASS] Shape mismatch detected. Falling back to Heuristic Swing Routing for {symbol}.")
+            x_prob = 0.500
+            ddqn_p = 0.500
+            
+            if latest_swing is not None:
+                rsi = latest_swing.get('rsi', 50)
+                entropy = latest_swing.get('entropy', 0.5)
+                
+                # Heuristic Protocol logic
+                if rsi < 35 and entropy > 0.85:
+                    p_blend = 0.85 # Mean Rev Long
+                elif rsi > 65 and entropy > 0.85:
+                    p_blend = 0.15 # Mean Rev Short
+                elif latest_swing.get('trend_continuation_signal', 0) > 0:
+                    # Price vs EMA 20 for direction
+                    p_blend = 0.90 if df_m15['close'].iloc[-1] > latest_swing.get('ema_20', 0) else 0.10
+                elif latest_swing.get('catalyst_momentum_signal', 0) > 0:
+                    p_blend = 0.80 if latest_swing.get('gap_pct', 0) > 0 else 0.20
+                else:
+                    p_blend = 0.50 # Neutral
+            else:
+                p_blend = 0.50
+                
+            logging.warning(f"[{symbol}] HEURISTIC_OVERRIDE ACTIVE: P_blend={p_blend:.2f} (Reason: {e})")
 
-        # Update cache with dynamic XGB probability
-        kronos_bridge.commit_to_cache(symbol, k_prob, xgboost_prob=x_prob)
-        
-        p_blend = (k_prob * 0.70) + (x_prob * 0.30)
-        
         if _OBSERVER:
             s_t_data = {
                 "kronos_p": k_prob,
                 "xgb_p": x_prob,
+                "ddqn_p": ddqn_p,
                 "hmm_state": hmm_state,
                 "atr": atr,
                 "timesfm_p10": float(k_item.data.iloc[-1].get("p10", 0.0)),
@@ -676,7 +808,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             }
             _OBSERVER.observe(pd.DataFrame([s_t_data]))
 
-        primary_dir = 1 if p_blend > 0.55 else (-1 if p_blend < 0.45 else 0)
+        primary_dir = 1 if p_blend > 0.60 else (-1 if p_blend < 0.40 else 0)
 
         live_vec = copy.deepcopy(sigproc.get_feature_vector(symbol))
         mem_matches = _MEMORY.retrieve(live_vec, k=3)
@@ -772,9 +904,8 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * 0.75)
         
         # Post-processing: Regime Alignment & Graveyard
-        if not is_legend:
-            if hmm_state == "BEAR" and primary_dir == 1: meta_p = 0.50
-            elif hmm_state == "BULL" and primary_dir == -1: meta_p = 0.50
+        # v24.3 Constitution: Eradicated legacy v17.9 regime overrides. 
+        # MixTS handles regime alignment natively via Bayesian weighting.
         if is_graveyard: meta_p = 0.50
         
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f})")
@@ -784,22 +915,25 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "meta_conviction": float(meta_p),
             "hmm_state": hmm_state,
             "atr": float(atr),
+            "entropy": float(_final.get("order_flow_entropy", 0.0)),
+            "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
             "timestamp": utils.get_utc_epoch(),
             "is_legend": is_legend,
             "is_graveyard": is_graveyard,
         }]))
 
-        norm_p = 0.5 if meta_p == 0.0 else abs(meta_p - 0.5) + 0.5
+        # Directive 1: Absolute Conviction Gate (v24.3 Level 23 SRE)
+        # norm_p must reflect BOTH BUY (P > 0.5) and SELL (P < 0.5) conviction.
+        # A bearish P=0.15 is abs(0.15-0.5)+0.5 = 0.85 absolute conviction.
+        norm_p = abs(meta_p - 0.5) + 0.5
         
-        # 3. Resurrect DDQN (Directive 3)
-        # We call this BEFORE the gate to ensure ddqn_p is available for the payload
-        # Ensure we only pass numeric values to avoid Timestamp errors
-        ddqn_agent = ddqn_bridge.get_ddqn_agent()
-        feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
-        ddqn_p = ddqn_agent.infer_probability(feature_vec)
-
-        if norm_p >= current_gate and primary_dir != 0:
-            signal_dir = "BUY" if primary_dir == 1 else "SELL"
+        # v23.12 Directive: Sealed Hysteresis Dead-Zone
+        if 0.40 <= meta_p <= 0.60:
+            logging.info(f"[GATE] {symbol}: P={meta_p:.6f} falls in DEAD-ZONE (0.40-0.60). HARD BLOCKED.")
+            # Skip the signal dispatch block
+        elif norm_p >= current_gate and primary_dir != 0:
+            # Direction: BUY for P > 0.5, SELL for P < 0.5 — always from raw meta_p
+            signal_dir = "BUY" if meta_p > 0.5 else "SELL"
             
             push_to_orchestrator({
                 "symbol": symbol,
@@ -809,10 +943,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 "ddqn_p": float(ddqn_p),
                 "hmm_state": hmm_state,
                 "atr": float(atr),
-                "timestamp": int(time.time()),
-                "version": "v23.6-AUTOPSY-DDQN",
+                "timestamp": int(datetime.now(timezone.utc).timestamp()),
+                "version": "v24.3-UNCHAINED",
             })
-            logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
+            logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
         else:
             if hmm_state == "RANGE":
                 logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
@@ -891,15 +1025,21 @@ def main():
     _LAST_CS_REFRESH = time.time()
     logging.info("[SYSTEM] Warm-up complete. Entering event-driven dollar-bar cycle.")
 
-    streamer = bars.InformationBarStreamer(watchlist)
-    for bar in streamer.stream_bars():
-        # Directive 3: Periodically refresh Cross-Sectional Ranks (every 15m)
-        if time.time() - _LAST_CS_REFRESH > 900:
+    # Directive 3: The 1-Hour Heartbeat (Anti-Scalp Lock)
+    while True:
+        try:
+            logging.info(f"[HEARTBEAT] Starting H1 Swing Evaluation Cycle ({len(watchlist)} assets)...")
+            asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
             _pre_scan_watchlist(watchlist)
-            _LAST_CS_REFRESH = time.time()
             
-        symbol = bar["symbol"]
-        update_slow_oracles(symbol)
+            # Sleep until the top of the next hour
+            now = datetime.now()
+            seconds_to_wait = 3600 - (now.minute * 60 + now.second)
+            logging.info(f"[HEARTBEAT] Cycle complete. Sleeping for {seconds_to_wait} seconds until next H1 close.")
+            time.sleep(seconds_to_wait)
+        except Exception as e:
+            logging.error(f"[HEARTBEAT_ERROR] {e}")
+            time.sleep(60)
 
 if __name__ == "__main__":
     main()

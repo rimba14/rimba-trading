@@ -19,6 +19,8 @@ from collections import defaultdict
 from dotenv import load_dotenv
 import io
 
+from agents.risk_agent import check_upcoming_tier1_events
+
 load_dotenv()
 
 MAGIC_NUMBER       = 142
@@ -44,8 +46,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ProfitManager")
 
-def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_M15, period=14) -> float:
-    """Calculates ATR using macroscopic M15 bars (Directive 2 v21.3)."""
+def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_H1, period=14) -> float:
+    """Calculates ATR using macroscopic H1 bars (Directive 2 v26.0 - Level 35 SRE)."""
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 1, period + 1)
     if rates is None or len(rates) < period + 1:
         return 0.0
@@ -63,6 +65,33 @@ def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_M15, period=
     
     return float(np.mean(tr))
 
+def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, is_buy):
+    """v25.1: Level 29 SRE Stoplevel Armor & Tick Normalization."""
+    info = mt5.symbol_info(symbol)
+    if not info: return target_price
+    
+    tick_size = info.trade_tick_size
+    point = info.point
+    stoplevel_distance = info.trade_stops_level * point
+    
+    if is_buy:
+        if is_sl:
+            max_allowed_sl = current_price - stoplevel_distance
+            target_price = min(target_price, max_allowed_sl)
+        else:
+            min_allowed_tp = current_price + stoplevel_distance
+            target_price = max(target_price, min_allowed_tp)
+    else: # SELL
+        if is_sl:
+            min_allowed_sl = current_price + stoplevel_distance
+            target_price = max(target_price, min_allowed_sl)
+        else:
+            max_allowed_tp = current_price - stoplevel_distance
+            target_price = min(target_price, max_allowed_tp)
+            
+    normalized_price = round(target_price / tick_size) * tick_size
+    return round(normalized_price, info.digits)
+
 def _get_live_oracle_meta(symbol: str) -> dict | None:
     """Reads the latest oracle metadata (HMM, conviction, ATR) from ArcticDB."""
     try:
@@ -74,7 +103,8 @@ def _get_live_oracle_meta(symbol: str) -> dict | None:
         return {
             "hmm_state": str(row["hmm_state"]),
             "conviction": float(row["meta_conviction"]),
-            "atr": float(row["atr"])
+            "atr": float(row["atr"]),
+            "entropy": float(row.get("entropy", 0.0))
         }
     except Exception as e:
         import traceback
@@ -112,10 +142,10 @@ def _push_exit_signal(pos, reason: str):
         logger.error(f"[EXIT_SIGNAL] [FAIL] Failed to push exit to HTTP Bridge: {e}\n{traceback.format_exc()}")
 
 
-# ── Immediate Market Close ────────────────────────────────────────────────────
+#  Immediate Market Close 
 def _market_close(pos) -> bool:
     """
-    Closes a position at market immediately — bypasses Virtual SL/TP.
+    Closes a position at market immediately  bypasses Virtual SL/TP.
     Returns True on success.
     """
     tick = mt5.symbol_info_tick(pos.symbol)
@@ -153,7 +183,7 @@ def _market_close(pos) -> bool:
         return False
 
 
-# ── Notify via Discord ────────────────────────────────────────────────────────
+#  Notify via Discord 
 def _notify(msg: str):
     if not WEBHOOK_URL:
         return
@@ -185,11 +215,19 @@ class SentinelProfitManager:
         if not mt5.initialize():
             logger.critical("[FATAL] MT5 init failed.")
             sys.exit(1)
+            
+        try:
+            from sentinel_config import WATCHLIST
+            for sym in WATCHLIST:
+                mt5.symbol_select(sym, True)
+        except Exception:
+            pass
+            
         self._last_regime_check: dict[str, float] = {}
         self._regime_persistence_counter: dict[int, int] = defaultdict(int)
-        logger.info("Profit Manager v23.14 online — Continuous CADES Naked Sweep ACTIVE.")
+        logger.info("Profit Manager v24.2 online  Continuous Ironclad CADES Naked Sweep ACTIVE.")
 
-    # ── PSR (Bailey & Lopez de Prado) ─────────────────────────────────────────
+    #  PSR (Bailey & Lopez de Prado) 
     def calculate_psr(self, returns: list) -> float:
         arr = np.array(returns)
         if len(arr) < 10:
@@ -203,7 +241,7 @@ class SentinelProfitManager:
         )
         return float(stats.norm.cdf(sharpe / (std_err + 1e-9)))
 
-    # ── PSR Audit ─────────────────────────────────────────────────────────────
+    #  PSR Audit 
     def audit_performance(self):
         """Phase 5: Audits last 7 days of closed deals. Triggers SRE halt if PSR < 0.80."""
         now   = datetime.now(timezone.utc)
@@ -221,7 +259,7 @@ class SentinelProfitManager:
         psr_val = self.calculate_psr(returns)
         logger.info(f"[PSR_AUDIT] PSR={psr_val:.4f} (threshold={PSR_THRESHOLD})")
         if psr_val < PSR_THRESHOLD:
-            logger.critical(f"⚠️ [PSR_DEGRADATION] PSR={psr_val:.4f} < {PSR_THRESHOLD}")
+            logger.critical(f" [PSR_DEGRADATION] PSR={psr_val:.4f} < {PSR_THRESHOLD}")
             self._sre_halt(psr_val)
 
     def _sre_halt(self, psr_val: float):
@@ -239,9 +277,9 @@ class SentinelProfitManager:
             with open(ticket, "w") as fh:
                 json.dump(payload, fh, indent=2)
         logger.info(f"[SRE_HALT] Ticket dropped: {ticket.name}")
-        _notify(f"⚠️ **PSR_DEGRADATION**\nLive PSR = {psr_val:.4f} < {PSR_THRESHOLD}\nSRE halt triggered.")
+        _notify(f" **PSR_DEGRADATION**\nLive PSR = {psr_val:.4f} < {PSR_THRESHOLD}\nSRE halt triggered.")
 
-    # ── Dynamic Regime Liquidation (SRE Phase 6 Patch) ────────────────────────
+    #  Dynamic Regime Liquidation (SRE Phase 6 Patch) 
     def _regime_liquidation_audit(self, positions: list):
         """
         Polls the live HMM regime for each open position.
@@ -332,7 +370,7 @@ class SentinelProfitManager:
                 pos_ext = min(pos_ext, current_price)
             _POSITION_EXTREMES[pos.ticket] = pos_ext
             
-            # ── Mechanical Profit Locking (v23.13 Fluid Mechanics) ─────────────────────
+            #  Mechanical Profit Locking (v23.13 Fluid Mechanics) 
             profit_price_delta = current_price - price_open if pos.type == 0 else price_open - current_price
             digits = info.digits if info else 5
             
@@ -343,36 +381,89 @@ class SentinelProfitManager:
             target_sl = pos.sl
             modify_needed = False
             
-            if profit_price_delta >= 2.0 * macro_atr:
-                # Zone 3: Parabolic Trail (Current_Price - 1.5 ATR)
-                trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
-                trail_sl = round(trail_sl, digits)
-                if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
-                    target_sl = trail_sl
-                    modify_needed = True
-                elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
-                    target_sl = trail_sl
-                    modify_needed = True
-            elif profit_price_delta >= 1.75 * macro_atr:
-                # Zone 2: Fee-Paid Break-Even (+0.2 ATR)
-                be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
-                be_sl = round(be_sl, digits)
-                if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
-                    target_sl = be_sl
-                    modify_needed = True
-                elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
-                    target_sl = be_sl
-                    modify_needed = True
-            elif profit_price_delta >= 1.2 * macro_atr:
-                # Zone 1: Risk Halving (-0.4 ATR from entry)
-                half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
-                half_sl = round(half_sl, digits)
-                if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
-                    target_sl = half_sl
-                    modify_needed = True
-                elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
-                    target_sl = half_sl
-                    modify_needed = True
+            active_regime = hmm_state
+            if active_regime == "RANGE":
+                # Directive 2: Entropy-Discounted Zone 2 Threshold
+                s_ent = oracle_data.get("entropy", 0.0)
+                zone_2_limit = 4.0  # v26.0: Widened from 1.75 -> 4.0 ATR for swing
+                if s_ent > 0.90:
+                    zone_2_limit = 3.4  # 15% Entropy Discount applied
+                    logger.info(f"[{symbol}] High Entropy detected ({s_ent:.2f} > 0.90). Discounting Zone 2 to {zone_2_limit}x ATR.")
+
+                if profit_price_delta >= zone_2_limit * macro_atr:
+                    # Modify Zone 2: forcefully liquidate 75% of the position volume to capture mean-reverting profits
+                    if pos.ticket not in _SCALED_OUT_POSITIONS:
+                        logger.info(f"[RANGE_SCALE_OUT] {symbol} #{pos.ticket} active_regime is RANGE and profit >= {zone_2_limit} ATR. Liquidating 75% volume.")
+                        _SCALED_OUT_POSITIONS.add(pos.ticket)
+                        close_vol = round(pos.volume * 0.75 / info.volume_step) * info.volume_step if info else pos.volume * 0.75
+                        if close_vol >= (info.volume_step if info else 0.01):
+                            close_type = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
+                            close_price = tick.bid if pos.type == 0 else tick.ask
+                            scale_req = {
+                                "action": mt5.TRADE_ACTION_DEAL,
+                                "symbol": symbol,
+                                "volume": float(close_vol),
+                                "type": close_type,
+                                "position": pos.ticket,
+                                "price": close_price,
+                                "deviation": 30,
+                                "comment": f"RANGE_SCALE_OUT_75%_S{s_ent:.2f}",
+                                "type_time": mt5.ORDER_TIME_GTC,
+                                "type_filling": mt5.ORDER_FILLING_IOC,
+                            }
+                            mt5.order_send(scale_req)
+                    
+                    # Leave remaining 25% at a Fee-Paid Break-Even (+0.2 ATR)
+                    be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
+                    be_sl = round(be_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
+                        target_sl = be_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
+                        target_sl = be_sl
+                        modify_needed = True
+                elif profit_price_delta >= 2.5 * macro_atr:  # v26.0: Zone 1 widened 1.2 -> 2.5 ATR
+                    # Zone 1: Risk Halving (-0.4 ATR from entry)
+                    half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
+                    half_sl = round(half_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
+                        target_sl = half_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
+                        target_sl = half_sl
+                        modify_needed = True
+            else:
+                # Original 3-Zone Geometric Trail for non-RANGE regimes
+                if profit_price_delta >= 5.0 * macro_atr:  # v26.0: Zone 3 Parabolic activated at +5.0 ATR
+                    # Zone 3: Parabolic Trail (Current_Price - 1.5 ATR)
+                    trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
+                    trail_sl = round(trail_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
+                        target_sl = trail_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
+                        target_sl = trail_sl
+                        modify_needed = True
+                elif profit_price_delta >= 4.0 * macro_atr:  # v26.0: Zone 2 widened 1.75 -> 4.0 ATR
+                    # Zone 2: Fee-Paid Break-Even (+0.2 ATR)
+                    be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
+                    be_sl = round(be_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
+                        target_sl = be_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
+                        target_sl = be_sl
+                        modify_needed = True
+                elif profit_price_delta >= 2.5 * macro_atr:  # v26.0: Zone 1 widened 1.2 -> 2.5 ATR
+                    # Zone 1: Risk Halving (-0.4 ATR from entry)
+                    half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
+                    half_sl = round(half_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
+                        target_sl = half_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
+                        target_sl = half_sl
+                        modify_needed = True
                     
             current_tp = round(pos.tp, digits)
             if current_tp == 0.0 or abs(current_tp - target_tp) > (info.point * 10 if info else 0.0001):
@@ -413,6 +504,21 @@ class SentinelProfitManager:
                 if delta_p < -0.30:
                     is_velocity_kill = True
                     logger.warning(f"[{symbol}] Violent Conviction Velocity Drop detected: dP={delta_p:.2f} over last 3 ticks. Triggering immediate [VELOCITY KILL].")
+            
+            # v24.0 Directive 2: Alternative Data Virtual Exits [MACRO SHOCK] kill switch
+            try:
+                from gitagent_utils import fetch_unstructured_sentiment
+                live_sentiment = fetch_unstructured_sentiment(symbol)
+            except Exception:
+                live_sentiment = 0.0
+
+            is_macro_shock = False
+            if pos_direction == "BUY" and live_sentiment < -0.60:
+                is_macro_shock = True
+                logger.warning(f"[{symbol}] Alternative Data [MACRO SHOCK] kill switch triggered: Sentiment={live_sentiment:.2f} < -0.60 for Long position.")
+            elif pos_direction == "SELL" and live_sentiment > 0.60:
+                is_macro_shock = True
+                logger.warning(f"[{symbol}] Alternative Data [MACRO SHOCK] kill switch triggered: Sentiment={live_sentiment:.2f} > +0.60 for Short position.")
             
             # Fetch ticks transacted since entry for Data Density logic
             rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, int(pos.time), int(now) + 60)
@@ -476,11 +582,26 @@ class SentinelProfitManager:
                 
             is_thesis_decay = _THESIS_DECAY_STREAK[pos.ticket] >= 3
             
-            # Directive 3: Dead-Money Time Stop
-            is_dead_money = (trade_ticks > 300) and (abs(profit_atr) < 0.25)
+            # ── v26.1: True Swing Time-Stop & Weekend Bypass ──
+            # Fetch H1 bars elapsed since entry for the swing time-stop gate
+            h1_rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_H1, int(pos.time), int(now) + 3600)
+            h1_candles_elapsed = len(h1_rates_since) if h1_rates_since is not None else 0
             
-            # Directive 1: Time Stop (Theta Decay) - v21.4
-            MAX_HOLDING_SECONDS = 6 * 3600
+            crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX"]
+            is_crypto = any(k in symbol.upper() for k in crypto_keywords)
+            dt_now = datetime.fromtimestamp(now, tz=timezone.utc)
+            
+            is_weekend_pause = False
+            if not is_crypto:
+                if (dt_now.weekday() == 4 and dt_now.strftime('%H:%M') >= "23:55") or \
+                   (dt_now.weekday() in [5, 6]) or \
+                   (dt_now.weekday() == 0 and dt_now.strftime('%H:%M') < "00:15"):
+                    is_weekend_pause = True
+
+            is_dead_money = (h1_candles_elapsed > 72) and (abs(profit_atr) < 0.25) and not is_weekend_pause
+            
+            # Directive 1: Time Stop (Theta Decay) - v26.0: Extended to 10 days for swing holds
+            MAX_HOLDING_SECONDS = 10 * 24 * 3600  # 10 days
             elapsed_seconds = now - pos.time
             is_theta_decay = (elapsed_seconds > MAX_HOLDING_SECONDS) and (pos.profit <= 0)
             
@@ -492,8 +613,11 @@ class SentinelProfitManager:
                     is_thesis_decay = False
                     is_dead_money = False
             
-            if is_velocity_kill or is_dead_money or is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit or is_theta_decay:
-                if is_velocity_kill:
+            if is_macro_shock or is_velocity_kill or is_dead_money or is_regime_conflict or is_thesis_decay or is_sl_hit or is_tp_hit or is_theta_decay:
+                if is_macro_shock:
+                    reason_type = "[MACRO SHOCK]"
+                    trigger_desc = f"Sentiment={live_sentiment:.2f} threshold breached"
+                elif is_velocity_kill:
                     reason_type = "[VELOCITY KILL]"
                     trigger_desc = f"dP/dt drop < -0.30 in 3 ticks"
                 elif is_dead_money:
@@ -516,7 +640,7 @@ class SentinelProfitManager:
                     trigger_desc = f"Price={current_price:.5f} hit TP={tp_level:.5f}"
 
                 reason = f"{reason_type} | {trigger_desc} | Ticket={pos.ticket} | PnL={pos.profit:+.2f}"
-                logger.warning(f"🚨 [AUTONOMOUS SRE] Liquidated {symbol} due to {reason_type}. PnL={pos.profit:+.2f}")
+                logger.warning(f" [AUTONOMOUS SRE] Liquidated {symbol} due to {reason_type}. PnL={pos.profit:+.2f}")
 
                 _push_exit_signal(pos, reason)
                 success = _market_close(pos)
@@ -541,12 +665,79 @@ class SentinelProfitManager:
                             json.dump(diag, fh, indent=2)
                     logger.info(f"[DIAG] SRE ticket written: {diag_path.name}")
             else:
-                logger.debug(f"[REGIME_OK] {symbol} #{pos.ticket}: {pos_direction} | HMM={hmm_state} — aligned.")
+                logger.debug(f"[REGIME_OK] {symbol} #{pos.ticket}: {pos_direction} | HMM={hmm_state}  aligned.")
 
-    # ── Monitor Loop ──────────────────────────────────────────────────────────
+    def _event_horizon_protection(self, pos) -> bool:
+        """v26.3 Level 40 SRE: Pre-Event Risk Reduction.
+           Scales out 50% of the position and moves SL to BE if within 12h of Tier-1 Event."""
+        if pos.ticket in _SCALED_OUT_POSITIONS:
+            return False # Already protected
+            
+        has_event, event_desc = check_upcoming_tier1_events(pos.symbol, threshold_hours=12.0)
+        if not has_event:
+            return False
+            
+        logger.warning(f"[EVENT HORIZON] {pos.symbol} {event_desc}. Scaling out 50% and moving SL to Breakeven to survive gap risk.")
+        
+        tick = mt5.symbol_info_tick(pos.symbol)
+        info = mt5.symbol_info(pos.symbol)
+        if not tick or not info:
+            return False
+            
+        # 1. Scale Out 50%
+        close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+        close_price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
+        
+        # Round volume to step
+        half_vol = pos.volume * 0.5
+        vol_step = info.volume_step if info.volume_step > 0 else 0.01
+        half_vol = max(round(half_vol / vol_step) * vol_step, vol_step)
+        
+        # Only scale out if the remaining position is >= min volume
+        if half_vol < pos.volume:
+            request_close = {
+                "action":      mt5.TRADE_ACTION_DEAL,
+                "symbol":      pos.symbol,
+                "volume":      float(half_vol),
+                "type":        close_type,
+                "position":    pos.ticket,
+                "price":       close_price,
+                "deviation":   30,
+                "magic":       MAGIC_NUMBER,
+                "comment":     "EVENT_HORIZON_SCALE_OUT",
+                "type_time":   mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+            mt5.order_send(request_close)
+            
+        # 2. Move SL to Breakeven (Fee-Paid BE approx)
+        is_buy = (pos.type == mt5.ORDER_TYPE_BUY)
+        # Adding a tiny offset for fee-paid BE
+        offset = (info.trade_stops_level * info.point) + (info.spread * info.point)
+        be_price = pos.price_open + offset if is_buy else pos.price_open - offset
+        
+        # Ensure we don't worsen the SL
+        if (is_buy and be_price > pos.sl) or (not is_buy and be_price < pos.sl and pos.sl > 0):
+            # Normalize to avoid 10016
+            curr_price = tick.bid if is_buy else tick.ask
+            be_price = enforce_stoplevel_and_normalize(pos.symbol, curr_price, be_price, is_sl=True, is_buy=is_buy)
+            
+            request_mod = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "symbol": pos.symbol,
+                "position": pos.ticket,
+                "sl": be_price,
+                "tp": pos.tp # Keep TP
+            }
+            mt5.order_send(request_mod)
+            
+        _SCALED_OUT_POSITIONS.add(pos.ticket)
+        return True
+
+    #  Monitor Loop 
     def monitor_loop(self):
         logger.info(
-            "Starting monitor loop — PSR audit every 10 min | Position scan every 1 s."
+            "Starting monitor loop  PSR audit every 10 min | Position scan every 1 s."
         )
         last_audit = 0.0
         while True:
@@ -562,7 +753,10 @@ class SentinelProfitManager:
                 if all_positions:
                     # Directive 3: Continuous Loop Naked Sweep (CADES TP Enforcement)
                     for pos in all_positions:
-                        if pos.tp == 0.0:
+                        # v26.3 Event Horizon Check
+                        self._event_horizon_protection(pos)
+                        
+                        if pos.tp == 0.0 or pos.sl == 0.0:
                             try:
                                 info = mt5.symbol_info(pos.symbol)
                                 if info is None:
@@ -574,54 +768,56 @@ class SentinelProfitManager:
                                 broker_min = info.trade_stops_level * info.point
                                 true_atr = max(raw_atr, price_based_min, broker_min)
                                 
-                                # 2. Calculate CADES TP Distance (Defaulting to 3x if P not in memory)
+                                # 2. Calculate CADES TP and SL Distances
                                 tp_dist = 3.0 * true_atr
+                                sl_dist = 1.2 * true_atr
                                 
                                 # 3. Directional Math
                                 if pos.type == mt5.ORDER_TYPE_BUY:
                                     new_tp = pos.price_open + tp_dist
+                                    new_sl = pos.price_open - sl_dist
                                 elif pos.type == mt5.ORDER_TYPE_SELL:
                                     new_tp = pos.price_open - tp_dist
+                                    new_sl = pos.price_open + sl_dist
                                 else:
                                     continue
                                     
-                                # 1. Get the precise tick size from the broker
-                                tick_size = info.trade_tick_size
+                                # Preserve existing targets if already attached
+                                final_tp = pos.tp if pos.tp > 0.0 else new_tp
+                                final_sl = pos.sl if pos.sl > 0.0 else new_sl
 
-                                # 2. Normalize TP to the nearest tick step
-                                if tick_size > 0:
-                                    new_tp = round(new_tp / tick_size) * tick_size
-
-                                # 3. Ensure SL is also normalized if we are sending it
-                                current_sl = pos.sl
-                                if current_sl > 0 and tick_size > 0:
-                                    current_sl = round(current_sl / tick_size) * tick_size
-
-                                # 4. Truncate floating-point drift (e.g., 61666.50000000001 -> 61666.50)
-                                new_tp = round(new_tp, info.digits)
-                                current_sl = round(current_sl, info.digits) if current_sl > 0 else 0.0
+                                # 4. Universal v25.1 Armor Normalization
+                                is_buy = (pos.type == mt5.ORDER_TYPE_BUY)
+                                tick = mt5.symbol_info_tick(pos.symbol)
+                                if tick is None:
+                                    logger.warning(f"[SWEEP] Skipping {pos.symbol} - No Tick Data available.")
+                                    continue
+                                curr_price = tick.bid if is_buy else tick.ask
+                                
+                                final_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, final_sl, is_sl=True, is_buy=is_buy)
+                                final_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, final_tp, is_sl=False, is_buy=is_buy)
 
                                 # Now build the payload...
                                 request = {
                                     "action": mt5.TRADE_ACTION_SLTP,
                                     "symbol": pos.symbol,
                                     "position": pos.ticket,
-                                    "sl": current_sl,
-                                    "tp": new_tp
+                                    "sl": final_sl,
+                                    "tp": final_tp
                                 }
                                 
                                 # 5. Dispatch and Scream on Failure
                                 result = mt5.order_send(request)
                                 if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                                     err = mt5.last_error()
-                                    print(f"🚨 [SWEEP REJECTION] Ticket {pos.ticket} ({pos.symbol}) failed TP attach.")
+                                    print(f"[SWEEP REJECTION] Ticket {pos.ticket} ({pos.symbol}) failed SL/TP attach.")
                                     print(f"   -> Retcode: {result.retcode if result else 'None'}, MT5 Error: {err}")
-                                    print(f"   -> Attempted TP: {new_tp}, Open: {pos.price_open}, True ATR: {true_atr}")
+                                    print(f"   -> Attempted TP: {final_tp}, SL: {final_sl}, Open: {pos.price_open}, True ATR: {true_atr}")
                                 else:
-                                    print(f"✅ [SWEEP SUCCESS] Ticket {pos.ticket} ({pos.symbol}) TP forcefully attached at {new_tp}.")
+                                    print(f"[NAKED SWEEP RESCUE] Successfully armored ticket #{pos.ticket} ({pos.symbol}) with normalized SL/TP.")
                                     
                             except Exception as e:
-                                print(f"🚨 [SWEEP CRASH] Python error during naked sweep for {pos.ticket}: {str(e)}")
+                                print(f"[SWEEP CRASH] Python error during naked sweep for {pos.ticket}: {str(e)}")
 
                     self._regime_liquidation_audit(all_positions)
 

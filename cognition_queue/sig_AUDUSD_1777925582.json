@@ -1,9 +1,0 @@
-{
-  "symbol": "AUDUSD",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "RANGE",
-  "atr": 0.0009435714285714088,
-  "timestamp": 1777925566,
-  "version": "v19.5-AUDIT"
-}

@@ -1,9 +1,0 @@
-{
-  "symbol": "ETHUSD",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "RANGE",
-  "atr": 8.101428571428512,
-  "timestamp": 1777953809,
-  "version": "v19.5-AUDIT"
-}

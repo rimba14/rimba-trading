@@ -1,8 +1,8 @@
 """
 fastapi_sniper.py - Adaptive Sentinel Direct HTTP Execution Bridge (Machine B)
-Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v23.1 Oxford Apex)
+Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v24.2 Ironclad CADES)
 Concurrency: Idempotent Execution & Mutex Locking Active.
-v23.1: Upgraded baseline to Volume-Weighted Micro-Price.
+v24.2: Upgraded baseline to Volume-Weighted Micro-Price & Regime-Aware Squashing.
 """
 
 import os
@@ -54,43 +54,68 @@ if not logger.handlers:
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
 
-# Directive 1: Atomic Persistent Mutex Lock (v23.8 Autopsy Fix)
-from filelock import FileLock
-import json
-from pathlib import Path
+# Directive 1 & 2: Level 14 SRE Refactoring - Native MT5 Ledger Amnesia Lock
+from datetime import timedelta
 
-MUTEX_FILE = Path("C:/Sentinel_Project/data/cooldown_mutex.json")
-MUTEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+def is_amnesia_lock_active(symbol, cooldown_seconds=86400):
+    # v26.0 Swing Paradigm: 24-hour post-exit embargo (86400s).
+    # Swing setups take days to form; re-entering minutes after a stop-loss is statistically invalid noise.
+    info = mt5.symbol_info(symbol)
+    if not info: 
+        return False
+    current_broker_time = info.time
+    
+    # Fetch history deals for the last 2 days (generous window for 24h embargo)
+    now = datetime.now()
+    lookback = now - timedelta(days=2)
+    tomorrow = now + timedelta(days=1)
+    
+    # Filter deals SPECIFICALLY for this symbol
+    deals = mt5.history_deals_get(lookback, tomorrow, group=f"*{symbol}*")
+    
+    if deals is None or len(deals) == 0:
+        return False # No recent trades, clear to execute
+        
+    # Find the absolute most recent deal timestamp
+    last_deal_time = max([deal.time for deal in deals])
+    
+    # Enforce the 24-hour embargo using unified broker time
+    time_since_last_trade = current_broker_time - last_deal_time
+    
+    if 0 <= time_since_last_trade < cooldown_seconds:
+        return True # Lock Active for this specific symbol!
+        
+    return False # Clear to execute
 
-def get_cooldown_time(symbol: str) -> float:
-    if not MUTEX_FILE.exists():
-        return 0.0
-    try:
-        with FileLock(str(MUTEX_FILE) + ".lock", timeout=1):
-            with open(MUTEX_FILE, "r") as f:
-                data = json.load(f)
-                return float(data.get(symbol, 0.0))
-    except Exception as e:
-        import traceback
-        logger.error(f"Mutex read error: {e}\n{traceback.format_exc()}")
-        return 0.0
-
-def set_cooldown_time(symbol: str, timestamp: float):
-    try:
-        with FileLock(str(MUTEX_FILE) + ".lock", timeout=1):
-            data = {}
-            if MUTEX_FILE.exists():
-                try:
-                    with open(MUTEX_FILE, "r") as f:
-                        data = json.load(f)
-                except Exception:
-                    pass
-            data[symbol] = float(timestamp)
-            with open(MUTEX_FILE, "w") as f:
-                json.dump(data, f)
-    except Exception as e:
-        import traceback
-        logger.error(f"Mutex write error: {e}\n{traceback.format_exc()}")
+def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, is_buy):
+    """v25.1: Level 29 SRE Stoplevel Armor & Tick Normalization."""
+    info = mt5.symbol_info(symbol)
+    if not info: return target_price
+    
+    tick_size = info.trade_tick_size
+    point = info.point
+    # trade_stops_level is in points. convert to price distance.
+    stoplevel_distance = info.trade_stops_level * point
+    
+    # Directive 1: Enforce Minimum Distance (Stoplevel)
+    if is_buy:
+        if is_sl: # Buy SL must be BELOW (current_price - stoplevel)
+            max_allowed_sl = current_price - stoplevel_distance
+            target_price = min(target_price, max_allowed_sl)
+        else:     # Buy TP must be ABOVE (current_price + stoplevel)
+            min_allowed_tp = current_price + stoplevel_distance
+            target_price = max(target_price, min_allowed_tp)
+    else: # SELL
+        if is_sl: # Sell SL must be ABOVE (current_price + stoplevel)
+            min_allowed_sl = current_price + stoplevel_distance
+            target_price = max(target_price, min_allowed_sl)
+        else:     # Sell TP must be BELOW (current_price - stoplevel)
+            max_allowed_tp = current_price - stoplevel_distance
+            target_price = min(target_price, max_allowed_tp)
+            
+    # Directive 2: Strict Tick Size Normalization
+    normalized_price = round(target_price / tick_size) * tick_size
+    return round(normalized_price, info.digits)
 
 active_liquidations = set()
 
@@ -111,6 +136,13 @@ def startup_event():
         logger.critical("MT5 Initialization failed. Sniper cannot proceed.")
         sys.exit(1)
     
+    # Level 6 SRE Patch: Explicitly subscribe to target portfolio symbols in MT5 Market Watch
+    logger.info(f"[BOOT] Forcing MT5 Market Watch selection for {len(WATCHLIST)} portfolio symbols...")
+    for sym in WATCHLIST:
+        selected = mt5.symbol_select(sym, True)
+        if not selected:
+            logger.warning(f"⚠️ [WARNING] Failed to select {sym} in MT5 Market Watch.")
+            
     # Directive 2: Terminal Status Check (v23.6)
     info = mt5.terminal_info()
     logger.info(f"[BOOT] MT5 Terminal Info: Connected={info.connected} | TradeAllowed={info.trade_allowed}")
@@ -149,12 +181,10 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
         raise HTTPException(status_code=400, detail="Epistemic gate block")
 
-    # 2b. Entry Cooldown (60s Persistent Mutex)
-    now = time.time()
-    last_time = get_cooldown_time(signal.symbol)
-    if now - last_time < 60:
-        logger.warning(f"[{signal.symbol}] Signal REJECTED: Entry Cooldown Active ({60 - (now - last_time):.1f}s remaining)")
-        raise HTTPException(status_code=429, detail="Entry cooldown active")
+    # 2b. Native MT5 Ledger Amnesia Lock Check (Level 14 SRE Refactoring)
+    if is_amnesia_lock_active(signal.symbol, cooldown_seconds=300):
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (Native MT5 Ledger Embargo)")
+        raise HTTPException(status_code=429, detail="Amnesia Lock Active")
 
     # 2c. Pre-Trade Toxicity Gating (VPIN)
     vpin_val = getattr(signal, 'vpin', 0.0)
@@ -214,7 +244,6 @@ async def execute_trade_endpoint(signal: TradeSignal):
     # 5. Execution
     success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction)
     if success:
-        set_cooldown_time(signal.symbol, time.time())
         return {"status": "success", "symbol": signal.symbol, "lot": lot_size}
     else:
         raise HTTPException(status_code=500, detail="MT5 execution failed")
@@ -347,7 +376,7 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
     # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
     acc = mt5.account_info()
     if acc:
-        if acc.margin_level > 0 and acc.margin_level < 200:
+        if acc.margin_level > 0 and acc.margin_level < 200.0:
             logger.warning(f"[{symbol}] Signal REJECTED: Margin Level too low ({acc.margin_level})")
             return False
     
@@ -411,21 +440,41 @@ def calculate_kelly_lot(symbol, conviction):
     f_final = min(max(0, f_star * KELLY_FRACTION), HARD_RISK_CAP) 
     risk_usd = acc.equity * f_final
     
-    # ── v23.1: 1.5x Spread Buffer ──
+    # ── v25.0: Align Sizing SL with Execution SL (ATR/Swing) ──
+    direction = "BUY" if conviction > 0.5 else "SELL"
+    current_atr, distance_to_swing = calculate_atr_and_swing(symbol, direction, lookback=20)
     spread = tick.ask - tick.bid
     spread_buffer = spread * 1.5
+    sl_dist_price = max(1.2 * current_atr, distance_to_swing)
     
-    # Dynamic SL distance: 1% volatility proxy + Spread Buffer
-    sl_dist_price = (micro_price * 0.01) + spread_buffer
+    # Fallback if ATR is 0
+    if sl_dist_price <= 0:
+        sl_dist_price = (micro_price * 0.005) + spread_buffer # Default 0.5%
+        
+    # ── v26.1: ATR-Adjusted Position Sizing ──
     sl_dist_points = sl_dist_price / (info.point + 1e-12)
-    
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
-    raw_vol = risk_usd / (sl_dist_points * point_val + 1e-12)
-    lot = round(raw_vol / info.volume_step) * info.volume_step
     
-    if 0.0 < lot < 0.01:
-        logger.info(f"[{symbol}] Small Account Bypass: Rounding {lot} up to 0.01")
-        lot = 0.01
+    # Kelly-suggested lot
+    raw_kelly_vol = risk_usd / (sl_dist_points * point_val + 1e-12)
+    kelly_lot = math.floor(raw_kelly_vol / info.volume_step) * info.volume_step
+    
+    # ATR-Adjusted lot
+    max_dollar_risk = acc.balance * 0.02
+    atr_raw_vol = max_dollar_risk / (sl_dist_points * point_val + 1e-12)
+    atr_adjusted_lot = math.floor(atr_raw_vol / info.volume_step) * info.volume_step
+    
+    lot = min(kelly_lot, atr_adjusted_lot)
+    
+    logger.info(f"[{symbol}] DEBUG LOT: Balance={acc.balance:.2f} | MaxRisk=${max_dollar_risk:.2f} | KellyLot={kelly_lot} | AtrLot={atr_adjusted_lot} | FinalLot={lot}")
+
+    if lot < info.volume_min and (risk_usd > 0 or max_dollar_risk > 0):
+        # Verify if account can handle the margin for volume_min
+        action_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+        margin_req = mt5.order_calc_margin(action_type, symbol, info.volume_min, tick.ask)
+        if margin_req and margin_req < acc.margin_free * 0.8:
+            logger.info(f"[{symbol}] Small Account Floor: Forcing {lot} -> {info.volume_min}")
+            lot = info.volume_min
         
     lot = max(min(lot, info.volume_max), 0.0) 
     return lot
@@ -458,8 +507,8 @@ def calculate_ac_trajectory(
     return [max(0.0, float(s)) for s in child_sizes]
 
 def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> Tuple[float, float]:
-    """Calculates live macroscopic ATR and distance to recent Swing High/Low."""
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, lookback + 1)
+    """Calculates live macroscopic ATR (H1) and distance to recent Swing High/Low."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, lookback + 1)
     if rates is None or len(rates) < lookback + 1:
         tick = mt5.symbol_info_tick(symbol)
         spread = (tick.ask - tick.bid) if tick else 0.0001
@@ -527,8 +576,12 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             p_entry = abs(conv_val - 0.5) + 0.5
         p_entry = max(p_entry, 0.60)
         
-        # Verify the Conviction-Scaled TP formula: tp_dist = current_atr * (2.0 + 4.0 * ((max(P, 0.60) - 0.60) / 0.40))
-        tp_dist = current_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+        # Directive 1: Implement Logarithmic TP Squashing (SRE Optimization)
+        # Linear: tp_dist = current_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+        normalized_p = (p_entry - 0.60) / 0.40
+        tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
+        tp_dist = current_atr * tp_multiplier
+        
         # Directional Math: BUY = entry + tp_dist, SELL = entry - tp_dist
         tp_price = price + tp_dist if direction == "BUY" else price - tp_dist
         tp_price = round(tp_price, digits)
@@ -589,27 +642,66 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                             alpha_features = {}
                             info = mt5.symbol_info(pos.symbol)
                             if info:
-                                # Directive 1: Implement the Dynamic ATR Floor
-                                raw_atr = float(alpha_features.get('atr', current_atr))
+                                # Directive 1: Implement the Dynamic ATR Floor (v25.0)
+                                raw_atr = current_atr
                                 # Fallback to 0.25% of the open price if raw_atr is dangerously small
                                 price_based_min = pos.price_open * 0.0025 
                                 # Check against the broker's legally required minimum stop level
                                 broker_min = info.trade_stops_level * info.point
                                 
-                                # The True ATR is the largest of the three
-                                true_atr = max(raw_atr, price_based_min, broker_min)
+                                # Directive 2: SRE Hardened Safety Floor (v26.1)
+                                # Even if broker_min is 0, we enforce a minimum of 1.5x ATR
+                                # NEW: Spread-Aware Floor - ensure SL/TP is at least 1.0x Spread + 1.2x ATR
+                                tick = mt5.symbol_info_tick(pos.symbol)
+                                current_spread = abs(tick.ask - tick.bid) if tick else 0.0
+                                spread_safety = current_spread * 1.5 
                                 
-                                # Directive 2: Apply the True ATR to the CADES Math
-                                sl_dist = 1.2 * true_atr
+                                sre_safety_floor = max(1.5 * raw_atr, spread_safety)
+                                
+                                # The True ATR is the largest of these
+                                true_atr = max(raw_atr, price_based_min, broker_min, sre_safety_floor)
+                                
+                                # v24.0 Directive 1: Avellaneda-Stoikov Inventory Skewing
+                                active_sym_positions = mt5.positions_get(symbol=pos.symbol) or []
+                                current_position_size = sum(p.volume for p in active_sym_positions if (p.type == mt5.ORDER_TYPE_BUY if direction == "BUY" else p.type == mt5.ORDER_TYPE_SELL) and p.magic == MAGIC_NUMBER)
+                                
+                                grid_expansion_scalar = 1.0 + 0.25 * (current_position_size ** 1.2)
+                                tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
+
+                                # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
+                                sl_dist = (1.2 * true_atr) * grid_expansion_scalar
                                 # Secure TP Calculation
                                 try:
                                     p_val = float(alpha_features.get('P', conviction))
                                 except (ValueError, TypeError):
                                     p_val = 0.80
 
-                                tp_multiplier = 2.0 + 4.0 * ((max(p_val, 0.60) - 0.60) / 0.40)
-                                tp_dist = tp_multiplier * true_atr # true_atr uses the 0.25% floor
+                                # Directive 1: Implement Logarithmic TP Squashing (SRE Optimization)
+                                normalized_p_val = (max(p_val, 0.60) - 0.60) / 0.40
+                                tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p_val)
+                                tp_dist = tp_multiplier * true_atr * tp_skew_scalar # Tighten TP bounds incrementally
                                 
+                                # Assume active_regime is passed in the alpha_features payload
+                                active_regime = alpha_features.get('regime')
+                                if not active_regime:
+                                    try:
+                                        from arcticdb import Arctic
+                                        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+                                        row = store["oracle_cache"].read(f"{pos.symbol}_meta").data.iloc[-1]
+                                        active_regime = str(row["hmm_state"]).upper()
+                                    except Exception:
+                                        active_regime = "TRENDING"
+                                else:
+                                    active_regime = str(active_regime).upper()
+
+                                if active_regime == "RANGE":
+                                    # Squash the TP target for mean-reverting chop environments
+                                    # Aim for 0.4x to 0.8x ATR instead of 2.0x to 6.0x
+                                    tp_dist = tp_dist * 0.15 
+                                elif active_regime == "HIGH_VOLATILITY":
+                                    # Widen slightly to avoid noise
+                                    tp_dist = tp_dist * 1.2
+
                                 # 2. Directional Math (CRITICAL)
                                 if pos.type == mt5.ORDER_TYPE_BUY:
                                     new_sl = pos.price_open - sl_dist
@@ -666,7 +758,36 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                 time.sleep(0.05)
             return success
 
-        # ── Standard single market order (small lot) ────────────────────────────────
+        # Directive 3: Passive Maker Routing for High Toxicity
+        # Conditions: P > 0.85 AND H_int > 0.00005
+        # Fetch Hawkes Intensity from ArcticDB cache
+        hawkes_intensity = 0.0
+        try:
+            from arcticdb import Arctic
+            store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+            row = store["oracle_cache"].read(f"{symbol}_meta").data.iloc[-1]
+            hawkes_intensity = float(row.get("hawkes_intensity", 0.0))
+        except Exception:
+            pass
+
+        if conv_val > 0.85 and hawkes_intensity > 0.00005:
+            logger.info(f"[{symbol}] High Toxicity detected (H_int={hawkes_intensity:.6f}). Switching to PASSIVE MAKER routing at Micro-Price.")
+            order_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT
+            
+            # Directive 1: Entry Price Normalization
+            tick_size = info.trade_tick_size
+            if tick_size > 0:
+                price = round(micro_price / tick_size) * tick_size
+            else:
+                price = round(micro_price, digits)
+            price = round(price, digits)
+            
+            time_type = mt5.ORDER_TIME_SPECIFIED
+            expiration = int(time.time() + 5)
+        else:
+            time_type = mt5.ORDER_TIME_GTC
+            expiration = 0
+
         request = {
             "action":       mt5.TRADE_ACTION_DEAL,
             "symbol":       symbol,
@@ -677,10 +798,32 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             "tp":           0.0,
             "magic":        MAGIC_NUMBER,
             "comment":      f"SENTINEL_v23.11_P{conviction:.2f}",
-            "type_time":    mt5.ORDER_TIME_GTC,
+            "type_time":    time_type,
+            "expiration":   expiration,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
         res = mt5.order_send(request)
+        
+        # Directive 2: The Limit-to-Market Fallback
+        if res and res.retcode in [mt5.TRADE_RETCODE_INVALID_PRICE, mt5.TRADE_RETCODE_INVALID_STOPS] and \
+           order_type in [mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT]:
+            
+            logger.warning(f"[{symbol}] [MAKER REJECTED] Retcode {res.retcode}. Price drifted or invalid. Falling back to Market Taker execution to secure alpha.")
+            
+            # Downgrade to Market Order
+            order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+            tick = mt5.symbol_info_tick(symbol)
+            price = tick.ask if direction == "BUY" else tick.bid
+            price = round(price, digits)
+            
+            request["type"] = order_type
+            request["price"] = price
+            request["type_time"] = mt5.ORDER_TIME_GTC
+            request["expiration"] = 0
+            request["comment"] = f"SENTINEL_FALLBACK_P{conviction:.2f}"
+            
+            res = mt5.order_send(request)
+
         if res is None:
             err = mt5.last_error()
             logger.critical(f"[FAIL] [CRITICAL_API_ERROR] {symbol} {direction} | mt5.order_send returned None. Last error: {err}")
@@ -703,40 +846,74 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     # Check against the broker's legally required minimum stop level
                     broker_min = info.trade_stops_level * info.point
                     
-                    # The True ATR is the largest of the three
-                    true_atr = max(raw_atr, price_based_min, broker_min)
+                    # Directive 2: SRE Hardened Safety Floor (v26.1)
+                    # NEW: Spread-Aware Floor
+                    tick = mt5.symbol_info_tick(pos.symbol)
+                    current_spread = abs(tick.ask - tick.bid) if tick else 0.0
+                    spread_safety = current_spread * 1.5
                     
-                    # Directive 2: Apply the True ATR to the CADES Math
-                    sl_dist = 1.2 * true_atr
+                    sre_safety_floor = max(1.5 * raw_atr, spread_safety)
+                    
+                    # The True ATR is the largest of these
+                    true_atr = max(raw_atr, price_based_min, broker_min, sre_safety_floor)
+                    
+                    # v24.0 Directive 1: Avellaneda-Stoikov Inventory Skewing
+                    active_sym_positions = mt5.positions_get(symbol=pos.symbol) or []
+                    current_position_size = sum(p.volume for p in active_sym_positions if (p.type == mt5.ORDER_TYPE_BUY if direction == "BUY" else p.type == mt5.ORDER_TYPE_SELL) and p.magic == MAGIC_NUMBER)
+                    
+                    grid_expansion_scalar = 1.0 + 0.25 * (current_position_size ** 1.2)
+                    tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
+
+                    # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
+                    sl_dist = (1.2 * true_atr) * grid_expansion_scalar
                     # Secure TP Calculation
                     try:
                         p_val = float(alpha_features.get('P', conviction))
                     except (ValueError, TypeError):
                         p_val = 0.80
 
-                    tp_multiplier = 2.0 + 4.0 * ((max(p_val, 0.60) - 0.60) / 0.40)
-                    tp_dist = tp_multiplier * true_atr # true_atr uses the 0.25% floor
+                    # Directive 1: Implement Logarithmic TP Squashing (SRE Optimization)
+                    normalized_p_val = (max(p_val, 0.60) - 0.60) / 0.40
+                    tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p_val)
+                    tp_dist = tp_multiplier * true_atr * tp_skew_scalar # Tighten TP bounds incrementally
                     
-                    # 2. Directional Math (CRITICAL)
-                    if pos.type == mt5.ORDER_TYPE_BUY:
-                        new_sl = pos.price_open - sl_dist
-                        new_tp = pos.price_open + tp_dist
-                    elif pos.type == mt5.ORDER_TYPE_SELL:
-                        new_sl = pos.price_open + sl_dist
-                        new_tp = pos.price_open - tp_dist
+                    # Assume active_regime is passed in the alpha_features payload
+                    active_regime = alpha_features.get('regime')
+                    if not active_regime:
+                        try:
+                            from arcticdb import Arctic
+                            store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+                            row = store["oracle_cache"].read(f"{pos.symbol}_meta").data.iloc[-1]
+                            active_regime = str(row["hmm_state"]).upper()
+                        except Exception:
+                            active_regime = "TRENDING"
                     else:
-                        new_sl = sl_price
-                        new_tp = tp_price
-                    
-                    # 3. Universal Tick Size Normalization
-                    tick_size = info.trade_tick_size
-                    if tick_size > 0:
-                        new_tp = round(new_tp / tick_size) * tick_size
-                        if new_sl > 0:
-                            new_sl = round(new_sl / tick_size) * tick_size
+                        active_regime = str(active_regime).upper()
 
-                    new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
-                    new_tp = round(new_tp, info.digits)
+                    if active_regime == "RANGE":
+                        # Squash the TP target for mean-reverting chop environments
+                        # Aim for 0.4x to 0.8x ATR instead of 2.0x to 6.0x
+                        tp_dist = tp_dist * 0.15 
+                    elif active_regime == "HIGH_VOLATILITY":
+                        # Widen slightly to avoid noise
+                        tp_dist = tp_dist * 1.2
+
+                    # 2. Directional Math (CRITICAL)
+                    is_buy = (pos.type == mt5.ORDER_TYPE_BUY)
+                    
+                    if is_buy:
+                        target_sl = pos.price_open - sl_dist
+                        target_tp = pos.price_open + tp_dist
+                    else: # SELL
+                        target_sl = pos.price_open + sl_dist
+                        target_tp = pos.price_open - tp_dist
+                    
+                    # 3. Universal v25.1 Armor Normalization
+                    tick = mt5.symbol_info_tick(pos.symbol)
+                    curr_price = tick.bid if is_buy else tick.ask # SL checked against opposite side
+                    
+                    new_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_sl, is_sl=True, is_buy=is_buy)
+                    new_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_tp, is_sl=False, is_buy=is_buy)
                     
                     # 4. MT5 Payload Architecture
                     request = {
@@ -807,8 +984,6 @@ def execute_exit(ticket, symbol, reason):
 
         if res.retcode == mt5.TRADE_RETCODE_DONE:
             logger.info(f"[OK] [EXITED] {symbol} Ticket {ticket} Reason: {reason}")
-            # Double Mutex Lock: 300-second Post-Exit Embargo post-liquidation (v23.10)
-            set_cooldown_time(symbol, time.time() + 300)
             return True
         
         # Directive 2: Graceful 10013 Error Handling (Idempotency)
@@ -816,7 +991,6 @@ def execute_exit(ticket, symbol, reason):
             # Check if the position exists
             if mt5.positions_get(ticket=ticket) is None:
                 logger.info(f"[SUCCESS/IDEMPOTENT] Ticket {ticket} already closed by prior process (MT5 10013).")
-                set_cooldown_time(symbol, time.time() + 300)
                 return True
 
         logger.error(f"[FAIL] [EXIT_FAILED] {symbol} Ticket {ticket} Error: {res.retcode} - {res.comment}")

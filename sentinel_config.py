@@ -39,7 +39,7 @@ LEVERAGE_WALL      = 10.0   # 10× notional margin limit
 # SYSTEM CONSTANTS (v19.2)
 STALENESS_THRESHOLD = 900   # Hard 900 s signal staleness gate
 ARCTIC_TIMEOUT      = 0.3   # Hard 300ms latency cap for ArcticDB (v19.1)
-EPISTEMIC_GATE      = 0.5500  # Restored after v23.6 Autopsy success
+EPISTEMIC_GATE      = 0.6000  # v23.9: Expanded Dead Zone (0.40 - 0.60)
 AC_LARGE_ORDER_THRESHOLD = 0.50 # v23.1: Minimum lot size for Almgren-Chriss slicing
 REASONING_TIMEOUT   = int(os.getenv("REASONING_TIMEOUT", 45))
 
@@ -77,7 +77,8 @@ def get_valid_mt5_symbol(base_symbol: str) -> str | None:
     Three-phase fallback: direct -> suffix -> pattern scan.
     Strictly never hardcodes broker suffixes.
     """
-    # Phase 1 — Direct match
+    # Phase 1 — Direct match (pre-select to guarantee visibility if hidden)
+    mt5.symbol_select(base_symbol, True)
     info = mt5.symbol_info(base_symbol)
     if info and info.visible:
         return base_symbol
@@ -85,6 +86,7 @@ def get_valid_mt5_symbol(base_symbol: str) -> str | None:
     # Phase 2 — Common suffix probing
     for suffix in (".m", ".pro", ".t", "+", "-", ".r", ".c", ".x"):
         test_sym = f"{base_symbol}{suffix}"
+        mt5.symbol_select(test_sym, True)
         info = mt5.symbol_info(test_sym)
         if info and info.visible:
             return test_sym
@@ -97,16 +99,19 @@ def get_valid_mt5_symbol(base_symbol: str) -> str | None:
         # Priority 1: exact case-insensitive name match
         for s in all_symbols:
             if s.name.upper() == base_up:
+                mt5.symbol_select(s.name, True)
                 return s.name
 
         # Priority 2: base symbol as prefix with short (<= 5-char) suffix
         for s in all_symbols:
             if s.name.upper().startswith(base_up) and len(s.name) <= len(base_symbol) + 5:
+                mt5.symbol_select(s.name, True)
                 return s.name
 
         # Priority 3: base symbol contained anywhere in the name
         for s in all_symbols:
             if base_up in s.name.upper():
+                mt5.symbol_select(s.name, True)
                 return s.name
 
     return None
@@ -118,6 +123,7 @@ def resolve_watchlist(base_list: list) -> list:
     for sym in base_list:
         v = get_valid_mt5_symbol(sym)
         if v:
+            mt5.symbol_select(v, True)
             resolved.append(v)
         else:
             logging.warning(f"[DISCOVERY] Could not resolve tradeable symbol for base: {sym}")

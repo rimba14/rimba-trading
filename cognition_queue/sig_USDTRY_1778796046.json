@@ -1,0 +1,11 @@
+{
+  "symbol": "USDTRY",
+  "direction": "SELL",
+  "conviction": 0.273583,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.015750714285715617,
+  "timestamp": 1778796030,
+  "version": "v24.3-UNCHAINED"
+}

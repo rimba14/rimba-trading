@@ -1,4 +1,4 @@
-﻿"""
+"""
 qwen_reasoning_engine.py - ADAPTIVE SENTINEL REASONING CORE (v17.3 Native MoE)
 Constitution: Native Ollama API, keep_alive=-1 (RAM-lock), enable_thinking=True.
 Fail-safe: returns neutral 0.500 on any timeout or endpoint error.
@@ -23,7 +23,7 @@ KEEP_ALIVE     = int(os.getenv("OLLAMA_KEEP_ALIVE", "-1"))   # -1 = lock in RAM 
 # lifetime of the process. All subsequent calls return FAIL_SAFE instantly
 # without waiting for another timeout. This prevents the 10s * N_assets hang.
 _OLLAMA_CIRCUIT_OPEN: bool = False  # True = breaker tripped, Ollama is dead
-_OLLAMA_TIMEOUT_SEC: float = 2.0    # Reduced from 10s -> 2s (SRE v21.0)
+_OLLAMA_TIMEOUT_SEC: float = 120.0   # Increased from 2s -> 120s (SRE v23.4 Patch)
 _OLLAMA_DEAD_MSG: str = "Circuit breaker open: Ollama unreachable. Routing via Math Meta-Model."
 
 
@@ -87,23 +87,24 @@ class QwenReasoningEngine:
         except requests.exceptions.Timeout:
             # SRE v21.0: Trip the circuit breaker on first timeout
             _OLLAMA_CIRCUIT_OPEN = True
-            import logging
+            import traceback
             logging.error(
                 f"[QWEN_ENGINE] [CIRCUIT_BREAKER_TRIPPED] Ollama timed out after "
-                f"{_OLLAMA_TIMEOUT_SEC}s. Breaker is now OPEN. All subsequent "
-                f"assets will route via Math Meta-Model without delay."
+                f"{_OLLAMA_TIMEOUT_SEC}s. Breaker is now OPEN. Traceback:\n{traceback.format_exc()}"
             )
             return "TIMEOUT"
         except requests.exceptions.ConnectionError:
             # Connection refused (Ollama not running) - trip breaker immediately
             _OLLAMA_CIRCUIT_OPEN = True
-            import logging
+            import traceback
             logging.error(
-                "[QWEN_ENGINE] [CIRCUIT_BREAKER_TRIPPED] Ollama connection refused. "
-                "Breaker OPEN. Routing via Math Meta-Model."
+                f"[QWEN_ENGINE] [CIRCUIT_BREAKER_TRIPPED] Ollama connection refused. "
+                f"Breaker OPEN. Traceback:\n{traceback.format_exc()}"
             )
             return "TIMEOUT"
         except Exception as e:
+            import traceback
+            logging.error(f"[QWEN_ENGINE] Unexpected error during generation: {traceback.format_exc()}")
             return f"Error: {e}"
 
     def json_with_retry(
@@ -124,7 +125,9 @@ class QwenReasoningEngine:
                     data = json.loads(raw[start:end])
                     jsonschema.validate(instance=data, schema=self.DECISION_SCHEMA)
                     return data
-            except Exception:
+            except Exception as e:
+                import traceback
+                logging.debug(f"[QWEN_ENGINE] JSON parse/validate failed: {traceback.format_exc()}")
                 pass
 
         return self.FAIL_SAFE

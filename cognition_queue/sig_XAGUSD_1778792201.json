@@ -1,0 +1,11 @@
+{
+  "symbol": "XAGUSD",
+  "direction": "BUY",
+  "conviction": 0.714361,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.918214285714284,
+  "timestamp": 1778792184,
+  "version": "v24.3-UNCHAINED"
+}

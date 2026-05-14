@@ -1,9 +1,0 @@
-{
-  "symbol": "EURPLN",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "RANGE",
-  "atr": 0.0023957142857144375,
-  "timestamp": 1777901749,
-  "version": "v19.5-AUDIT"
-}

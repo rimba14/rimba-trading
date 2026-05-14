@@ -1,0 +1,11 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "SELL",
+  "conviction": 0.312218,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 525.5614285714297,
+  "timestamp": 1778792570,
+  "version": "v24.3-UNCHAINED"
+}

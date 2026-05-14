@@ -19,30 +19,36 @@ class EpisodicMemory:
         if os.path.exists(self.index_path):
             try:
                 self.index = faiss.read_index(self.index_path)
-                # Check if it's the correct type (SQ8) and dimension
-                is_sq8 = isinstance(self.index, faiss.IndexScalarQuantizer)
-                if self.index.d != self.dim or not is_sq8:
-                    print(f"[MEMORY] Index type/dim mismatch. Upgrading to SQ8 (QT_8bit)...")
-                    self._initialize_sq8_index()
+                # Check if it's the correct type (IVF-SQ8) and dimension
+                is_ivf = isinstance(self.index, faiss.IndexIVF)
+                if self.index.d != self.dim or not is_ivf:
+                    print(f"[MEMORY] Index type/dim mismatch or Legacy Flat detected. Upgrading to Subquadratic (v21.0)...")
+                    self._initialize_subquadratic_index()
                 else:
                     with open(self.meta_path, "r") as f:
                         self.metadata = json.load(f)
                     print(f"[MEMORY] Loaded SQ8 index with {self.index.ntotal} episodes.")
             except Exception as e:
                 print(f"[MEMORY] Load error: {e}. Creating fresh index.")
-                self._initialize_sq8_index()
+                self._initialize_subquadratic_index()
         else:
-            self._initialize_sq8_index()
+            self._initialize_subquadratic_index()
 
-    def _initialize_sq8_index(self):
-        """Directive: SQ8 Quantization with AVX2 Acceleration."""
-        print(f"[MEMORY] Initializing SQ8 Scalar Quantizer (93-dim, Inner Product)...")
-        self.index = faiss.IndexScalarQuantizer(self.dim, faiss.ScalarQuantizer.QT_8bit, faiss.METRIC_INNER_PRODUCT)
+    def _initialize_subquadratic_index(self):
+        """Directive: IVF-SQ8 Subquadratic Scaling (v21.0)."""
+        print(f"[MEMORY] Initializing IVF-SQ8 (Subquadratic Centroid Routing)...")
+        # KDE Approximation: Partition the space into 128 clusters (centroids)
+        # to ensure O(sqrt(N)) search time instead of O(N) linear scan.
+        quantizer = faiss.IndexFlatIP(self.dim)
+        self.index = faiss.IndexIVFScalarQuantizer(
+            quantizer, self.dim, 128, faiss.ScalarQuantizer.QT_8bit, faiss.METRIC_INNER_PRODUCT
+        )
         
-        # SQ8 requires a training phase to establish bin bounds
+        # Training phase on high-entropy synthetic data (to establish quantization bins & centroids)
         training_data = self._get_training_data()
         self.index.train(training_data)
-        print("[MEMORY] SQ8 Index Trained and Ready.")
+        self.index.nprobe = 10 # Search in nearest 10 clusters (Directive: Precision/Recall balance)
+        print("[MEMORY] Subquadratic Index Trained (Centroids=128, SQ8=Active).")
         self.metadata = {}
 
     def _get_training_data(self):

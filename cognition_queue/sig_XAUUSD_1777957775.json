@@ -1,9 +1,0 @@
-{
-  "symbol": "XAUUSD",
-  "direction": "BUY",
-  "conviction": 0.7058,
-  "hmm_state": "RANGE",
-  "atr": 5.825000000000078,
-  "timestamp": 1777957759,
-  "version": "v19.5-AUDIT"
-}

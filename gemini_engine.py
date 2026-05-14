@@ -33,7 +33,7 @@ MASTER_CONSTITUTION = (
     "⚙️ SYSTEM COMMAND: Adaptive Sentinel Execution & Risk Audit (v17.9 - Regime Liquidation )\n"
     "Phase 1: Architecture, Synchronization & Scalability\n"
     "Information-Driven Architecture (Dollar/Volume Bars): The system strictly rejects chronological Time Bars (e.g., 5-minute charts). The Dual-Loop matrix operates on an Event-Driven basis. Both the Slow Loop (sentinel_slow_loop.py) and the Fast Loop (discord_listener.py ) only trigger inference and execution evaluations when a statistically significant threshold of fiat value is exchanged in the market. The system natively sleeps during low-volume noise and hyper-samples during high-volume volatility.\n"
-    "Core Pruned Watchlist (API Stabilization): To optimize cloud API rate limits and execution speed, the system exclusively monitors a pruned list of 13 high-liquidity assets: ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'BTCUSD', 'ETHUSD', 'SP500', 'NAS100', 'GER40', 'XAUUSD', 'XAGUSD', 'USDCHF', 'NZDUSD']. sentinel_config.py must utilize a fallback base-symbol matcher to dynamically map these core strings to exact broker suffixes.\n"
+    "Core Expanded Watchlist (v19.5): The system monitors an expanded list of 50 high-liquidity assets across Crypto, Forex, Indices, and Commodities. sentinel_config.py MUST utilize the fallback base-symbol matcher to dynamically map these core strings to exact broker suffixes (e.g., .m, .pro, +, -) to ensure execution parity.\n"
     "Universal UTC & Staleness: Enforce a hard 300ms timeout on ArcticDB reads to accommodate concurrency load. All timestamps written/read from the cache must use universal UTC epoch time. Verify cached signal age; if > 900 seconds old, halt new entries for that asset and log [STALE_SIGNAL].\n"
     "Data Preprocessing & Fractional Differentiation (FracDiff): The Slow Loop must never use integer differentiation (pct_change() or .diff()) to achieve stationarity, as this destroys the market's memory. All price series fed into the ML models must be Fractionally Differentiated.\n"
     "\n"
@@ -86,8 +86,12 @@ MASTER_CONSTITUTION = (
     "PHASE 1: ARCHITECTURE STABILIZATION\n"
     "The system utilizes Information-Driven bars. Unlike Time bars, these are formed based on trade volume or fiat value exchanged. "
     "This filters out market noise during low-liquidity periods and hyper-samples high-volatility events. "
-    "The 13-asset watchlist is carefully selected for high liquidity and low spread: "
-    "EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, SP500, NAS100, GER40, XAUUSD, XAGUSD, USDCHF, NZDUSD. "
+    "The 50-asset watchlist is carefully selected for high liquidity: "
+    "BTCUSD, ETHUSD, SOLUSD, AVAXUSD, LINKUSD, LTCUSD, BCHUSD, XRPUSD, ADAUSD, DOTUSD, "
+    "MATICUSD, DOGEUSD, UNIUSD, ATOMUSD, TRXUSD, EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF, "
+    "NZDUSD, USDCAD, EURGBP, EURJPY, GBPJPY, EURCHF, AUDJPY, NZDJPY, CHFJPY, EURAUD, "
+    "GBPAUD, USDMXN, USDZAR, USDTRY, EURNOK, EURSEK, USDCNH, USDSGD, USDHKD, EURPLN, "
+    "SP500, NAS100, US30, GER40, HK50, US2000, FRA40, XAUUSD, XAGUSD, CL-OIL. "
     "Staleness is enforced at 900 seconds. ArcticDB is the primary cache with a 300ms hard timeout.\n"
     "PHASE 2: COGNITION & PERCEPTION\n"
     "The HMM Oracle classifies market regimes into BULL, BEAR, or RANGE. Meta-Labeling separates the directional 'what' from the conviction 'how much'. "
@@ -239,8 +243,9 @@ class GeminiReasoningEngine:
             return data
 
         except Exception as e:
+            import traceback
             elapsed = time.time() - start_time
-            self.logger.error(f"[GEMINI] Failed after {elapsed:.2f}s: {e}")
+            self.logger.error(f"[GEMINI] Failed after {elapsed:.2f}s: {traceback.format_exc()}")
             return {"decision": "HOLD", "confidence": 0.5, "reasoning": f"Inference Error: {e}"}
 
     async def json_with_retry_async(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:

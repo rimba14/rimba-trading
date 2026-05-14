@@ -30,7 +30,7 @@ async def fetch_market_data(symbol="XAUUSD"):
 
 async def trading_cycle(router):
     async with execution_lock:
-        print(f"[{time.strftime('%H:%M:%S')}] Starting Oxford Trading Cycle v23.3 (JL Compressed)...")
+        print(f"[{time.strftime('%H:%M:%S')}] Starting Oxford Trading Cycle v24.2 (Ironclad CADES)...")
         
         # 1. Fetch data
         df = await fetch_market_data()
@@ -69,7 +69,7 @@ async def trading_cycle(router):
 
 async def main():
     print("====================================================")
-    print("OXFORD ARCHITECTURE v23.3: JL COMPRESSION ACTIVE")
+    print("OXFORD ARCHITECTURE v24.2: IRONCLAD CADES ACTIVE")
     print("====================================================\n")
     
     if not mt5.initialize():

@@ -3,6 +3,8 @@ import os
 sys.path.append(r"C:\Sentinel_Project")
 from qwen_reasoning_engine import QwenReasoningEngine
 import json
+import logging
+logging.basicConfig(level=logging.INFO)
 
 engine = QwenReasoningEngine()
 sys_prompt = "You are the Sentinel Meta-Model."

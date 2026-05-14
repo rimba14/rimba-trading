@@ -1,0 +1,11 @@
+{
+  "symbol": "USDZAR",
+  "direction": "SELL",
+  "conviction": 0.304627,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.033862857142857195,
+  "timestamp": 1778796026,
+  "version": "v24.3-UNCHAINED"
+}

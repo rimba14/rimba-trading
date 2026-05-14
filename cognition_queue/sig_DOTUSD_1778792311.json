@@ -1,0 +1,11 @@
+{
+  "symbol": "DOTUSD",
+  "direction": "SELL",
+  "conviction": 0.281487,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.018214285714285676,
+  "timestamp": 1778792295,
+  "version": "v24.3-UNCHAINED"
+}

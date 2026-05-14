@@ -128,7 +128,8 @@ class MathMetaModel:
             logger.critical(f"[FATAL] {symbol}: XGBoost prediction failed with ValueError: {e}. NOT defaulting to 0.500.")
             raise
         except Exception as e:
-            logger.critical(f"[FATAL] {symbol}: XGBoost prediction failed: {e}. NOT defaulting to 0.500.")
+            import traceback
+            logger.critical(f"[FATAL] {symbol}: XGBoost prediction failed: {traceback.format_exc()}. NOT defaulting to 0.500.")
             raise
 
     def train_from_diagnostics(self):

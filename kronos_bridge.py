@@ -43,9 +43,7 @@ def init_model():
     try:
         # Directive 3: Hard-Lock the Bridge Loader
         if not os.path.exists(QUANT_PATH) or os.path.getsize(QUANT_PATH) < 1000000:
-            print(f"CRITICAL ERROR: Quantized Kronos artifact missing or corrupted at {QUANT_PATH}")
-            print("Please run 'python compile_quantized_models.py' first to generate valid model artifacts.")
-            sys.exit(1)
+            raise FileNotFoundError(f"Quantized Kronos artifact missing at {QUANT_PATH}")
 
         print(f"[KRONOS] Loading Pre-Quantized Model from {QUANT_PATH}...")
         _MODEL = torch.load(QUANT_PATH, weights_only=False)
@@ -62,7 +60,7 @@ def init_model():
         print(f"[KRONOS] CRITICAL: Model Loading Failed: {e}")
         import traceback
         print(traceback.format_exc())
-        sys.exit(1)
+        raise Exception(f"Failed to load Kronos model: {e}")
     return _MODEL
 
 # Configure Logging
@@ -98,7 +96,7 @@ class KronosBridge:
                 logging.error("KronosTokenizer class not found.")
         except Exception as e:
             logging.error(f"Bridge Components Init Failed: {e}")
-            sys.exit(1)
+            raise Exception(f"Kronos infer probability error: {e}")
 
     def get_wake_up_gate(self, symbol: str) -> bool:
         """
@@ -333,6 +331,13 @@ def update_cognition_cache(symbol: str, ohlcv_df: pd.DataFrame):
     if _BRIDGE is None:
         _BRIDGE = KronosBridge()
     _BRIDGE.run_inference(symbol, ohlcv_df)
+
+def commit_to_cache(symbol: str, prob: float, xgboost_prob: float = 0.50, base_atr: float = 0.0, vol_pct: float = 0.5):
+    """Bridge function for manual cache updates."""
+    global _BRIDGE
+    if _BRIDGE is None:
+        _BRIDGE = KronosBridge()
+    _BRIDGE.commit_to_cache(symbol, prob, xgboost_prob, base_atr, vol_pct)
 
 if __name__ == "__main__":
     # Test with realistic mock data

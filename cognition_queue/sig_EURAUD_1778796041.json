@@ -1,0 +1,11 @@
+{
+  "symbol": "EURAUD",
+  "direction": "BUY",
+  "conviction": 0.680896,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0014864285714285869,
+  "timestamp": 1778796024,
+  "version": "v24.3-UNCHAINED"
+}

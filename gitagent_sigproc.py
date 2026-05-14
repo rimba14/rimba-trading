@@ -35,14 +35,25 @@ def get_tick_dataframe(symbol, count=2000):
     # Directive: v21.2 Data Parity - Ensure all expected columns exist
     if 'real_volume' not in df.columns:
         df['real_volume'] = df['volume'] if 'volume' in df.columns else 0.0
+    if 'tick_volume' not in df.columns:
+        df['tick_volume'] = df['real_volume']
     if 'volume' not in df.columns:
         df['volume'] = df['real_volume']
         
     # Synthetic OHLC from ticks for indicator parity
-    df['close'] = df['last'].where(df['last'] > 0, df['bid'])
-    df['open'] = df['close']
-    df['high'] = df['close']
-    df['low'] = df['close']
+    # Use 'last' if available, otherwise 'bid'
+    p_series = df['last'].where(df['last'] > 0, df['bid'])
+    df['close'] = p_series
+    df['open']  = p_series
+    df['high']  = p_series
+    df['low']   = p_series
+    
+    # Final check for Kronos Bridge (open, high, low, close, tick_volume, real_volume)
+    required = ['open', 'high', 'low', 'close', 'tick_volume', 'real_volume']
+    for col in required:
+        if col not in df.columns:
+            df[col] = 0.0
+            
     return df
 
 def get_m15_dataframe(symbol, count=200):

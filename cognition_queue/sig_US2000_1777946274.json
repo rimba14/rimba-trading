@@ -1,9 +1,0 @@
-{
-  "symbol": "US2000",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "BEAR",
-  "atr": 2.3428571428571234,
-  "timestamp": 1777946258,
-  "version": "v19.5-AUDIT"
-}

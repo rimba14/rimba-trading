@@ -1,0 +1,11 @@
+{
+  "symbol": "ADAUSD",
+  "direction": "SELL",
+  "conviction": 0.284919,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.0031142857142857122,
+  "timestamp": 1778792093,
+  "version": "v24.3-UNCHAINED"
+}

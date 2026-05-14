@@ -1,9 +1,0 @@
-{
-  "symbol": "NAS100",
-  "direction": "SELL",
-  "conviction": 0.123557,
-  "hmm_state": "RANGE",
-  "atr": 30.996428571428623,
-  "timestamp": 1778013246,
-  "version": "v20.3-PROD"
-}

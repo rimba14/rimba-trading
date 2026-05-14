@@ -1,0 +1,11 @@
+{
+  "symbol": "USDMXN",
+  "direction": "SELL",
+  "conviction": 0.272938,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.02439214285714288,
+  "timestamp": 1778792138,
+  "version": "v24.3-UNCHAINED"
+}

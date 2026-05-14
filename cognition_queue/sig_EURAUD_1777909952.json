@@ -1,9 +1,0 @@
-{
-  "symbol": "EURAUD",
-  "direction": "SELL",
-  "conviction": 0.2942,
-  "hmm_state": "BEAR",
-  "atr": 0.0011550000000000171,
-  "timestamp": 1777909936,
-  "version": "v19.5-AUDIT"
-}

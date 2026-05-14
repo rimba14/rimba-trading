@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import time
+import asyncio
 from typing import Dict, Any
 
 from groq import Groq
@@ -114,7 +115,8 @@ class CascadingReasoningEngine:
                 self.logger.info(f"[GEMINI_SUCCESS] Failover complete in {time.time()-start_time:.2f}s")
                 return data
             except Exception as e2:
-                self.logger.error(f"[TOTAL_EXHAUSTION] Both Groq and Gemini failed: {e2}")
+                import traceback
+                self.logger.error(f"[TOTAL_EXHAUSTION] Both Groq and Gemini failed: {traceback.format_exc()}")
                 # 3. Final Fail-Safe: Neutral 0.500
                 return {
                     "decision": "HOLD",
@@ -123,8 +125,8 @@ class CascadingReasoningEngine:
                 }
 
     async def json_with_retry_async(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-        # Simple wrapper for now as the libraries are mostly synchronous or have their own async handlers
-        return self.json_with_retry(system_prompt, user_prompt)
+        # Wrap the synchronous call to offload it to a worker thread and unblock the main event loop
+        return await asyncio.to_thread(self.json_with_retry, system_prompt, user_prompt)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

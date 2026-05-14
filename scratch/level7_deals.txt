@@ -1,0 +1,6 @@
+=== Last 5 Closed Deals ===
+ExitTicket: 1113018509 | PosID (EntryTicket): 1286047548 | Symbol: US2000 | Time In: 2026-05-11 20:21:10 | Time Out: 2026-05-12 14:16:49 | Price In: 2878.36 | Price Out: 2858.23 | Profit: -2.01 | Comment: EXIT_Mutual Excl
+ExitTicket: 1113018501 | PosID (EntryTicket): 1286047526 | Symbol: US2000 | Time In: 2026-05-11 20:21:10 | Time Out: 2026-05-12 14:16:49 | Price In: 2878.41 | Price Out: 2858.13 | Profit: -12.17 | Comment: EXIT_Mutual Excl
+ExitTicket: 1112507198 | PosID (EntryTicket): 1288444186 | Symbol: NAS100 | Time In: 2026-05-12 09:48:02 | Time Out: 2026-05-12 11:45:56 | Price In: 29165.3 | Price Out: 29111.95 | Profit: -5.34 | Comment: EXIT_Mutual Excl
+ExitTicket: 1112258505 | PosID (EntryTicket): 1288400414 | Symbol: BTCUSD | Time In: 2026-05-12 09:36:05 | Time Out: 2026-05-12 10:22:01 | Price In: 81197.05 | Price Out: 81048.97 | Profit: -4.44 | Comment: EXIT_Mutual Excl
+ExitTicket: 1112112611 | PosID (EntryTicket): 1288419653 | Symbol: NAS100 | Time In: 2026-05-12 09:40:57 | Time Out: 2026-05-12 09:48:01 | Price In: 29157.45 | Price Out: 29166.15 | Profit: -0.87 | Comment: EXIT_Mutual Excl
