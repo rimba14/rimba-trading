@@ -1,5 +1,9 @@
 import numpy as np
 import pandas as pd
+import logging
+from agent_quarantine import registry, register_default_agents
+
+logger = logging.getLogger("AlphaCombiner")
 
 class AlphaCombiner:
     """
@@ -9,6 +13,7 @@ class AlphaCombiner:
     def __init__(self, window=20):
         self.window = window
         self.signal_history = {} # sym -> list of raw scores
+        register_default_agents()
         
     def process_signals(self, signals_dict, volatilities):
         """
@@ -16,6 +21,20 @@ class AlphaCombiner:
         volatilities: { 'sym': current_atr }
         """
         if not signals_dict: return {}
+        
+        # v26.4: Filter out quarantined (uninitialized) agents
+        filtered_signals_dict = {}
+        for sym, scores in signals_dict.items():
+            res = registry.filter_agents(scores)
+            if res.filtered_scores:
+                filtered_signals_dict[sym] = res.filtered_scores
+                
+        signals_dict = filtered_signals_dict
+        
+        if not signals_dict:
+            logger.warning("No qualified agents — skipping cycle")
+            return {}
+
         
         # 1. Standardize (Z-Score) raw agent scores across symbols (Eq 1-3)
         # We treat each agent as an independent 'signal i'

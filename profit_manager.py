@@ -755,9 +755,19 @@ class SentinelProfitManager:
                     for pos in all_positions:
                         # v26.3 Event Horizon Check
                         self._event_horizon_protection(pos)
-                        
                         if pos.tp == 0.0 or pos.sl == 0.0:
                             try:
+                                tick = mt5.symbol_info_tick(pos.symbol)
+                                if tick is None:
+                                    continue
+                                
+                                # Directive 2: The 10-second Hostile Liquidation Rule (v26.5)
+                                time_held = tick.time - pos.time
+                                if time_held > 10:
+                                    logger.critical(f"💀 [NAKED SWEEP] Orphaned trade detected > 10s (Held {time_held}s). Initiating hostile liquidation for Ticket {pos.ticket}.")
+                                    _market_close(pos)
+                                    continue
+                                    
                                 info = mt5.symbol_info(pos.symbol)
                                 if info is None:
                                     continue
@@ -785,18 +795,14 @@ class SentinelProfitManager:
                                 # Preserve existing targets if already attached
                                 final_tp = pos.tp if pos.tp > 0.0 else new_tp
                                 final_sl = pos.sl if pos.sl > 0.0 else new_sl
-
+ 
                                 # 4. Universal v25.1 Armor Normalization
                                 is_buy = (pos.type == mt5.ORDER_TYPE_BUY)
-                                tick = mt5.symbol_info_tick(pos.symbol)
-                                if tick is None:
-                                    logger.warning(f"[SWEEP] Skipping {pos.symbol} - No Tick Data available.")
-                                    continue
                                 curr_price = tick.bid if is_buy else tick.ask
                                 
                                 final_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, final_sl, is_sl=True, is_buy=is_buy)
                                 final_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, final_tp, is_sl=False, is_buy=is_buy)
-
+ 
                                 # Now build the payload...
                                 request = {
                                     "action": mt5.TRADE_ACTION_SLTP,

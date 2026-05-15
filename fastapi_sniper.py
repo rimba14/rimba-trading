@@ -114,8 +114,71 @@ def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, 
             target_price = min(target_price, max_allowed_tp)
             
     # Directive 2: Strict Tick Size Normalization
-    normalized_price = round(target_price / tick_size) * tick_size
+    if tick_size > 0:
+        normalized_price = round(target_price / tick_size) * tick_size
+    else:
+        normalized_price = target_price
     return round(normalized_price, info.digits)
+
+def atomic_sl_tp_modification(pos, new_sl, new_tp):
+    """
+    v26.5: Level 42 SRE Atomic Modification Block.
+    Retries SL/TP attachment 3 times. If all fail, fires the Naked Kill Switch.
+    """
+    max_retries = 3
+    attempt = 0
+    result = None
+    
+    request = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": pos.symbol,
+        "position": pos.ticket,
+        "sl": new_sl,
+        "tp": new_tp
+    }
+    
+    while attempt < max_retries:
+        result = mt5.order_send(request)
+        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(f"[MT5 SUCCESS] Ticket {pos.ticket} SL/TP attached flawlessly (Attempt {attempt+1}).")
+            return True
+        
+        attempt += 1
+        if attempt < max_retries:
+            logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in 250ms (Attempt {attempt}/{max_retries})...")
+            time.sleep(0.25)
+            
+    # IF WE REACH HERE, ALL RETRIES FAILED. FIRE THE NAKED KILL SWITCH.
+    logger.critical(f"🚨 [CRITICAL] SL/TP modification failed after 3 retries for Ticket {pos.ticket}. Firing Emergency Naked Kill Switch.")
+    
+    tick = mt5.symbol_info_tick(pos.symbol)
+    if not tick:
+        logger.error(f"[FATAL] Cannot kill ticket {pos.ticket} - No tick data.")
+        return False
+        
+    close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    close_price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
+    
+    kill_request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": pos.symbol,
+        "volume": pos.volume,
+        "type": close_type,
+        "position": pos.ticket,
+        "price": close_price,
+        "deviation": 30,
+        "magic": MAGIC_NUMBER,
+        "comment": "NAKED_KILL_SWITCH",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+    kill_res = mt5.order_send(kill_request)
+    if kill_res and kill_res.retcode == mt5.TRADE_RETCODE_DONE:
+        logger.info(f"💀 [NAKED KILL] Successfully liquidated orphan Ticket {pos.ticket} at market.")
+    else:
+        logger.error(f"❌ [NAKED KILL FAIL] Ticket {pos.ticket} liquidation failed! Retcode: {kill_res.retcode if kill_res else 'None'}")
+        
+    return False
 
 active_liquidations = set()
 
@@ -442,10 +505,11 @@ def calculate_kelly_lot(symbol, conviction):
     
     # ── v25.0: Align Sizing SL with Execution SL (ATR/Swing) ──
     direction = "BUY" if conviction > 0.5 else "SELL"
-    current_atr, distance_to_swing = calculate_atr_and_swing(symbol, direction, lookback=20)
+    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     spread = tick.ask - tick.bid
     spread_buffer = spread * 1.5
-    sl_dist_price = max(1.2 * current_atr, distance_to_swing)
+    sl_dist_price = max(3.0 * current_atr, distance_to_fractal_sl)
     
     # Fallback if ATR is 0
     if sl_dist_price <= 0:
@@ -539,6 +603,33 @@ def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> 
         
     return current_atr, distance_to_swing
 
+def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> float:
+    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using H4 data."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, lookback)
+    tick = mt5.symbol_info_tick(symbol)
+    
+    if rates is None or len(rates) == 0 or tick is None:
+        # Fallback if H4 data is missing
+        return 0.0
+        
+    current_spread = abs(tick.ask - tick.bid)
+    spread_safety = current_spread * 1.5
+    
+    if direction == "BUY":
+        # Find absolute MIN(Low)
+        fractal_low = float(np.min(rates['low']))
+        fractal_sl = fractal_low - spread_safety
+        # Calculate distance
+        distance = max(0.0, tick.ask - fractal_sl)
+        return distance
+    else:
+        # Find absolute MAX(High)
+        fractal_high = float(np.max(rates['high']))
+        fractal_sl = fractal_high + spread_safety
+        # Calculate distance
+        distance = max(0.0, fractal_sl - tick.bid)
+        return distance
+
 def perform_mt5_trade(symbol, direction, lot, conviction):
     try:
         tick = mt5.symbol_info_tick(symbol)
@@ -558,12 +649,13 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         price = round(tick.ask if direction == "BUY" else tick.bid, digits)
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
-        current_atr, distance_to_swing = calculate_atr_and_swing(symbol, direction, lookback=20)
-        calculated_sl_dist = max(1.2 * current_atr, distance_to_swing)
+        current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+        distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
+        calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
         final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | SwingDist={distance_to_swing:.5f} | FinalSL={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | FractalDist={distance_to_fractal_sl:.5f} | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
@@ -669,7 +761,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                                 tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
 
                                 # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
-                                sl_dist = (1.2 * true_atr) * grid_expansion_scalar
+                                distance_to_fractal_sl = calculate_fractal_swing(pos.symbol, direction, lookback=20)
+                                sl_dist = max(3.0 * true_atr, distance_to_fractal_sl) * grid_expansion_scalar
                                 # Secure TP Calculation
                                 try:
                                     p_val = float(alpha_features.get('P', conviction))
@@ -723,35 +816,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                                 new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
                                 new_tp = round(new_tp, info.digits)
                                 
-                                # 4. MT5 Payload Architecture
-                                request = {
-                                    "action": mt5.TRADE_ACTION_SLTP,
-                                    "symbol": pos.symbol,
-                                    "position": pos.ticket,
-                                    "sl": new_sl,
-                                    "tp": new_tp
-                                }
-                                
-                                # 5. Execution & Loud Logging with Exponential Backoff Retry Loop
-                                max_retries = 3
-                                attempt = 0
-                                result = None
-                                while attempt < max_retries:
-                                    result = mt5.order_send(request)
-                                    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                                        break
-                                    attempt += 1
-                                    if attempt < max_retries:
-                                        backoff_time = 0.1 * (2 ** attempt)
-                                        logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in {backoff_time:.2f}s (Attempt {attempt}/{max_retries})...")
-                                        time.sleep(backoff_time)
-                                        
-                                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-                                    error_code = mt5.last_error()
-                                    logger.critical(f"🚨 [PAGER ALERT] Ticket {pos.ticket} Exhausted 3 retries. Failed to attach SL/TP. Result: {result.retcode if result else 'None'}, MT5 Error: {error_code}")
-                                    print(f"   -> Attempted SL: {new_sl}, Attempted TP: {new_tp}, Open Price: {pos.price_open}")
-                                else:
-                                    print(f"✅ [MT5 SUCCESS] Ticket {pos.ticket} SL/TP attached flawlessly.")
+                                # v26.5: Level 42 SRE Atomic Modification
+                                atomic_sl_tp_modification(pos, new_sl, new_tp)
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
                         success = False
@@ -865,7 +931,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
 
                     # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
-                    sl_dist = (1.2 * true_atr) * grid_expansion_scalar
+                    distance_to_fractal_sl = calculate_fractal_swing(pos.symbol, direction, lookback=20)
+                    sl_dist = max(3.0 * true_atr, distance_to_fractal_sl) * grid_expansion_scalar
                     # Secure TP Calculation
                     try:
                         p_val = float(alpha_features.get('P', conviction))
@@ -915,35 +982,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     new_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_sl, is_sl=True, is_buy=is_buy)
                     new_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_tp, is_sl=False, is_buy=is_buy)
                     
-                    # 4. MT5 Payload Architecture
-                    request = {
-                        "action": mt5.TRADE_ACTION_SLTP,
-                        "symbol": pos.symbol,
-                        "position": pos.ticket,
-                        "sl": new_sl,
-                        "tp": new_tp
-                    }
-                    
-                    # 5. Execution & Loud Logging with Exponential Backoff Retry Loop
-                    max_retries = 3
-                    attempt = 0
-                    result = None
-                    while attempt < max_retries:
-                        result = mt5.order_send(request)
-                        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                            break
-                        attempt += 1
-                        if attempt < max_retries:
-                            backoff_time = 0.1 * (2 ** attempt)
-                            logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in {backoff_time:.2f}s (Attempt {attempt}/{max_retries})...")
-                            time.sleep(backoff_time)
-                            
-                    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-                        error_code = mt5.last_error()
-                        logger.critical(f"🚨 [PAGER ALERT] Ticket {pos.ticket} Exhausted 3 retries. Failed to attach SL/TP. Result: {result.retcode if result else 'None'}, MT5 Error: {error_code}")
-                        print(f"   -> Attempted SL: {new_sl}, Attempted TP: {new_tp}, Open Price: {pos.price_open}")
-                    else:
-                        print(f"✅ [MT5 SUCCESS] Ticket {pos.ticket} SL/TP attached flawlessly.")
+                    # v26.5: Level 42 SRE Atomic Modification
+                    atomic_sl_tp_modification(pos, new_sl, new_tp)
             return True
         else:
             # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)
