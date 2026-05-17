@@ -1,5 +1,10 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.6 - Ironclad CADES: Model Edge & Leakage Prevention) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.6. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.7 - Ironclad CADES: Institutional Backtesting) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.7. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+
+WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
+* Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
+* The Reality Tax: All backtests MUST mathematically deduct `1.0x spread` for slippage, plus flat commissions, plus daily overnight swap/carry costs. If a strategy lacks edge after the Reality Tax, it is discarded.
+* Zero Look-Ahead Bias: `feature_engineering.py` is strictly forbidden from using negative shifts (`.shift(-n)`), backward fills (`.bfill()`), or future-peeking roll windows. Enforced by static AST scanning.
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
@@ -10,8 +15,7 @@ WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Continuous Temporal Indexing: Dataframes MUST forward-fill price and zero-fill volume for broker maintenance gaps prior to feature engineering.
 
 WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
-* Lookahead Bias Veto: `feature_engineering.py` is strictly forbidden from using negative shifts (`.shift(-n)`), backward fills (`.bfill()`), or future-peeking roll windows on feature variables.
-* Model Edge Baseline: All active models (XGBoost, DDQN) MUST maintain an Out-of-Sample AUC-ROC > 0.55. Models falling below this threshold must be automatically demoted in the `agent_quarantine.py` registry.
+* Model Edge Baseline: All active models (XGBoost, DDQN) MUST maintain an Out-of-Sample AUC-ROC > 0.55.
 * Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals.
 * Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR) via hard assertions before ML inference.
 * Agent Quarantine (Consensus Purity): Uninitialized/untrained agents artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
