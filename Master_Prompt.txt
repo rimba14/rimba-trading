@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.5 - Ironclad CADES: HMM Calibration) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.5. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.6 - Ironclad CADES: Model Edge & Leakage Prevention) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.6. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
@@ -10,10 +10,11 @@ WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Continuous Temporal Indexing: Dataframes MUST forward-fill price and zero-fill volume for broker maintenance gaps prior to feature engineering.
 
 WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
+* Lookahead Bias Veto: `feature_engineering.py` is strictly forbidden from using negative shifts (`.shift(-n)`), backward fills (`.bfill()`), or future-peeking roll windows on feature variables.
+* Model Edge Baseline: All active models (XGBoost, DDQN) MUST maintain an Out-of-Sample AUC-ROC > 0.55. Models falling below this threshold must be automatically demoted in the `agent_quarantine.py` registry.
 * Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals.
-* HMM Calibration Mandate: The HMM Regime Classifier MUST maintain >70% accuracy against structural Ground Truth (ADX > 25). If accuracy decays, autonomous trading must halt for retraining.
-* Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR, Entropy clamped to [0,1], zero NaNs) via hard assertions before ML inference.
-* Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
+* Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR) via hard assertions before ML inference.
+* Agent Quarantine (Consensus Purity): Uninitialized/untrained agents artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
 * Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.
 * Combiner Integrity: Cross-sectional asset scoring MUST utilize `NaN`-safe math (`np.nanmean`, `np.nanstd`).
 * Toxicity Blindness Veto: The system MUST evaluate VPIN/Order-Flow Toxicity. Trades firing into highly adversarial flow must be rejected.
@@ -21,12 +22,13 @@ WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
 WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.
 * Regime Misalignment Veto: The strategy must mathematically align with the environment. Mean-reversion signals in a TREND regime, or Momentum signals in a RANGE regime, MUST be explicitly rejected by the execution bridge.
+* HMM Calibration: The HMM Regime Classifier MUST maintain >70% accuracy against structural Ground Truth (ADX > 25).
 * Heuristic Override: If legacy ML models crash due to H1/H4 dimension mismatch, route raw Swing Alpha signals directly to execution via hardcoded scores.
 
 WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
 * ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries). 
 * Naked Kill Switch: If `TRADE_ACTION_SLTP` fails 3 times, OR Profit Manager finds `SL == 0` for > 10 seconds, INSTANTLY liquidate via Market Close.
-* Risk Agent Circuit Breaker (FAIL-CLOSED STRICT): If Port 8001 times out or errors, the Fast Loop MUST explicitly reject the trade by raising `TradeRejected`. Logging a warning and proceeding is explicitly forbidden.
+* Risk Agent Circuit Breaker (FAIL-CLOSED STRICT): If Port 8001 times out or errors, the Fast Loop MUST explicitly reject the trade by raising `TradeRejected`.
 * Spread-Aware Armor: Baseline risk distance MUST enforce a safety floor: `true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread)`.
 * Fractal Anchoring: MT5 SL = `max(3.0 * true_atr, distance_to_Fractal_SL)`. All SL/TP must pass a strict `trade_tick_size` normalization wrapper.
 * ATR-Adjusted Sizing: Max dollar risk = 2%. Final lot is the lesser of the Kelly-Fraction lot and the ATR-Adjusted lot.

@@ -70,7 +70,7 @@ def generate_features(ticks_df, other_asset_df=None):
         'macd': macd,
         'sentiment': sentiment,
         'cross_impact': cross_impact
-    }).bfill().fillna(0)
+    }).ffill().fillna(0)
     
     # v23.3 Directive: Include high-dimensional NLP Embeddings (768d)
     # v27.0 SRE Fix: Zero-fill dummy embeddings to prevent stochastic noise injection
@@ -213,7 +213,7 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     rsi = 100 - (100 / (1 + rs))
-    rsi = rsi.bfill().fillna(50.0) # Burn-in fillna neutral state
+    rsi = rsi.ffill().fillna(50.0) # Burn-in fillna neutral state
 
     # Shannon Entropy of binary outcomes (positive vs negative returns) normalized to [0, 1]
     returns = close.pct_change().fillna(0)
@@ -223,7 +223,7 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     pos_p = (pos_count / total_count).clip(1e-9, 1.0 - 1e-9)
     neg_p = (neg_count / total_count).clip(1e-9, 1.0 - 1e-9)
     entropy = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p))
-    entropy = entropy.bfill().fillna(0.5)
+    entropy = entropy.ffill().fillna(0.5)
     
     mean_reversion_signal = (rsi < 35) & (entropy > 0.85)
 
@@ -233,7 +233,7 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     bb_mid = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
     bb_width = (2 * bb_std) / (bb_mid + 1e-9)
-    bb_width = bb_width.bfill().fillna(0.0001)
+    bb_width = bb_width.ffill().fillna(0.0001)
     
     bb_squeeze = bb_width <= bb_width.rolling(20).min().shift(1)  # current BB at 20-bar low
     price_on_ema = np.abs(close - ema_20) < (bb_std * 0.3)
@@ -252,7 +252,7 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     tr2 = (high - close.shift(1)).abs()
     tr3 = (low - close.shift(1)).abs()
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(14).mean().bfill().fillna(0.0001)
+    atr = tr.rolling(14).mean().ffill().fillna(0.0001)
 
     alpha = pd.DataFrame({
         'rsi': rsi,
