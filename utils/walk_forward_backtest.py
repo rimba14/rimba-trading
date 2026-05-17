@@ -16,6 +16,61 @@ class StrategyFailed(Warning):
     """Custom warning thrown when the backtest Sharpe ratio fails to clear the Reality Tax threshold."""
     pass
 
+def compute_strategy_metrics(trades_df, initial_capital=10000):
+    """
+    SRE Patched: trades_df must have ['close_time', 'pnl_net']
+    """
+    if trades_df.empty:
+        return {}
+
+    pnl = trades_df['pnl_net'].values
+    
+    # 1. Base Metrics
+    win_rate = (pnl > 0).mean()
+    avg_win = pnl[pnl > 0].mean() if (pnl > 0).any() else 0.0
+    avg_loss = abs(pnl[pnl < 0].mean()) if (pnl < 0).any() else 0.0
+    profit_factor = (pnl[pnl > 0].sum() / abs(pnl[pnl < 0].sum())) if (pnl < 0).any() else np.inf
+    expectancy = (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
+
+    # 2. Equity Curve & Drawdown (Capital Adjusted)
+    cumulative_equity = initial_capital + np.cumsum(pnl)
+    rolling_max = np.maximum.accumulate(cumulative_equity)
+    drawdown_pct = (cumulative_equity - rolling_max) / rolling_max
+    max_dd = abs(drawdown_pct.min())
+
+    # 3. Resample to Daily for Accurate Sharpe/Sortino
+    # Requires 'close_time' as a datetime column in trades_df
+    trades_df['close_time'] = pd.to_datetime(trades_df['close_time'])
+    daily_pnl = trades_df.set_index('close_time')['pnl_net'].resample('D').sum().fillna(0)
+    daily_returns = daily_pnl / initial_capital  # Simplified daily return
+    
+    mean_daily_ret = np.mean(daily_returns)
+    std_daily_ret = np.std(daily_returns) + 1e-9
+    
+    sharpe = (mean_daily_ret / std_daily_ret) * np.sqrt(252)
+    
+    downside_returns = daily_returns[daily_returns < 0]
+    sortino_neg = np.std(downside_returns) if len(downside_returns) > 0 else 1e-9
+    sortino = (mean_daily_ret / sortino_neg) * np.sqrt(252)
+    
+    annual_return = (cumulative_equity[-1] - initial_capital) / initial_capital * (252 / len(daily_returns))
+    calmar = annual_return / (max_dd + 1e-9)
+
+    # Return RAW FLOATS for the optimizer. Format only on print.
+    metrics = {
+        "win_rate": win_rate,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "profit_factor": profit_factor,
+        "expectancy": expectancy,
+        "max_dd_pct": max_dd,
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "calmar": calmar,
+        "total_trades": len(trades_df)
+    }
+    return metrics
+
 def fetch_data():
     """Fetches H1 historical candles for EURUSD or falls back to high-fidelity synthetic candles if offline."""
     df = None
@@ -83,7 +138,7 @@ def main():
     
     oos_preds = []
     oos_targets = []
-    oos_trades_returns = []
+    oos_trades_log = []
     
     # Parameters for Reality Tax
     flat_commission = 3.00   # USD per trade
@@ -148,7 +203,11 @@ def main():
                 
                 net_pnl = gross_pnl - slippage_penalty - flat_commission - swap_penalty
                 fold_trades_pnl.append(net_pnl)
-                oos_trades_returns.append(net_pnl)
+                
+                oos_trades_log.append({
+                    "close_time": times[exit_idx],
+                    "pnl_net": net_pnl
+                })
                 
         fold_trades_pnl = np.array(fold_trades_pnl)
         fold_net_profit = np.sum(fold_trades_pnl) if len(fold_trades_pnl) > 0 else 0.0
@@ -160,23 +219,26 @@ def main():
         
     # 3. Stitch OOS metrics together
     stitched_auc = roc_auc_score(oos_targets, oos_preds)
-    oos_trades_returns = np.array(oos_trades_returns)
+    trades_df = pd.DataFrame(oos_trades_log)
     
-    # Calculate Sharpe Ratio after the Reality Tax
-    if len(oos_trades_returns) > 1:
-        mean_ret = np.mean(oos_trades_returns)
-        std_ret = np.std(oos_trades_returns) + 1e-9
-        # Annualized Sharpe (assuming standard daily-frequency equivalent trade distributions)
-        sharpe_ratio = (mean_ret / std_ret) * np.sqrt(252)
-    else:
-        sharpe_ratio = 0.0
-        
+    metrics = compute_strategy_metrics(trades_df, initial_capital=10000)
+    sharpe_ratio = metrics.get("sharpe", 0.0)
+    sortino_ratio = metrics.get("sortino", 0.0)
+    calmar_ratio = metrics.get("calmar", 0.0)
+    max_drawdown = metrics.get("max_dd_pct", 0.0)
+    win_rate = metrics.get("win_rate", 0.0)
+    profit_factor = metrics.get("profit_factor", 0.0)
+    
     print("\n==================================================")
-    print("--- FINAL AGGREGATED OOS METRICS ---")
+    print("--- FINAL AGGREGATED OOS METRICS (SRE AUDIT) ---")
     print(f" Stitched OOS AUC-ROC    : {stitched_auc:.4f}")
-    print(f" Total Closed Trades     : {len(oos_trades_returns)}")
-    print(f" Aggregated Net OOS P&L  : ${np.sum(oos_trades_returns):.2f}")
+    print(f" Total Closed Trades     : {metrics.get('total_trades', 0)}")
+    print(f" Win Rate                : {win_rate:.2%}")
+    print(f" Profit Factor           : {profit_factor:.4f}")
+    print(f" Max Drawdown %          : {max_drawdown:.2%}")
     print(f" Reality-Tax Sharpe Ratio : {sharpe_ratio:.4f}")
+    print(f" Reality-Tax Sortino     : {sortino_ratio:.4f}")
+    print(f" Reality-Tax Calmar      : {calmar_ratio:.4f}")
     
     # Sharpe Ratio threshold gate
     if sharpe_ratio < 1.0:
