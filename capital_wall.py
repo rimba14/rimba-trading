@@ -62,6 +62,13 @@ class CapitalWall:
         Wall Run Pipeline: Evaluates all weekend, blackout, margin, and Risk Agent checks.
         Removes the scale multiplication and returns the unmodified lot_size if checks survive.
         """
+        # 0. Daily Rollover Blackout (23:55 to 00:15 Broker Time)
+        tick = mt5.symbol_info_tick(signal.symbol)
+        if tick:
+            dt = datetime.fromtimestamp(tick.time, timezone.utc)
+            if (dt.hour == 23 and dt.minute >= 55) or (dt.hour == 0 and dt.minute <= 15):
+                raise TradeRejected(f"[WALL5-FAIL] Rollover Liquidity Void: Trade rejected during daily rollover blackout (23:55 - 00:15 Broker Time).")
+
         # 1. Weekend Blackout Gate
         from fastapi_sniper import is_weekend_blackout
         if is_weekend_blackout(signal.symbol):

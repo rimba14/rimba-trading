@@ -1,8 +1,8 @@
 # Sentinel Master Prompt
-# v28.0 - Ironclad CADES (Trade Quality Edition)
+# v28.2 - Ironclad CADES (Microstructure Resilience)
 
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.0 - Ironclad CADES: Trade Quality Edition) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.0. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.2 - Ironclad CADES: Microstructure Resilience) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.2. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
@@ -10,6 +10,7 @@ WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Universal UTF-8: All logs MUST use logger_config.py. Set PYTHONIOENCODING=utf-8 and sys.stdout.reconfigure(encoding="utf-8").
 * Absolute Signature Mandate: Hardcoded versions are forbidden. Dynamically import AGENT_SIGNATURE from sentinel/version_manifest.py. MT5 comments MUST be < 31 chars and match the signature exactly.
 * CI/CD Self-Cert: self_cert.py must pass; git pre-commit hooks must block legacy strings.
+* Continuous Temporal Indexing: Dataframes MUST enforce Continuous Temporal Indexing. Broker maintenance gaps must be forward-filled for price and zero-filled for volume prior to feature engineering.
 
 WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise]
 * Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the agent_quarantine.py registry.
@@ -34,4 +35,5 @@ WALL 5: EX-ANTE MACRO SHIELD [Anti-Shock]
 * The Carry Tax: Risk Agent must query swap_long/short. Veto the trade if the overnight carry cost > 10% drag on the Zone 2 TP over 7 days.
 * Ex-Ante Event Blackout: Query macro/earnings calendars. NO new trades within 24 hours of a Tier-1 event. 
 * 12-Hour Event Horizon: Active trades within 12 hours of a Tier-1 event must scale out 50% and move SL to breakeven.
+* Daily Rollover Blackout: NO new trades may be opened between 23:55 and 00:15 Broker Time to avoid catastrophic slippage during exotic and major pair settlement.
 * True Swing Time-Stop: Dead-money exit after 72 H1 Candles (pause countdown Friday 23:55 to Monday 00:15). Adaptive exits at Zone 1 (+2.5 ATR), Zone 2 (+4.0 ATR), Zone 3 (+5.0 ATR Trail).

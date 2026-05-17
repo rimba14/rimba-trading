@@ -149,6 +149,30 @@ def ingest_mtf_ohlcv(symbol):
         df = pd.DataFrame(rates)
         df['time'] = pd.to_datetime(df['time'], unit='s')
         df.set_index('time', inplace=True)
+        
+        # Directive 1: Continuous Temporal Indexing (Crypto Gaps)
+        freq = '1h' if timeframe == mt5.TIMEFRAME_H1 else '4h'
+        original_idx = df.index
+        df = df.resample(freq).ffill()
+        
+        # Identify newly generated rows (maintenance gaps)
+        new_rows = df.index.difference(original_idx)
+        if not new_rows.empty:
+            if 'tick_volume' in df.columns:
+                df.loc[new_rows, 'tick_volume'] = 0
+            if 'real_volume' in df.columns:
+                df.loc[new_rows, 'real_volume'] = 0
+            if 'close' in df.columns:
+                if 'open' in df.columns:
+                    df.loc[new_rows, 'open'] = df.loc[new_rows, 'close']
+                if 'high' in df.columns:
+                    df.loc[new_rows, 'high'] = df.loc[new_rows, 'close']
+                if 'low' in df.columns:
+                    df.loc[new_rows, 'low'] = df.loc[new_rows, 'close']
+                    
+        # Maintain exactly the latest 'count' rows after resampling
+        df = df.iloc[-count:]
+        
         # Phase 1 Constitutional NaN/inf scrubbing
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df.ffill(inplace=True)
