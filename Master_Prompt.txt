@@ -1,23 +1,21 @@
-# Sentinel Master Prompt
-# v28.3 - Ironclad CADES (Feature Integrity)
-
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.3 - Ironclad CADES: Feature Integrity) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.3. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.4 - Ironclad CADES: Model Drift Telemetry) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.4. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
 * Port Liberation: Ports 8000 and 8001 must be strictly unbound.
-* Universal UTF-8: All logs MUST use logger_config.py. Set PYTHONIOENCODING=utf-8 and sys.stdout.reconfigure(encoding="utf-8").
-* Absolute Signature Mandate: Hardcoded versions are forbidden. Dynamically import AGENT_SIGNATURE from sentinel/version_manifest.py. MT5 comments MUST be < 31 chars and match the signature exactly.
-* CI/CD Self-Cert: self_cert.py must pass; git pre-commit hooks must block legacy strings.
-* Continuous Temporal Indexing: Dataframes MUST enforce Continuous Temporal Indexing. Broker maintenance gaps must be forward-filled for price and zero-filled for volume prior to feature engineering.
+* Universal UTF-8: All logs MUST use `logger_config.py`. Set `PYTHONIOENCODING=utf-8` and `sys.stdout.reconfigure(encoding="utf-8")`.
+* Absolute Signature Mandate: Hardcoded versions are forbidden. Dynamically import `AGENT_SIGNATURE` from `sentinel/version_manifest.py`. MT5 comments MUST be < 31 chars and match the signature exactly.
+* CI/CD Self-Cert: `self_cert.py` must pass; git pre-commit hooks must block legacy strings.
+* Continuous Temporal Indexing: Dataframes MUST forward-fill price and zero-fill volume for broker maintenance gaps prior to feature engineering.
 
-WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise]
-* Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the agent_quarantine.py registry.
+WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
+* Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals.
+* Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR, Entropy clamped to [0,1], zero NaNs) via hard assertions before ML inference.
+* Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
 * Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.
-* Combiner Integrity: Cross-sectional asset scoring MUST utilize NaN-safe math (np.nanmean, np.nanstd).
+* Combiner Integrity: Cross-sectional asset scoring MUST utilize `NaN`-safe math (`np.nanmean`, `np.nanstd`).
 * Toxicity Blindness Veto: The system MUST evaluate VPIN/Order-Flow Toxicity. Trades firing into highly adversarial flow must be rejected.
-* Feature Integrity Assertion Shield: All engineered features must pass through a strict mathematical bound assertion gate prior to consumption. RSI must be strictly bounded in [0, 100], ATR must be strictly positive, BB_Width non-negative, with zero NaNs permitted, and Order Flow Entropy must reside strictly within [0, 1] to prevent silent ML hallucinations.
 
 WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.
@@ -26,15 +24,15 @@ WALL 3: REGIME ALIGNMENT [Anti-Decay]
 
 WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
 * ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries). 
-* Naked Kill Switch: If TRADE_ACTION_SLTP fails 3 times, OR Profit Manager finds SL == 0 for > 10 seconds, INSTANTLY liquidate via Market Close.
-* Risk Agent Circuit Breaker: If Port 8001 times out, the Fast Loop MUST explicitly reject the trade.
-* Spread-Aware Armor: Baseline risk distance MUST enforce a safety floor: true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread).
-* Fractal Anchoring: MT5 SL = max(3.0 * true_atr, distance_to_Fractal_SL). All SL/TP must pass a strict trade_tick_size normalization wrapper.
+* Naked Kill Switch: If `TRADE_ACTION_SLTP` fails 3 times, OR Profit Manager finds `SL == 0` for > 10 seconds, INSTANTLY liquidate via Market Close.
+* Risk Agent Circuit Breaker (FAIL-CLOSED STRICT): If Port 8001 times out or errors, the Fast Loop MUST explicitly reject the trade by raising `TradeRejected`. Logging a warning and proceeding is explicitly forbidden.
+* Spread-Aware Armor: Baseline risk distance MUST enforce a safety floor: `true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread)`.
+* Fractal Anchoring: MT5 SL = `max(3.0 * true_atr, distance_to_Fractal_SL)`. All SL/TP must pass a strict `trade_tick_size` normalization wrapper.
 * ATR-Adjusted Sizing: Max dollar risk = 2%. Final lot is the lesser of the Kelly-Fraction lot and the ATR-Adjusted lot.
 
 WALL 5: EX-ANTE MACRO SHIELD [Anti-Shock]
-* The Carry Tax: Risk Agent must query swap_long/short. Veto the trade if the overnight carry cost > 10% drag on the Zone 2 TP over 7 days.
-* Ex-Ante Event Blackout: Query macro/earnings calendars. NO new trades within 24 hours of a Tier-1 event. 
+* The Carry Tax: Risk Agent must query `swap_long/short`. Veto the trade if the overnight carry cost > 10% drag on the Zone 2 TP over 7 days.
+* Daily Rollover Blackout: NO new trades may be opened between 23:55 and 00:15 Broker Time to avoid catastrophic exotic spread slippage.
+* Ex-Ante Event Blackout (STRICT): Query macro/earnings calendars. NO new trades within 24 hours of a Tier-1 event. Pre-scaling or reducing lot sizes for new entries is explicitly forbidden.
 * 12-Hour Event Horizon: Active trades within 12 hours of a Tier-1 event must scale out 50% and move SL to breakeven.
-* Daily Rollover Blackout: NO new trades may be opened between 23:55 and 00:15 Broker Time to avoid catastrophic slippage during exotic and major pair settlement.
 * True Swing Time-Stop: Dead-money exit after 72 H1 Candles (pause countdown Friday 23:55 to Monday 00:15). Adaptive exits at Zone 1 (+2.5 ATR), Zone 2 (+4.0 ATR), Zone 3 (+5.0 ATR Trail).

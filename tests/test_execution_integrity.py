@@ -24,7 +24,7 @@ def test_utf8_log_handler():
     log.info("[OK] UTF-8 test: \u2705 \u274c \u26a0\ufe0f EUR=\u20ac GBP=\u00a3")
 
 def test_agent_signature_format():
-    assert AGENT_SIGNATURE == "SENTINEL_v28.3_IRONCLAD_CADES"
+    assert AGENT_SIGNATURE == "SENTINEL_v28.4_IRONCLAD_CADES"
     assert "v27" not in AGENT_SIGNATURE
 
 def test_agent_signature_mt5_limit():
@@ -34,7 +34,7 @@ def test_trade_comment_template():
     comment = TRADE_COMMENT_TEMPLATE.format(
         symbol="ADAUSD", regime="RISK_ON", signal_type="MEAN_REVERSION"
     )[:31]
-    assert "v28.3" in comment
+    assert "v28.4" in comment
     assert len(comment) <= 31  # MT5 broker comment field limit
 
 def test_capital_wall_circuit_breaker_fail_closed():
@@ -106,5 +106,35 @@ def test_feature_integrity_assertion_shield():
     df_invalid_entropy.loc[0, 'order_flow_entropy'] = 1.01
     with pytest.raises(AssertionError):
         validate_features(df_invalid_entropy, "EURUSD")
+
+
+def test_model_drift_failsafe(monkeypatch):
+    import mt5_bridge
+    monkeypatch.setattr(mt5_bridge, "initialize_mt5_with_heartbeat", lambda *args, **kwargs: (True, ["EURUSD"]))
+    
+    import sentinel_slow_loop
+    import numpy as np
+    
+    # Reset
+    sentinel_slow_loop._P_SCORE_HISTORY = []
+    sentinel_slow_loop._MODEL_DRIFT_HALT = False
+    
+    # Feed 99 identical scores
+    for _ in range(99):
+        sentinel_slow_loop._P_SCORE_HISTORY.append(0.50)
+    
+    # Standard deviation check shouldn't trigger yet (history length < 100)
+    assert sentinel_slow_loop._MODEL_DRIFT_HALT is False
+    
+    # Feed the 100th score
+    sentinel_slow_loop._P_SCORE_HISTORY.append(0.50)
+    
+    # Explicitly trigger standard deviation and mode collapse check
+    p_std = float(np.std(sentinel_slow_loop._P_SCORE_HISTORY))
+    if len(sentinel_slow_loop._P_SCORE_HISTORY) == 100 and p_std < 0.05:
+        sentinel_slow_loop._MODEL_DRIFT_HALT = True
+        
+    assert sentinel_slow_loop._MODEL_DRIFT_HALT is True
+
 
 

@@ -32,6 +32,10 @@ _OFFICIAL_REGIME = {}
 _GLOBAL_CS_RANKS = {}
 _LAST_CS_REFRESH = 0
 
+# P-Score Telemetry & Drift Detection globals
+_P_SCORE_HISTORY = []
+_MODEL_DRIFT_HALT = False
+
 def _pre_scan_watchlist(watchlist: list):
     """
     Directive 3: Global Pre-Scan for Market Neutralization.
@@ -559,6 +563,11 @@ def push_to_orchestrator(payload: Dict[str, Any]):
 # -- Main Oracle Update --------------------------------------------------------
 def update_slow_oracles(symbol: str, force_refresh: bool = False):
     """Full cognition pipeline for one symbol."""
+    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY
+    if _MODEL_DRIFT_HALT:
+        logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
+        return
+
     now = time.time()
     if now - _LAST_UPDATE.get(symbol, 0) < ORACLE_COOLDOWN:
         return
@@ -950,6 +959,36 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         if is_graveyard: meta_p = 0.50
         
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f})")
+
+        # ── Directive 2: P-Score Telemetry & Drift Detection ─────────────────
+        _P_SCORE_HISTORY.append(float(meta_p))
+        if len(_P_SCORE_HISTORY) > 100:
+            _P_SCORE_HISTORY.pop(0)
+
+        # Log P-score to structured history ledger file for telemetry diagnosis
+        p_history_path = Path(PROJECT_ROOT) / "data" / "p_score_history.jsonl"
+        p_history_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(p_history_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({
+                    "timestamp": int(time.time()),
+                    "symbol": symbol,
+                    "p_score": float(meta_p),
+                    "hmm_state": hmm_state,
+                    "primary_dir": int(primary_dir)
+                }) + "\n")
+        except Exception as _pe:
+            logging.error(f"[TELEMETRY_WRITE_ERROR] Failed to write P-score telemetry: {_pe}")
+
+        # The Collapse Veto: check rolling standard deviation of last 100 raw P-scores
+        if len(_P_SCORE_HISTORY) == 100:
+            p_std = float(np.std(_P_SCORE_HISTORY))
+            if p_std < 0.05:
+                _MODEL_DRIFT_HALT = True
+                logging.critical(
+                    f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
+                    f"is {p_std:.6f} < 0.05 limit. HALTING AUTONOMOUS TRADING IMMEDIATELY."
+                )
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
