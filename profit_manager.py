@@ -47,7 +47,7 @@ logging.basicConfig(
 logger = logging.getLogger("ProfitManager")
 
 def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_H1, period=14) -> float:
-    """Calculates ATR using macroscopic H1 bars (Directive 2 v26.0 - Level 35 SRE)."""
+    """Calculates ATR using macroscopic H1 bars (Directive 2 v27.0 - Level 35 SRE)."""
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 1, period + 1)
     if rates is None or len(rates) < period + 1:
         return 0.0
@@ -385,7 +385,7 @@ class SentinelProfitManager:
             if active_regime == "RANGE":
                 # Directive 2: Entropy-Discounted Zone 2 Threshold
                 s_ent = oracle_data.get("entropy", 0.0)
-                zone_2_limit = 4.0  # v26.0: Widened from 1.75 -> 4.0 ATR for swing
+                zone_2_limit = 4.0  # v27.0: Widened from 1.75 -> 4.0 ATR for swing
                 if s_ent > 0.90:
                     zone_2_limit = 3.4  # 15% Entropy Discount applied
                     logger.info(f"[{symbol}] High Entropy detected ({s_ent:.2f} > 0.90). Discounting Zone 2 to {zone_2_limit}x ATR.")
@@ -422,7 +422,7 @@ class SentinelProfitManager:
                     elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
                         target_sl = be_sl
                         modify_needed = True
-                elif profit_price_delta >= 2.5 * macro_atr:  # v26.0: Zone 1 widened 1.2 -> 2.5 ATR
+                elif profit_price_delta >= 2.5 * macro_atr:  # v27.0: Zone 1 widened 1.2 -> 2.5 ATR
                     # Zone 1: Risk Halving (-0.4 ATR from entry)
                     half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
                     half_sl = round(half_sl, digits)
@@ -434,7 +434,7 @@ class SentinelProfitManager:
                         modify_needed = True
             else:
                 # Original 3-Zone Geometric Trail for non-RANGE regimes
-                if profit_price_delta >= 5.0 * macro_atr:  # v26.0: Zone 3 Parabolic activated at +5.0 ATR
+                if profit_price_delta >= 5.0 * macro_atr:  # v27.0: Zone 3 Parabolic activated at +5.0 ATR
                     # Zone 3: Parabolic Trail (Current_Price - 1.5 ATR)
                     trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
                     trail_sl = round(trail_sl, digits)
@@ -444,7 +444,7 @@ class SentinelProfitManager:
                     elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
                         target_sl = trail_sl
                         modify_needed = True
-                elif profit_price_delta >= 4.0 * macro_atr:  # v26.0: Zone 2 widened 1.75 -> 4.0 ATR
+                elif profit_price_delta >= 4.0 * macro_atr:  # v27.0: Zone 2 widened 1.75 -> 4.0 ATR
                     # Zone 2: Fee-Paid Break-Even (+0.2 ATR)
                     be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
                     be_sl = round(be_sl, digits)
@@ -454,7 +454,7 @@ class SentinelProfitManager:
                     elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
                         target_sl = be_sl
                         modify_needed = True
-                elif profit_price_delta >= 2.5 * macro_atr:  # v26.0: Zone 1 widened 1.2 -> 2.5 ATR
+                elif profit_price_delta >= 2.5 * macro_atr:  # v27.0: Zone 1 widened 1.2 -> 2.5 ATR
                     # Zone 1: Risk Halving (-0.4 ATR from entry)
                     half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
                     half_sl = round(half_sl, digits)
@@ -582,7 +582,7 @@ class SentinelProfitManager:
                 
             is_thesis_decay = _THESIS_DECAY_STREAK[pos.ticket] >= 3
             
-            # ── v26.1: True Swing Time-Stop & Weekend Bypass ──
+            # ── v27.0: True Swing Time-Stop & Weekend Bypass ──
             # Fetch H1 bars elapsed since entry for the swing time-stop gate
             h1_rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_H1, int(pos.time), int(now) + 3600)
             h1_candles_elapsed = len(h1_rates_since) if h1_rates_since is not None else 0
@@ -600,7 +600,7 @@ class SentinelProfitManager:
 
             is_dead_money = (h1_candles_elapsed > 72) and (abs(profit_atr) < 0.25) and not is_weekend_pause
             
-            # Directive 1: Time Stop (Theta Decay) - v26.0: Extended to 10 days for swing holds
+            # Directive 1: Time Stop (Theta Decay) - v27.0: Extended to 10 days for swing holds
             MAX_HOLDING_SECONDS = 10 * 24 * 3600  # 10 days
             elapsed_seconds = now - pos.time
             is_theta_decay = (elapsed_seconds > MAX_HOLDING_SECONDS) and (pos.profit <= 0)
@@ -668,7 +668,7 @@ class SentinelProfitManager:
                 logger.debug(f"[REGIME_OK] {symbol} #{pos.ticket}: {pos_direction} | HMM={hmm_state}  aligned.")
 
     def _event_horizon_protection(self, pos) -> bool:
-        """v26.3 Level 40 SRE: Pre-Event Risk Reduction.
+        """v27.0 Level 40 SRE: Pre-Event Risk Reduction.
            Scales out 50% of the position and moves SL to BE if within 12h of Tier-1 Event."""
         if pos.ticket in _SCALED_OUT_POSITIONS:
             return False # Already protected
@@ -753,7 +753,7 @@ class SentinelProfitManager:
                 if all_positions:
                     # Directive 3: Continuous Loop Naked Sweep (CADES TP Enforcement)
                     for pos in all_positions:
-                        # v26.3 Event Horizon Check
+                        # v27.0 Event Horizon Check
                         self._event_horizon_protection(pos)
                         if pos.tp == 0.0 or pos.sl == 0.0:
                             try:
@@ -761,7 +761,7 @@ class SentinelProfitManager:
                                 if tick is None:
                                     continue
                                 
-                                # Directive 2: The 10-second Hostile Liquidation Rule (v26.5)
+                                # Directive 2: The 10-second Hostile Liquidation Rule (v27.0)
                                 time_held = tick.time - pos.time
                                 if time_held > 10:
                                     logger.critical(f"[KILL] [NAKED SWEEP] Orphaned trade detected > 10s (Held {time_held}s). Initiating hostile liquidation for Ticket {pos.ticket}.")

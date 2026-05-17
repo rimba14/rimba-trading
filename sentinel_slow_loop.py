@@ -234,7 +234,7 @@ except Exception as _e:
     _MATH_META_MODEL = None
     logging.warning(f"[ROUTER] Math Meta-Model unavailable: {_e}")
 
-# -- Agent Quarantine (v26.8) --------------------------------------------------
+# -- Agent Quarantine (v27.0) --------------------------------------------------
 from agent_quarantine import registry, register_default_agents
 register_default_agents()
 # Ensure local agent states are updated based on file presence
@@ -565,7 +565,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
     _LAST_UPDATE[symbol] = now
 
     # -- Macro Halt & Black Swan Override (v19.5) ----------------------------
-    # v26.0: Initialize m_state with defaults to prevent UnboundLocalError
+    # v27.0: Initialize m_state with defaults to prevent UnboundLocalError
     m_state = {"global_macro_sentiment": 0.0, "black_swan_risk": 0.0, "asset_specific_catalysts": {}}
     
     if HALT_PATH.exists():
@@ -598,10 +598,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
     time.sleep(random.uniform(0.05, 0.3))
 
     df_m15 = df_ta = df_ml = None
-    latest_swing = None # v26.0: Store swing alpha features for Heuristic Override
+    latest_swing = None # v27.0: Store swing alpha features for Heuristic Override
     try:
         logging.info(f"[{symbol}] Updating high-resolution oracles (v21.0)...")
-        # v26.0 Swing Paradigm: H1/H4 Multi-Timeframe Ingestion (Primary Data Source)
+        # v27.0 Swing Paradigm: H1/H4 Multi-Timeframe Ingestion (Primary Data Source)
         mt5.symbol_select(symbol, True)
         try:
             from feature_engineering import ingest_mtf_ohlcv, compute_swing_alpha
@@ -610,7 +610,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 swing_alpha = compute_swing_alpha(df_h1, df_h4)
                 latest_swing = swing_alpha.iloc[-1]
                 logging.info(
-                    f"[v26.0 SWING ALPHA] {symbol} | "
+                    f"[v27.0 SWING ALPHA] {symbol} | "
                     f"H1_Bars={len(df_h1)} | H4_Bars={len(df_h4) if df_h4 is not None else 0} | "
                     f"RSI={latest_swing.get('rsi', float('nan')):.2f} | "
                     f"BB_Width={latest_swing.get('bb_width', float('nan')):.5f} | "
@@ -623,7 +623,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             else:
                 logging.warning(f"[{symbol}] H1 ingestion insufficient ({len(df_h1) if df_h1 is not None else 0} bars). Proceeding with tick fallback.")
         except Exception as _h1_err:
-            logging.warning(f"[{symbol}] v26.0 Swing Alpha failed: {_h1_err}. Proceeding with tick fallback.")
+            logging.warning(f"[{symbol}] v27.0 Swing Alpha failed: {_h1_err}. Proceeding with tick fallback.")
         # 1. Force a single tick request to wake up the broker's data stream
         mt5.symbol_info_tick(symbol)
         # Shift from M15 to Tick Ingestion (N=2000) with async pre-fetch retry loop
@@ -747,7 +747,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             
         hmm_state = _OFFICIAL_REGIME[symbol]
         
-        # v26.0: Use H1-based ATR for all regime/scaling decisions
+        # v27.0: Use H1-based ATR for all regime/scaling decisions
         atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
         logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f}) | ATR(H1)={atr:.5f}")
 
@@ -772,7 +772,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             x_prob = get_xgb_prediction(df_ml)
             ddqn_p = 0.500 # Default
 
-            # v26.8 Consensus Purity Protocol
+            # v27.0 Consensus Purity Protocol
             scores_raw = {
                 "kronos": k_prob,
                 "xgb": x_prob,
@@ -791,7 +791,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             q_result = registry.filter_agents(scores_raw)
             active_scores = q_result.filtered_scores
             
-            # v26.8 Weight Allocation
+            # v27.0 Weight Allocation
             # Base Weights: Kronos=0.4, XGB=0.3, DDQN=0.3
             base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
             

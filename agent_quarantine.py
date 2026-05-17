@@ -5,7 +5,7 @@ CADES Agent Quarantine — Prevents uninitialised agents from voting.
 
 Problem solved
 ──────────────
-v26.4: The DDQN agent had uninitialized weights. It scored 0.500 — the default
+v27.0: The DDQN agent had uninitialized weights. It scored 0.500 — the default
 output of a random network. The multi-agent combiner treated this as a valid
 signal, diluting the HMM+FinEmotion consensus from 0.745 → 0.7227. This false
 precision implied two agents agreed, when only one had real predictive power.
@@ -347,16 +347,16 @@ class QuarantineRegistry:
 registry = QuarantineRegistry(persist_path="agent_states.json")
 
 
-# ── Convenience: register the v26.4 known agents ─────────────────────────────
+# ── Convenience: register the v27.0 known agents ─────────────────────────────
 
 def register_default_agents() -> None:
     """
-    Register the Sentinel's known agents with their v26.4 states.
+    Register the Sentinel's known agents with their v27.0 states.
     Call this ONCE at startup, before the slow loop begins.
     Update 'training_episodes' and 'is_initialized' as agents train.
     """
     registry.register("hmm",           AgentState(is_initialized=True,  training_episodes=None,  notes="HMM regime model"))
     registry.register("finemotion",    AgentState(is_initialized=True,  training_episodes=None,  notes="FinEmotion NLP sentiment"))
     registry.register("deep_research", AgentState(is_initialized=True,  training_episodes=None,  notes="Macro research daemon"))
-    registry.register("ddqn",          AgentState(is_initialized=False, training_episodes=0,     notes="v26.4: uninitialized — quarantined"))
+    registry.register("ddqn",          AgentState(is_initialized=False, training_episodes=0,     notes="v27.0: uninitialized — quarantined"))
     registry.register("rl_agent",      AgentState(is_initialized=False, training_episodes=0,     notes="RL sub-agent — not yet trained"))

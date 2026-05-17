@@ -73,7 +73,7 @@ def generate_features(ticks_df, other_asset_df=None):
     }).bfill().fillna(0)
     
     # v23.3 Directive: Include high-dimensional NLP Embeddings (768d)
-    # v26.4 SRE Fix: Zero-fill dummy embeddings to prevent stochastic noise injection
+    # v27.0 SRE Fix: Zero-fill dummy embeddings to prevent stochastic noise injection
     batch_size = len(ticks_df)
     nlp_embeddings = np.zeros((batch_size, 768), dtype='float32')
     
@@ -113,7 +113,7 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     buy_vol = np.where(returns > 0, df[volume_col], 0)
     sell_vol = np.where(returns < 0, df[volume_col], 0)
     
-    # v26.4 SRE Purge: VPIN and Hawkes Intensity removed (Invalid on H1/H4 Swing)
+    # v27.0 SRE Purge: VPIN and Hawkes Intensity removed (Invalid on H1/H4 Swing)
     # rolling_buy = pd.Series(buy_vol).rolling(window=20, min_periods=1).sum()
     # rolling_sell = pd.Series(sell_vol).rolling(window=20, min_periods=1).sum()
     # rolling_total = pd.Series(df[volume_col]).rolling(window=20, min_periods=1).sum()

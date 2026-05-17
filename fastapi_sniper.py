@@ -34,7 +34,7 @@ from sentinel_config import (
 
 load_dotenv()
 
-# Configure Logging — v26.9: Centralized via logger_config.py (Bug #5 fix: no rogue basicConfig)
+# Configure Logging — v27.0: Centralized via logger_config.py
 import io
 os.environ["PYTHONIOENCODING"] = "utf-8"
 def _get_utf8_stream():
@@ -50,7 +50,7 @@ _UTF8_STREAM = _get_utf8_stream()
 LOG_FILE = r"C:\sentinel_logs\fastapi_sniper_v2.log"
 _LOG_FMT = '%(asctime)s [HTTP_SNIPER] %(message)s'
 
-# v26.9: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
+# v27.0: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
 logger = logging.getLogger("HttpSniper")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
@@ -132,7 +132,7 @@ def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, 
 
 def atomic_sl_tp_modification(pos, new_sl, new_tp):
     """
-    v26.5: Level 42 SRE Atomic Modification Block.
+    v27.0: Level 42 SRE Atomic Modification Block.
     Retries SL/TP attachment 3 times. If all fail, fires the Naked Kill Switch.
     """
     max_retries = 3
@@ -205,7 +205,7 @@ class TradeSignal(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    # v26.9 Bug #8: Boot assertion — MT5 comment field is capped at 31 chars
+    # v27.0: Boot assertion — MT5 comment field is capped at 31 chars
     assert len(AGENT_SIGNATURE) < 31, f"MT5 Comment exceeds 31 chars: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)"
     logger.info(f"[BOOT] Agent Signature verified: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)")
 
@@ -258,12 +258,12 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
         raise HTTPException(status_code=400, detail="Epistemic gate block")
 
-    # 2b. Native MT5 Ledger Amnesia Lock Check (v26.8: 24-hour Embargo)
+    # 2b. Native MT5 Ledger Amnesia Lock Check (v27.0: 24-hour Embargo)
     if is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (24-hour Embargo)")
         raise HTTPException(status_code=429, detail="Amnesia Lock Active (24h)")
 
-    # 2c. Sealed Hysteresis (v26.8 Phase 4: HARD BLOCK 0.40 <= P <= 0.60)
+    # 2c. Sealed Hysteresis (v27.0 Phase 4: HARD BLOCK 0.40 <= P <= 0.60)
     if 0.40 <= signal.conviction <= 0.60:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Sealed Hysteresis Block (0.40 <= {signal.conviction} <= 0.60)")
         raise HTTPException(status_code=403, detail="Sealed Hysteresis Block")
@@ -427,7 +427,7 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
                 return False
             logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| + 0.05 ({old_delta + 0.05:.4f}). Authorized for Mutual Exclusion.")
 
-    # D. MCP Risk Agent Check (v22.8) — v26.9 Circuit Breaker (Bug #7)
+    # D. MCP Risk Agent Check (v22.8) — v27.0 Circuit Breaker
     try:
         risk_url = "http://localhost:8001/check_trade"
         payload = {
@@ -810,7 +810,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                                     active_regime = str(active_regime).upper()
 
                                 if active_regime == "RANGE":
-                                    # v26.9 Bug #6 fix: 0.15x placed TP inside spread, guaranteeing loss.
+                                    # v27.0: 1.5x floor to ensure TP clears the spread in mean-reverting chop.
                                     # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
                                     tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
                                 elif active_regime == "HIGH_VOLATILITY":
@@ -838,7 +838,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                                 new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
                                 new_tp = round(new_tp, info.digits)
                                 
-                                # v26.5: Level 42 SRE Atomic Modification
+                                # v27.0: Level 42 SRE Atomic Modification
                                 atomic_sl_tp_modification(pos, new_sl, new_tp)
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
@@ -922,7 +922,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             ticket = getattr(res, 'order', getattr(res, 'deal', 0))
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
 
-            # v26.9 Bug #9: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
+            # v27.0: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
             positions = mt5.positions_get(ticket=ticket)
             if positions:
                 pos = positions[0]
@@ -986,7 +986,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                         active_regime = str(active_regime).upper()
 
                     if active_regime == "RANGE":
-                        # v26.9 Bug #6 fix: 0.15x placed TP inside spread, guaranteeing loss.
+                        # v27.0: 1.5x floor to ensure TP clears the spread in mean-reverting chop.
                         # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
                         tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
                     elif active_regime == "HIGH_VOLATILITY":
@@ -1010,7 +1010,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     new_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_sl, is_sl=True, is_buy=is_buy)
                     new_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_tp, is_sl=False, is_buy=is_buy)
                     
-                    # v26.5: Level 42 SRE Atomic Modification
+                    # v27.0: Level 42 SRE Atomic Modification
                     atomic_sl_tp_modification(pos, new_sl, new_tp)
             return True
         else:

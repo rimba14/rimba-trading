@@ -22,7 +22,7 @@ class AlphaCombiner:
         """
         if not signals_dict: return {}
         
-        # v26.4: Filter out quarantined (uninitialized) agents
+        # v27.0: Filter out quarantined (uninitialized) agents
         filtered_signals_dict = {}
         for sym, scores in signals_dict.items():
             res = registry.filter_agents(scores)
