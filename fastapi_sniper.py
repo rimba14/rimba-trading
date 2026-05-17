@@ -343,7 +343,7 @@ async def execute_trade_endpoint(signal: TradeSignal):
                     execute_exit(p.ticket, p.symbol, "Mutual Excl")
 
     # 5. Execution
-    success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction)
+    success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction, vpin=vpin_val)
     if success:
         return {"status": "success", "symbol": signal.symbol, "lot": lot_size}
     else:
@@ -671,7 +671,7 @@ def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> 
         distance = max(0.0, fractal_sl - tick.bid)
         return distance
 
-def perform_mt5_trade(symbol, direction, lot, conviction):
+def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0):
     try:
         tick = mt5.symbol_info_tick(symbol)
         if not tick: 
@@ -772,7 +772,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                         positions = mt5.positions_get(ticket=ticket)
                         if positions:
                             pos = positions[0]
-                            alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': signal.vpin if hasattr(signal, 'vpin') else 0.0}
+                            alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin}
                             info = mt5.symbol_info(pos.symbol)
                             if info:
                                 # Directive 1: Implement the Dynamic ATR Floor (v25.0)
@@ -949,7 +949,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                     logger.warning(f"[POST-EXEC VERIFY] Ticket #{ticket} comment mismatch: expected '{AGENT_SIGNATURE}', got '{pos.comment}'. Possible broker truncation or injection.")
                 else:
                     logger.info(f"[POST-EXEC VERIFY] Ticket #{ticket} comment verified: '{pos.comment}'")
-                alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin_val}
+                alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin}
                 info = mt5.symbol_info(pos.symbol)
                 if info:
                     # Directive 1: Implement the Dynamic ATR Floor
