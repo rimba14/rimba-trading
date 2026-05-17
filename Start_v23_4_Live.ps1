@@ -4,6 +4,9 @@
 $PROJECT_ROOT = "C:\Sentinel_Project"
 Set-Location $PROJECT_ROOT
 
+# v26.7 SRE: Force UTF-8 encoding for all Python subprocesses
+$env:PYTHONIOENCODING = "utf-8"
+
 Write-Host "##########################################################" -ForegroundColor Cyan
 Write-Host "  ADAPTIVE SENTINEL v23.4 - LIVE RESUMPTION"           -ForegroundColor Cyan
 Write-Host "##########################################################" -ForegroundColor Cyan

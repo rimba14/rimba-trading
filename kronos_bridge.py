@@ -64,7 +64,19 @@ def init_model():
     return _MODEL
 
 # Configure Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [KRONOS_BRIDGE] %(message)s')
+import io as _io
+def _get_utf8_stream():
+    if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
+        return sys.stdout
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        return sys.stdout
+    except Exception:
+        return _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+_UTF8_STREAM = _get_utf8_stream()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [KRONOS_BRIDGE] %(message)s',
+                    handlers=[logging.StreamHandler(_UTF8_STREAM)])
 
 def calc_time_stamps(x_timestamp):
     time_df = pd.DataFrame()

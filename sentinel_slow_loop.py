@@ -61,7 +61,7 @@ def _pre_scan_watchlist(watchlist: list):
 
             if rates is None or len(rates) == 0:
                 err = mt5.last_error()
-                print(f"🚨 [DATA STARVATION] MT5 failed to fetch history for {symbol} after {max_retries} attempts. MT5 Error: {err}")
+                print(f"[ALERT] [DATA STARVATION] MT5 failed to fetch history for {symbol} after {max_retries} attempts. MT5 Error: {err}")
                 metrics[symbol] = 0.0
                 continue
 
@@ -158,13 +158,25 @@ for d in [SHAP_DIR, SIGNAL_DIR, LOG_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # -- Logging -------------------------------------------------------------------
+# -- Logging -------------------------------------------------------------------
+import io as _io
+def _get_utf8_stream():
+    if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
+        return sys.stdout
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        return sys.stdout
+    except Exception:
+        return _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+_UTF8_STREAM = _get_utf8_stream()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [SLOW_LOOP] %(message)s",
     force=True,
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(str(LOG_DIR / "slow_loop_v17_9.log")),
+        logging.StreamHandler(_UTF8_STREAM),
+        logging.FileHandler(str(LOG_DIR / "slow_loop_v17_9.log"), encoding="utf-8"),
     ],
 )
 
@@ -222,9 +234,15 @@ except Exception as _e:
     _MATH_META_MODEL = None
     logging.warning(f"[ROUTER] Math Meta-Model unavailable: {_e}")
 
-# Cloud Engine Fallback: Fail-safe neutral 0.500 if both engines exhausted
-# Note: Local Ollama MoE is officially deprecated per v17.9 Constitution.
-
+# -- Agent Quarantine (v26.8) --------------------------------------------------
+from agent_quarantine import registry, register_default_agents
+register_default_agents()
+# Ensure local agent states are updated based on file presence
+from rl_agents.oxford_ddqn import CHECKPOINT_PATH
+if os.path.exists(CHECKPOINT_PATH):
+    registry.update("ddqn", is_initialized=True, training_episodes=1000) # Proxy
+else:
+    registry.update("ddqn", is_initialized=False, training_episodes=0)
 
 # -- ArcticDB Singleton (300 ms timeout enforced via ThreadPoolExecutor) -------
 from arcticdb import Arctic
@@ -750,21 +768,44 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 k_prob = float(_k_data["kronos_prob"])
             else:
                 k_prob = 0.500
-
-            x_prob = get_xgb_prediction(df_ml)
             
+            x_prob = get_xgb_prediction(df_ml)
+            ddqn_p = 0.500 # Default
+
+            # v26.8 Consensus Purity Protocol
+            scores_raw = {
+                "kronos": k_prob,
+                "xgb": x_prob,
+                "ddqn": ddqn_p
+            }
+            
+            # RL Inference (if not quarantined)
             from rl_agents.oxford_ddqn import CHECKPOINT_PATH
-            ddqn_trained = os.path.exists(CHECKPOINT_PATH)
-            if ddqn_trained:
+            if os.path.exists(CHECKPOINT_PATH):
                 ddqn_agent = ddqn_bridge.get_ddqn_agent()
                 feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
                 ddqn_p = ddqn_agent.infer_probability(feature_vec)
-                p_blend = (k_prob * 0.40) + (x_prob * 0.30) + (ddqn_p * 0.30)
-            else:
-                ddqn_p = 0.500
-                p_blend = (k_prob * 0.50) + (x_prob * 0.50)
+                scores_raw["ddqn"] = ddqn_p
             
-            logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f}")
+            # APPLY QUARANTINE FILTER
+            q_result = registry.filter_agents(scores_raw)
+            active_scores = q_result.filtered_scores
+            
+            # v26.8 Weight Allocation
+            # Base Weights: Kronos=0.4, XGB=0.3, DDQN=0.3
+            base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
+            
+            # Re-normalize weights for active agents
+            total_active_weight = sum(base_weights[name] for name in active_scores)
+            if total_active_weight > 0:
+                p_blend = sum(
+                    active_scores[name] * (base_weights[name] / total_active_weight)
+                    for name in active_scores
+                )
+            else:
+                p_blend = 0.500
+                
+            logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f} (Agents: {list(active_scores.keys())})")
             
         except Exception as e:
             logging.warning(f"[{symbol}] ML Bypass in effect. Reason: {e}")

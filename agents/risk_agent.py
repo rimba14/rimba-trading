@@ -215,5 +215,25 @@ def _start_mcp_server():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [RISK_AGENT] %(message)s")
+    # Configure Logging
+    import io as _io
+    def _get_utf8_stream():
+        if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
+            return sys.stdout
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            return sys.stdout
+        except Exception:
+            return _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+    _UTF8_STREAM = _get_utf8_stream()
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [RISK_AGENT] %(message)s",
+        handlers=[
+            logging.StreamHandler(_UTF8_STREAM),
+            logging.FileHandler(os.path.join("C:\\sentinel_logs", "risk_agent_v26.log"), encoding="utf-8"),
+        ]
+    )
     _start_mcp_server()

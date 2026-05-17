@@ -764,7 +764,7 @@ class SentinelProfitManager:
                                 # Directive 2: The 10-second Hostile Liquidation Rule (v26.5)
                                 time_held = tick.time - pos.time
                                 if time_held > 10:
-                                    logger.critical(f"💀 [NAKED SWEEP] Orphaned trade detected > 10s (Held {time_held}s). Initiating hostile liquidation for Ticket {pos.ticket}.")
+                                    logger.critical(f"[KILL] [NAKED SWEEP] Orphaned trade detected > 10s (Held {time_held}s). Initiating hostile liquidation for Ticket {pos.ticket}.")
                                     _market_close(pos)
                                     continue
                                     

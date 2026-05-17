@@ -32,24 +32,38 @@ from sentinel_config import (
 
 load_dotenv()
 
-# Configure Logging
+# Configure Logging — v26.8: UTF-8 Hardened
+import io
+os.environ["PYTHONIOENCODING"] = "utf-8"
+def _get_utf8_stream():
+    if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
+        return sys.stdout
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        return sys.stdout
+    except Exception:
+        return io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+_UTF8_STREAM = _get_utf8_stream()
 LOG_FILE = r"C:\sentinel_logs\fastapi_sniper_v2.log"
+_LOG_FMT = '%(asctime)s [HTTP_SNIPER] %(message)s'
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [HTTP_SNIPER] %(message)s',
+    format=_LOG_FMT,
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_FILE)
+        logging.StreamHandler(_UTF8_STREAM),
+        logging.FileHandler(LOG_FILE, encoding="utf-8")
     ]
 )
 logger = logging.getLogger("HttpSniper")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
-    # Avoid duplicate handlers if the file is re-imported
-    fh = logging.FileHandler(LOG_FILE)
-    fh.setFormatter(logging.Formatter('%(asctime)s [HTTP_SNIPER] %(message)s'))
+    fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    fh.setFormatter(logging.Formatter(_LOG_FMT))
     logger.addHandler(fh)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    sh = logging.StreamHandler(_UTF8_STREAM)
+    sh.setFormatter(logging.Formatter(_LOG_FMT))
+    logger.addHandler(sh)
 
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
@@ -145,11 +159,11 @@ def atomic_sl_tp_modification(pos, new_sl, new_tp):
         
         attempt += 1
         if attempt < max_retries:
-            logger.warning(f"⚠️ [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in 250ms (Attempt {attempt}/{max_retries})...")
+            logger.warning(f"[WARN] [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in 250ms (Attempt {attempt}/{max_retries})...")
             time.sleep(0.25)
             
     # IF WE REACH HERE, ALL RETRIES FAILED. FIRE THE NAKED KILL SWITCH.
-    logger.critical(f"🚨 [CRITICAL] SL/TP modification failed after 3 retries for Ticket {pos.ticket}. Firing Emergency Naked Kill Switch.")
+    logger.critical(f"[ALERT] [CRITICAL] SL/TP modification failed after 3 retries for Ticket {pos.ticket}. Firing Emergency Naked Kill Switch.")
     
     tick = mt5.symbol_info_tick(pos.symbol)
     if not tick:
@@ -174,9 +188,9 @@ def atomic_sl_tp_modification(pos, new_sl, new_tp):
     }
     kill_res = mt5.order_send(kill_request)
     if kill_res and kill_res.retcode == mt5.TRADE_RETCODE_DONE:
-        logger.info(f"💀 [NAKED KILL] Successfully liquidated orphan Ticket {pos.ticket} at market.")
+        logger.info(f"[KILL] [NAKED KILL] Successfully liquidated orphan Ticket {pos.ticket} at market.")
     else:
-        logger.error(f"❌ [NAKED KILL FAIL] Ticket {pos.ticket} liquidation failed! Retcode: {kill_res.retcode if kill_res else 'None'}")
+        logger.error(f"[FAIL] [NAKED KILL FAIL] Ticket {pos.ticket} liquidation failed! Retcode: {kill_res.retcode if kill_res else 'None'}")
         
     return False
 
@@ -204,7 +218,7 @@ def startup_event():
     for sym in WATCHLIST:
         selected = mt5.symbol_select(sym, True)
         if not selected:
-            logger.warning(f"⚠️ [WARNING] Failed to select {sym} in MT5 Market Watch.")
+            logger.warning(f"[WARN] Failed to select {sym} in MT5 Market Watch.")
             
     # Directive 2: Terminal Status Check (v23.6)
     info = mt5.terminal_info()
@@ -244,10 +258,15 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
         raise HTTPException(status_code=400, detail="Epistemic gate block")
 
-    # 2b. Native MT5 Ledger Amnesia Lock Check (Level 14 SRE Refactoring)
-    if is_amnesia_lock_active(signal.symbol, cooldown_seconds=300):
-        logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (Native MT5 Ledger Embargo)")
-        raise HTTPException(status_code=429, detail="Amnesia Lock Active")
+    # 2b. Native MT5 Ledger Amnesia Lock Check (v26.8: 24-hour Embargo)
+    if is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (24-hour Embargo)")
+        raise HTTPException(status_code=429, detail="Amnesia Lock Active (24h)")
+
+    # 2c. Sealed Hysteresis (v26.8 Phase 4: HARD BLOCK 0.40 <= P <= 0.60)
+    if 0.40 <= signal.conviction <= 0.60:
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: Sealed Hysteresis Block (0.40 <= {signal.conviction} <= 0.60)")
+        raise HTTPException(status_code=403, detail="Sealed Hysteresis Block")
 
     # 2c. Pre-Trade Toxicity Gating (VPIN)
     vpin_val = getattr(signal, 'vpin', 0.0)
@@ -863,7 +882,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
             "sl":           0.0,
             "tp":           0.0,
             "magic":        MAGIC_NUMBER,
-            "comment":      f"SENTINEL_v23.11_P{conviction:.2f}",
+            "comment":      AGENT_SIGNATURE,
             "type_time":    time_type,
             "expiration":   expiration,
             "type_filling": mt5.ORDER_FILLING_IOC,

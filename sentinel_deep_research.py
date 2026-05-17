@@ -20,12 +20,23 @@ MACRO_STATE_FILE = PROJECT_ROOT / "data" / "macro_state.json"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Configure Logging
+import io as _io
+def _get_utf8_stream():
+    if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
+        return sys.stdout
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        return sys.stdout
+    except Exception:
+        return _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+_UTF8_STREAM = _get_utf8_stream()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [DEEP_RESEARCH] %(message)s",
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(PROJECT_ROOT / "data" / "deep_research.log")
+        logging.StreamHandler(_UTF8_STREAM),
+        logging.FileHandler(PROJECT_ROOT / "data" / "deep_research.log", encoding="utf-8")
     ]
 )
 
@@ -106,9 +117,9 @@ async def fetch_macro_oracle():
                     # In v18.9, the /liquidate endpoint expects a ticket or broad command
                     # We'll send a signal that the Fast Loop handles as 'ALL' if symbol is '*'
                     requests.post(f"{url}/liquidate", json={"symbol": "*", "reason": "BLACK_SWAN_SYSTEMIC_RISK"}, timeout=10)
-                    logging.info("✅ Liquidation command broadcast successfully.")
+                    logging.info("[OK] Liquidation command broadcast successfully.")
                 except Exception as ex:
-                    logging.error(f"❌ Failed to broadcast liquidation: {ex}")
+                    logging.error(f"[FAIL] Failed to broadcast liquidation: {ex}")
         
     except Exception as e:
         logging.error(f"Deep Research Oracle failed: {e}")
