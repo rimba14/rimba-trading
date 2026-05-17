@@ -11,6 +11,7 @@ import math
 import time
 import logging
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from fastapi import FastAPI, Request, HTTPException
@@ -20,6 +21,7 @@ import MetaTrader5 as mt5
 from dotenv import load_dotenv
 import requests
 import numpy as np
+from constants import AGENT_SIGNATURE
 
 risk_session = requests.Session()
 # Load constitution/config
@@ -32,7 +34,7 @@ from sentinel_config import (
 
 load_dotenv()
 
-# Configure Logging — v26.8: UTF-8 Hardened
+# Configure Logging — v26.9: Centralized via logger_config.py (Bug #5 fix: no rogue basicConfig)
 import io
 os.environ["PYTHONIOENCODING"] = "utf-8"
 def _get_utf8_stream():
@@ -47,14 +49,8 @@ def _get_utf8_stream():
 _UTF8_STREAM = _get_utf8_stream()
 LOG_FILE = r"C:\sentinel_logs\fastapi_sniper_v2.log"
 _LOG_FMT = '%(asctime)s [HTTP_SNIPER] %(message)s'
-logging.basicConfig(
-    level=logging.INFO,
-    format=_LOG_FMT,
-    handlers=[
-        logging.StreamHandler(_UTF8_STREAM),
-        logging.FileHandler(LOG_FILE, encoding="utf-8")
-    ]
-)
+
+# v26.9: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
 logger = logging.getLogger("HttpSniper")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
@@ -209,6 +205,10 @@ class TradeSignal(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
+    # v26.9 Bug #8: Boot assertion — MT5 comment field is capped at 31 chars
+    assert len(AGENT_SIGNATURE) < 31, f"MT5 Comment exceeds 31 chars: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)"
+    logger.info(f"[BOOT] Agent Signature verified: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)")
+
     if not mt5.initialize():
         logger.critical("MT5 Initialization failed. Sniper cannot proceed.")
         sys.exit(1)
@@ -427,7 +427,7 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
                 return False
             logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| + 0.05 ({old_delta + 0.05:.4f}). Authorized for Mutual Exclusion.")
 
-    # D. MCP Risk Agent Check (v22.8)
+    # D. MCP Risk Agent Check (v22.8) — v26.9 Circuit Breaker (Bug #7)
     try:
         risk_url = "http://localhost:8001/check_trade"
         payload = {
@@ -437,7 +437,7 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
             "xgb_p": xgb_p,
             "ddqn_p": ddqn_p
         }
-        resp = risk_session.post(risk_url, json=payload, timeout=0.5)
+        resp = risk_session.post(risk_url, json=payload, timeout=2.0)
         if resp.status_code == 200:
             data = resp.json()
             if not data.get("allow"):
@@ -449,10 +449,13 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
             logger.warning(f"[{symbol}] Risk Agent 403 VETO: {err_reason}")
             return False
         else:
-            logger.error(f"[{symbol}] MCP Risk Agent unavailable (Status {resp.status_code}). Failing safe.")
+            logger.critical(f"[{symbol}] [RISK AGENT FAILURE] Unexpected status {resp.status_code}. Trade REJECTED (circuit breaker).")
             return False
+    except requests.exceptions.Timeout:
+        logger.critical(f"[{symbol}] [RISK AGENT FAILURE] Timeout after 2s. Trade REJECTED (circuit breaker).")
+        return False
     except Exception as e:
-        logger.error(f"[{symbol}] MCP Risk Agent Connection Error: {e}. Failing safe.")
+        logger.critical(f"[{symbol}] [RISK AGENT FAILURE] Connection Error: {e}. Trade REJECTED (circuit breaker).")
         return False
 
     # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
@@ -750,7 +753,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                         positions = mt5.positions_get(ticket=ticket)
                         if positions:
                             pos = positions[0]
-                            alpha_features = {}
+                            alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': signal.vpin if hasattr(signal, 'vpin') else 0.0}
                             info = mt5.symbol_info(pos.symbol)
                             if info:
                                 # Directive 1: Implement the Dynamic ATR Floor (v25.0)
@@ -807,9 +810,9 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                                     active_regime = str(active_regime).upper()
 
                                 if active_regime == "RANGE":
-                                    # Squash the TP target for mean-reverting chop environments
-                                    # Aim for 0.4x to 0.8x ATR instead of 2.0x to 6.0x
-                                    tp_dist = tp_dist * 0.15 
+                                    # v26.9 Bug #6 fix: 0.15x placed TP inside spread, guaranteeing loss.
+                                    # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
+                                    tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
                                 elif active_regime == "HIGH_VOLATILITY":
                                     # Widen slightly to avoid noise
                                     tp_dist = tp_dist * 1.2
@@ -918,10 +921,16 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
         if res.retcode == mt5.TRADE_RETCODE_DONE:
             ticket = getattr(res, 'order', getattr(res, 'deal', 0))
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
+
+            # v26.9 Bug #9: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
             positions = mt5.positions_get(ticket=ticket)
             if positions:
                 pos = positions[0]
-                alpha_features = {}
+                if AGENT_SIGNATURE not in (pos.comment or ""):
+                    logger.warning(f"[POST-EXEC VERIFY] Ticket #{ticket} comment mismatch: expected '{AGENT_SIGNATURE}', got '{pos.comment}'. Possible broker truncation or injection.")
+                else:
+                    logger.info(f"[POST-EXEC VERIFY] Ticket #{ticket} comment verified: '{pos.comment}'")
+                alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin_val}
                 info = mt5.symbol_info(pos.symbol)
                 if info:
                     # Directive 1: Implement the Dynamic ATR Floor
@@ -977,9 +986,9 @@ def perform_mt5_trade(symbol, direction, lot, conviction):
                         active_regime = str(active_regime).upper()
 
                     if active_regime == "RANGE":
-                        # Squash the TP target for mean-reverting chop environments
-                        # Aim for 0.4x to 0.8x ATR instead of 2.0x to 6.0x
-                        tp_dist = tp_dist * 0.15 
+                        # v26.9 Bug #6 fix: 0.15x placed TP inside spread, guaranteeing loss.
+                        # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
+                        tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
                     elif active_regime == "HIGH_VOLATILITY":
                         # Widen slightly to avoid noise
                         tp_dist = tp_dist * 1.2

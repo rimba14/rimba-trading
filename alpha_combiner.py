@@ -42,13 +42,26 @@ class AlphaCombiner:
         standardized_signals = {sym: {} for sym in signals_dict}
         
         for agent in agents:
-            raw_scores = [signals_dict[s][agent] for s in signals_dict]
+            raw_scores = np.array(
+                [float(signals_dict[s].get(agent, np.nan) or np.nan) for s in signals_dict],
+                dtype=np.float64,
+            )
             mean_a = np.nanmean(raw_scores)
-            std_a = np.nanstd(raw_scores) + 1e-9
+            std_a = np.nanstd(raw_scores)
+            # Guard: if all values are NaN or std is zero, skip normalization
+            if np.isnan(mean_a) or std_a < 1e-12:
+                for sym in signals_dict:
+                    standardized_signals[sym][agent] = 0.0
+                continue
             
             for sym in signals_dict:
-                # Equation 3: Y(i,s) = X(i,s) / sigma
-                standardized_signals[sym][agent] = (signals_dict[sym][agent] - mean_a) / std_a
+                raw_val = signals_dict[sym].get(agent, None)
+                val = float(raw_val) if raw_val is not None else np.nan
+                if np.isnan(val):
+                    standardized_signals[sym][agent] = 0.0
+                else:
+                    # Equation 3: Y(i,s) = (X(i,s) - mean) / sigma
+                    standardized_signals[sym][agent] = (val - mean_a) / std_a
         
         # 2. Cross-Sectional Demeaning (Eq 5)
         # Removes market-wide bias from normalized signals
