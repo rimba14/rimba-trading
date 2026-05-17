@@ -1,8 +1,8 @@
 # Sentinel Master Prompt
-# v28.2 - Ironclad CADES (Microstructure Resilience)
+# v28.3 - Ironclad CADES (Feature Integrity)
 
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.2 - Ironclad CADES: Microstructure Resilience) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.2. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.3 - Ironclad CADES: Feature Integrity) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.3. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
@@ -17,6 +17,7 @@ WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise]
 * Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.
 * Combiner Integrity: Cross-sectional asset scoring MUST utilize NaN-safe math (np.nanmean, np.nanstd).
 * Toxicity Blindness Veto: The system MUST evaluate VPIN/Order-Flow Toxicity. Trades firing into highly adversarial flow must be rejected.
+* Feature Integrity Assertion Shield: All engineered features must pass through a strict mathematical bound assertion gate prior to consumption. RSI must be strictly bounded in [0, 100], ATR must be strictly positive, BB_Width non-negative, with zero NaNs permitted, and Order Flow Entropy must reside strictly within [0, 1] to prevent silent ML hallucinations.
 
 WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.

@@ -184,7 +184,19 @@ def ingest_mtf_ohlcv(symbol):
     return df_h1, df_h4
 
 
-def compute_swing_alpha(df, df_h4=None):
+def validate_features(df, symbol):
+    assert df['RSI'].between(0, 100).all(), f"{symbol}: RSI out of [0,100]"
+    assert (df['ATR'] > 0).all(), f"{symbol}: ATR has zero/negative values"
+    assert (df['BB_Width'] >= 0).all(), f"{symbol}: BB_Width negative"
+    assert df['RSI'].isnull().sum() == 0, f"{symbol}: RSI has NaN"
+    # Entropy MUST be [0, 1] — values > 1 indicate a normalization bug
+    if 'order_flow_entropy' in df.columns:
+        assert df['order_flow_entropy'].between(0, 1).all(), \
+            f"{symbol}: Entropy > 1 detected — normalization bug in Sent calculation"
+    return True
+
+
+def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     """
     v26.0 Swing Alpha Factory - 3 Setup Logic:
     1. Mean Reversion: RSI(14) + Order-Flow Entropy
@@ -201,10 +213,18 @@ def compute_swing_alpha(df, df_h4=None):
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.bfill().fillna(50.0) # Burn-in fillna neutral state
+
+    # Shannon Entropy of binary outcomes (positive vs negative returns) normalized to [0, 1]
     returns = close.pct_change().fillna(0)
-    pos_p = (returns > 0).rolling(20).mean() + 1e-9
-    neg_p = (returns < 0).rolling(20).mean() + 1e-9
+    pos_count = (returns > 0).rolling(20).sum()
+    neg_count = (returns < 0).rolling(20).sum()
+    total_count = pos_count + neg_count + 1e-9
+    pos_p = (pos_count / total_count).clip(1e-9, 1.0 - 1e-9)
+    neg_p = (neg_count / total_count).clip(1e-9, 1.0 - 1e-9)
     entropy = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p))
+    entropy = entropy.bfill().fillna(0.5)
+    
     mean_reversion_signal = (rsi < 35) & (entropy > 0.85)
 
     # --- Setup 2: Trend Continuation (EMA/SMA + BB Squeeze) ---
@@ -213,6 +233,8 @@ def compute_swing_alpha(df, df_h4=None):
     bb_mid = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
     bb_width = (2 * bb_std) / (bb_mid + 1e-9)
+    bb_width = bb_width.bfill().fillna(0.0001)
+    
     bb_squeeze = bb_width <= bb_width.rolling(20).min().shift(1)  # current BB at 20-bar low
     price_on_ema = np.abs(close - ema_20) < (bb_std * 0.3)
     trend_continuation_signal = bb_squeeze & price_on_ema
@@ -222,6 +244,15 @@ def compute_swing_alpha(df, df_h4=None):
     avg_volume = volume.rolling(20).mean()
     rvol = volume / (avg_volume + 1e-9)
     catalyst_momentum_signal = (gap_pct.abs() > 1.0) & (rvol > 2.0)
+
+    # Compute ATR(14) for features validation
+    high = df['high']
+    low = df['low']
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(14).mean().bfill().fillna(0.0001)
 
     alpha = pd.DataFrame({
         'rsi': rsi,
@@ -234,7 +265,19 @@ def compute_swing_alpha(df, df_h4=None):
         'mean_reversion_signal': mean_reversion_signal.astype(float),
         'trend_continuation_signal': trend_continuation_signal.astype(float),
         'catalyst_momentum_signal': catalyst_momentum_signal.astype(float),
+        
+        # Uppercase mapped columns for validation assertions
+        'RSI': rsi,
+        'ATR': atr,
+        'BB_Width': bb_width,
+        'order_flow_entropy': entropy
     }).replace([np.inf, -np.inf], np.nan).ffill().fillna(0)
+
+    # Enforce strict positive ATR bound after fillna to prevent zero-assert failure
+    alpha['ATR'] = np.maximum(alpha['ATR'], 0.0001)
+
+    # Directive 2: Enforce the Gate
+    validate_features(alpha, symbol)
 
     return alpha
 

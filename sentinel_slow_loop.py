@@ -607,7 +607,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             from feature_engineering import ingest_mtf_ohlcv, compute_swing_alpha
             df_h1, df_h4 = ingest_mtf_ohlcv(symbol)
             if df_h1 is not None and len(df_h1) >= 50:
-                swing_alpha = compute_swing_alpha(df_h1, df_h4)
+                swing_alpha = compute_swing_alpha(df_h1, df_h4, symbol=symbol)
                 latest_swing = swing_alpha.iloc[-1]
                 logging.info(
                     f"[v27.0 SWING ALPHA] {symbol} | "
