@@ -71,6 +71,55 @@ def compute_strategy_metrics(trades_df, initial_capital=10000):
     }
     return metrics
 
+def monte_carlo_path_stress(pnl_array, initial_capital=10000, n_simulations=1000):
+    """
+    SRE Patched: Shuffles trade order to stress-test Maximum Drawdown and Calmar Ratio.
+    Proves if the strategy survives 'bad luck' sequencing.
+    """
+    if len(pnl_array) < 10:
+        return {"pass": False, "reason": "Not enough trades"}
+
+    def calc_max_dd(pnl_seq):
+        equity = initial_capital + np.cumsum(pnl_seq)
+        peak = np.maximum.accumulate(equity)
+        drawdown = (equity - peak) / peak
+        return abs(drawdown.min())
+
+    # Calculate baseline drawdown
+    original_mdd = calc_max_dd(pnl_array)
+    
+    # Run Monte Carlo permutations
+    shuffled_mdds = []
+    for _ in range(n_simulations):
+        shuffled = np.random.permutation(pnl_array)
+        shuffled_mdds.append(calc_max_dd(shuffled))
+        
+    shuffled_mdds = np.array(shuffled_mdds)
+    
+    # If the original DD is worse than the 95th percentile of random shuffles,
+    # the original backtest sequence was actually UNUSUALLY unlucky (Robust).
+    # If the original DD is better than the 5th percentile, the backtest was UNUSUALLY lucky (Fragile).
+    
+    median_shuffled_dd = np.median(shuffled_mdds)
+    worst_shuffled_dd = np.max(shuffled_mdds)
+    percentile = (shuffled_mdds < original_mdd).mean() 
+    
+    print(f"Original Max DD:      {original_mdd:.2%}")
+    print(f"Median Shuffled DD:   {median_shuffled_dd:.2%}")
+    print(f"Worst Case Sim DD:    {worst_shuffled_dd:.2%}")
+    print(f"Luck Percentile:      {percentile:.1%} (Lower = Luckier backtest sequence)")
+    
+    # Veto if the backtest DD was artificially lucky (bottom 10% of possible outcomes)
+    # OR if the median shuffled DD blows past our 15% hard limit.
+    passed = percentile > 0.10 and median_shuffled_dd < 0.15
+    
+    return {
+        "pass": passed,
+        "original_mdd": original_mdd,
+        "median_sim_mdd": median_shuffled_dd,
+        "worst_sim_mdd": worst_shuffled_dd
+    }
+
 def fetch_data():
     """Fetches H1 historical candles for EURUSD or falls back to high-fidelity synthetic candles if offline."""
     df = None
@@ -240,16 +289,22 @@ def main():
     print(f" Reality-Tax Sortino     : {sortino_ratio:.4f}")
     print(f" Reality-Tax Calmar      : {calmar_ratio:.4f}")
     
-    # Sharpe Ratio threshold gate
-    if sharpe_ratio < 1.0:
-        print("\n [CRITICAL WARNING] [StrategyFailed] Strategy failed the Reality Tax!")
-        print("  Sharpe Ratio is below the institutional requirement of 1.0.")
-        print("  Wall 0 Veto active. Backtest rejected due to high friction sensitivity.")
+    print("\n Running Monte Carlo path dependency stress test...")
+    mc_results = monte_carlo_path_stress(trades_df['pnl_net'].values, initial_capital=10000)
+    
+    # Sharpe Ratio and Monte Carlo threshold gate
+    if sharpe_ratio < 1.0 or not mc_results.get("pass", True):
+        print("\n [CRITICAL WARNING] [StrategyFailed] Strategy failed backtest validation gates!")
+        if sharpe_ratio < 1.0:
+            print("  Sharpe Ratio is below the institutional requirement of 1.0.")
+        if not mc_results.get("pass", True):
+            print("  Monte Carlo Path Stress Veto: Strategy is fragile or path-dependent (median MDD >= 15% or sequence was unusually lucky).")
+        print("  Wall 0 Veto active. Backtest rejected.")
         # Raise standard warning format
         import warnings
-        warnings.warn("Strategy failed the Reality Tax Sharpe ratio threshold (< 1.0)!", StrategyFailed)
+        warnings.warn("Strategy failed backtest validation gates!", StrategyFailed)
     else:
-        print("\n [PASS] Strategy survives the Reality Tax with institutional Sharpe >= 1.0!")
+        print("\n [PASS] Strategy survives the Reality Tax & Monte Carlo Path Stress gates!")
         
     print("==================================================")
     print(" [OK] INSTITUTIONAL BACKTEST SIMULATION COMPLETE")
