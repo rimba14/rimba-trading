@@ -8,7 +8,7 @@ import logging
 PROJECT_ROOT = r"C:\Sentinel_Project"
 VENV_PYTHON = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
 
-# Define tasks: (Script Path, Name) - v27.0 Active Pipeline
+# Define tasks: (Script Path, Name) - v28.1 Active Pipeline
 TASKS = [
     (os.path.join(PROJECT_ROOT, "fastapi_sniper.py"), "EXECUTION_SNIPER"),
     (os.path.join(PROJECT_ROOT, "profit_manager.py"), "PROFIT_MANAGER"),
@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 
 def exorcise_legacy_processes():
-    """Rule 1 & 2: Singular RAM Dominance & Ruthless Purge (v27.0)"""
+    """Rule 1 & 2: Singular RAM Dominance & Ruthless Purge (v28.1)"""
     import psutil
     target_scripts = ["fastapi_sniper.py", "profit_manager.py", "oxford_orchestrator.py", "risk_agent.py", "sentinel_slow_loop.py"]
     logging.info("[PHASE 0] Starting Environment Exorcism...")
@@ -57,7 +57,7 @@ def exorcise_legacy_processes():
             continue
 
 def verify_ports_unbound():
-    """Rule 3: Port Liberation (v27.0) — with 10s retry grace period"""
+    """Rule 3: Port Liberation (v28.1) — with 10s retry grace period"""
     import socket
     import time
     import psutil
@@ -103,7 +103,7 @@ def launch_process(script_path, name):
     return subprocess.Popen([VENV_PYTHON, script_path], cwd=PROJECT_ROOT, env=env)
 
 def main():
-    logging.info("ADAPTIVE SENTINEL v27.0 Ironclad CADES Supervisor Active.")
+    logging.info("ADAPTIVE SENTINEL v28.1 Ironclad CADES Supervisor Active.")
     
     # Phase 0: Pre-Flight Environment Exorcism
     exorcise_legacy_processes()
