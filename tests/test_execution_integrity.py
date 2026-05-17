@@ -36,3 +36,36 @@ def test_trade_comment_template():
     )[:31]
     assert "v27.0" in comment
     assert len(comment) <= 31  # MT5 broker comment field limit
+
+def test_capital_wall_circuit_breaker_fail_closed():
+    from capital_wall import CapitalWall, TradeRejected
+    class DummySignal:
+        symbol = "EURUSD"
+        xgb_p = 0.5
+        ddqn_p = 0.5
+    
+    # Point to a completely bogus port/URL to force a connection exception
+    wall = CapitalWall(risk_agent_url="http://localhost:9999/check_trade")
+    
+    with pytest.raises(TradeRejected) as excinfo:
+        wall.check_risk_agent(DummySignal(), 0.1, 1.1000)
+    
+    assert "[WALL4-FAIL] Risk Agent circuit breaker tripped" in str(excinfo.value)
+
+def test_capital_wall_ex_ante_blackout():
+    from capital_wall import CapitalWall, TradeRejected
+    class DummySignal:
+        symbol = "USDJPY"
+    
+    wall = CapitalWall()
+    # Mock check_upcoming_tier1_events to return True to guarantee test determinism.
+    import agents.risk_agent
+    original_check = agents.risk_agent.check_upcoming_tier1_events
+    try:
+        agents.risk_agent.check_upcoming_tier1_events = lambda sym, threshold_hours: (True, "FOMC Rate Decision in 2.0h")
+        with pytest.raises(TradeRejected) as excinfo:
+            wall.check_event_horizon_blackout(DummySignal())
+        assert "[WALL5-FAIL] Tier-1 event within 24h" in str(excinfo.value)
+    finally:
+        agents.risk_agent.check_upcoming_tier1_events = original_check
+

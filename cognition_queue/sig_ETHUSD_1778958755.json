@@ -1,0 +1,11 @@
+{
+  "symbol": "ETHUSD",
+  "direction": "BUY",
+  "conviction": 0.707089,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 12.319999999999936,
+  "timestamp": 1778958738,
+  "version": "v24.3-UNCHAINED"
+}

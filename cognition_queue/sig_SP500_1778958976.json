@@ -1,0 +1,11 @@
+{
+  "symbol": "SP500",
+  "direction": "BUY",
+  "conviction": 0.6725,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 27.050000000000182,
+  "timestamp": 1778958960,
+  "version": "v24.3-UNCHAINED"
+}

@@ -976,6 +976,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             # Direction: BUY for P > 0.5, SELL for P < 0.5 — always from raw meta_p
             signal_dir = "BUY" if meta_p > 0.5 else "SELL"
             
+            signal_type = "MEAN_REVERSION" if w_range > w_trend else "MOMENTUM"
             push_to_orchestrator({
                 "symbol": symbol,
                 "direction": signal_dir,
@@ -985,7 +986,8 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 "hmm_state": hmm_state,
                 "atr": float(atr),
                 "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                "version": "v24.3-UNCHAINED",
+                "version": "v28.0-TRADE-QUALITY",
+                "signal_type": signal_type
             })
             logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
         else:

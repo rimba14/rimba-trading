@@ -1,33 +1,37 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v26.7 - Ironclad CADES: Consensus Purity) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v26.7. This is a CODE FREEZE. Do not modify core logic without explicit user authorization.
+# Sentinel Master Prompt
+# v28.0 - Ironclad CADES (Trade Quality Edition)
 
-Phase 0: Pre-Flight Environment Exorcism [LOCKED]
-* Rule 1: Singular RAM Dominance. Before any Sentinel microservice (Slow Loop, FastAPI Sniper, Risk Agent, Profit Manager) is launched, the Orchestrator MUST perform an OS-level sweep (via `psutil`, `tasklist`, or `pkill`).
-* Rule 2: The Ruthless Purge. Any existing Python process matching the names of the Sentinel daemons MUST be forcefully terminated (`SIGKILL`). 
-* Rule 3: Port Liberation. The system must verify that Ports 8000 and 8001 are strictly unbound before initiating the Cold Boot sequence. Orphaned "Zombie" processes are considered a critical systemic threat and must be eradicated prior to trading.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.0 - Ironclad CADES: Trade Quality Edition) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.0. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
-Phase 1: Architecture & Atomic State [LOCKED]
-* Atomic State: Double Mutex Lock via native MT5 Ledger history. The Post-Exit Embargo (Amnesia Lock) is strictly set to 86,400 seconds (24 Hours) to prevent swing-trade noise chop.
-* Data Pipeline: Multi-Timeframe OHLCV Ingestion (100 H1 bars + 100 H4 bars). All dataframes MUST undergo strict `NaN` and `inf` scrubbing (`ffill().fillna(0)`) prior to inference.
+WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
+* Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
+* Port Liberation: Ports 8000 and 8001 must be strictly unbound.
+* Universal UTF-8: All logs MUST use logger_config.py. Set PYTHONIOENCODING=utf-8 and sys.stdout.reconfigure(encoding="utf-8").
+* Absolute Signature Mandate: Hardcoded versions are forbidden. Dynamically import AGENT_SIGNATURE from sentinel/version_manifest.py. MT5 comments MUST be < 31 chars and match the signature exactly.
+* CI/CD Self-Cert: self_cert.py must pass; git pre-commit hooks must block legacy strings.
 
-Phase 2 & 3: Causal Features & Subquadratic Cognition [LOCKED]
-* Swing Alpha Factory: Calculates Mean Reversion (RSI < 35 / > 65 + Entropy), Trend Continuation (EMA/SMA alignment + BB Squeeze), and Catalyst Momentum (Gap % + RVOL).
-* Agent Quarantine (Consensus Purity): Uninitialized or untrained agents outputting default weights (0.50) artificially dilute ensemble conviction. All models MUST pass through the `agent_quarantine.py` registry. Any agent failing the `is_initialized` or `MIN_TRAINING_EPISODES` checks must be stripped from the `alpha_combiner` before final probability calculation.
-* ML Bypass / Heuristic Override: If H1/H4 data triggers a feature dimension mismatch in legacy ML models, the system MUST catch the exception and route the raw Swing Alpha Factory signals directly to the MixTS Execution Router via hardcoded conviction scores.
+WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise]
+* Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the agent_quarantine.py registry.
+* Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.
+* Combiner Integrity: Cross-sectional asset scoring MUST utilize NaN-safe math (np.nanmean, np.nanstd).
+* Toxicity Blindness Veto: The system MUST evaluate VPIN/Order-Flow Toxicity. Trades firing into highly adversarial flow must be rejected.
 
-Phase 4: Dynamic Strategy Routing & Gating [LOCKED]
-* Sealed Hysteresis: $0.40 \le P \le 0.60$ is HARD BLOCKED.
-* Absolute Conviction Mapping: Signal dispatch must evaluate absolute divergence from neutral: `abs(P - 0.5) + 0.5 >= EPISTEMIC_GATE` to ensure high-conviction SELL signals route correctly.
-* Cognitive Dissonance: Veto threshold is locked at `0.55`.
+WALL 3: REGIME ALIGNMENT [Anti-Decay]
+* Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.
+* Regime Misalignment Veto: The strategy must mathematically align with the environment. Mean-reversion signals in a TREND regime, or Momentum signals in a RANGE regime, MUST be explicitly rejected by the execution bridge.
+* Heuristic Override: If legacy ML models crash due to H1/H4 dimension mismatch, route raw Swing Alpha signals directly to execution via hardcoded scores.
 
-Phase 5: Absolute SL/TP Mandate & CADES Execution [LOCKED]
-* Rule 1: ZERO NAKED TRADES (Atomic Execution & Kill Switch). All entries MUST use ECN 2-Step Execution wrapped in an atomic retry block. If the `TRADE_ACTION_SLTP` modification fails after 3 immediate retries, the system MUST instantly liquidate the position via Market Close. Furthermore, the Profit Manager MUST enforce a Hard Kill Switch: any open position found with `SL == 0` for more than 10 seconds is deemed unrecoverable and must be aggressively liquidated.
-* Rule 2: Mathematical Failsafes, Stoplevel & Spread Armor. The system MUST calculate real-time spread (`ask - bid`). The baseline risk distance must enforce a Spread-Aware Safety Floor: `true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread)`. MT5 SL = `max(3.0 * true_atr, distance_to_Fractal_SL)`. CRITICAL: NO stop-loss or take-profit may be dispatched without passing through a strict normalization wrapper that actively queries and enforces `info.trade_stops_level` and `info.trade_tick_size`.
-* Rule 3: ATR-Adjusted Position Sizing. Lot size must inversely scale with stop-loss width. `max_dollar_risk = Account Balance * 0.02`. Final lot size is the lesser of the Kelly-Fraction lot and the ATR-Adjusted lot.
-* Rule 4: The Carry Tax (Swap Filter). The Risk Agent must query `swap_long` and `swap_short`. If the daily overnight carry cost represents a $>10\%$ drag on the projected Zone 2 Take-Profit over a 7-day hold, the trade must be vetoed (Retcode 403).
-* Rule 5: Swing-Calibrated Adaptive Exits.
-   - Zone 1 (Risk Halving): $+2.5 \text{ ATR}$.
-   - Zone 2 (Scale-Out/BE): $+4.0 \text{ ATR}$ (Discounted 15% during extreme Order-Flow Entropy $S_{ent} > 0.90$).
-   - Zone 3 (Parabolic Trail): $+5.0 \text{ ATR}$.
-   - True Swing Time-Stop: Dead-money exit triggers after 72 H1 Candles. Non-crypto assets MUST pause the countdown from Friday 23:55 to Monday 00:15 Broker Time.
-* Rule 6: Ex-Ante Macro Blackouts. The Risk Agent must query upcoming macro calendars. No new trades may be opened within 24 hours of a Tier-1 event/Earnings. Active trades within 12 hours of an event must automatically scale out 50% and move stops to breakeven.
+WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
+* ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries). 
+* Naked Kill Switch: If TRADE_ACTION_SLTP fails 3 times, OR Profit Manager finds SL == 0 for > 10 seconds, INSTANTLY liquidate via Market Close.
+* Risk Agent Circuit Breaker: If Port 8001 times out, the Fast Loop MUST explicitly reject the trade.
+* Spread-Aware Armor: Baseline risk distance MUST enforce a safety floor: true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread).
+* Fractal Anchoring: MT5 SL = max(3.0 * true_atr, distance_to_Fractal_SL). All SL/TP must pass a strict trade_tick_size normalization wrapper.
+* ATR-Adjusted Sizing: Max dollar risk = 2%. Final lot is the lesser of the Kelly-Fraction lot and the ATR-Adjusted lot.
+
+WALL 5: EX-ANTE MACRO SHIELD [Anti-Shock]
+* The Carry Tax: Risk Agent must query swap_long/short. Veto the trade if the overnight carry cost > 10% drag on the Zone 2 TP over 7 days.
+* Ex-Ante Event Blackout: Query macro/earnings calendars. NO new trades within 24 hours of a Tier-1 event. 
+* 12-Hour Event Horizon: Active trades within 12 hours of a Tier-1 event must scale out 50% and move SL to breakeven.
+* True Swing Time-Stop: Dead-money exit after 72 H1 Candles (pause countdown Friday 23:55 to Monday 00:15). Adaptive exits at Zone 1 (+2.5 ATR), Zone 2 (+4.0 ATR), Zone 3 (+5.0 ATR Trail).

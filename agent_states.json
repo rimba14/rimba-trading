@@ -1,0 +1,37 @@
+{
+  "hmm": {
+    "is_initialized": true,
+    "training_episodes": null,
+    "version": null,
+    "last_updated": null,
+    "notes": "HMM regime model"
+  },
+  "finemotion": {
+    "is_initialized": true,
+    "training_episodes": null,
+    "version": null,
+    "last_updated": null,
+    "notes": "FinEmotion NLP sentiment"
+  },
+  "deep_research": {
+    "is_initialized": true,
+    "training_episodes": null,
+    "version": null,
+    "last_updated": null,
+    "notes": "Macro research daemon"
+  },
+  "ddqn": {
+    "is_initialized": false,
+    "training_episodes": 0,
+    "version": null,
+    "last_updated": null,
+    "notes": "v26.4: uninitialized \u2014 quarantined"
+  },
+  "rl_agent": {
+    "is_initialized": false,
+    "training_episodes": 0,
+    "version": null,
+    "last_updated": null,
+    "notes": "RL sub-agent \u2014 not yet trained"
+  }
+}

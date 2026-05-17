@@ -1,0 +1,11 @@
+{
+  "symbol": "EURUSD",
+  "direction": "SELL",
+  "conviction": 0.316203,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0012964285714285317,
+  "timestamp": 1778958937,
+  "version": "v24.3-UNCHAINED"
+}

@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 import requests
 import numpy as np
 from constants import AGENT_SIGNATURE
+from capital_wall import CapitalWall, TradeRejected
 
 risk_session = requests.Session()
 # Load constitution/config
@@ -202,6 +203,7 @@ class TradeSignal(BaseModel):
     timestamp: int
     reasoning: str = ""
     vpin: float = 0.0
+    signal_type: str = "UNKNOWN"
 
 @app.on_event("startup")
 def startup_event():
@@ -263,10 +265,19 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (24-hour Embargo)")
         raise HTTPException(status_code=429, detail="Amnesia Lock Active (24h)")
 
-    # 2c. Sealed Hysteresis (v27.0 Phase 4: HARD BLOCK 0.40 <= P <= 0.60)
+    # 2c. Sealed Hysteresis (v28.0 Phase 4: HARD BLOCK 0.40 <= P <= 0.60)
     if 0.40 <= signal.conviction <= 0.60:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Sealed Hysteresis Block (0.40 <= {signal.conviction} <= 0.60)")
         raise HTTPException(status_code=403, detail="Sealed Hysteresis Block")
+
+    # WALL 3: Regime Alignment Veto (v28.0)
+    sig_type_upper = signal.signal_type.upper()
+    if signal.hmm_state == "RANGE" and ("MOMENTUM" in sig_type_upper or "BREAKOUT" in sig_type_upper):
+        logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. (RANGE vs {signal.signal_type})")
+        raise HTTPException(status_code=403, detail="Regime Misalignment (RANGE vs Momentum)")
+    if signal.hmm_state in ["BULL", "BEAR", "TREND"] and "MEAN_REVERSION" in sig_type_upper:
+        logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. ({signal.hmm_state} vs {signal.signal_type})")
+        raise HTTPException(status_code=403, detail="Regime Misalignment (TREND vs Mean-Reversion)")
 
     # 2c. Pre-Trade Toxicity Gating (VPIN)
     vpin_val = getattr(signal, 'vpin', 0.0)
@@ -280,7 +291,7 @@ async def execute_trade_endpoint(signal: TradeSignal):
             pass
             
     if vpin_val > 0.750:
-        logger.warning(f"[{signal.symbol}] Signal REJECTED: Order-Flow Toxicity Breached (VPIN={vpin_val:.3f} > 0.750). Embargoing entry.")
+        logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 6: Toxicity Blindness. Adversarial order flow detected. (VPIN={vpin_val:.3f})")
         raise HTTPException(status_code=429, detail="Order-flow toxicity threshold breached (VPIN > 0.750)")
 
     # 3. Sizing (Calculate before Risk Gates for accurate validation)
@@ -293,6 +304,14 @@ async def execute_trade_endpoint(signal: TradeSignal):
     tick = mt5.symbol_info_tick(signal.symbol)
     price = tick.ask if signal.direction == "BUY" else tick.bid
     incoming_notional = lot_size * price
+
+    # v28.0 Trade Quality: Enforce CapitalWall Security Gates (Wall 4 & 5)
+    wall = CapitalWall()
+    try:
+        lot_size = wall.run(signal, lot_size, price)
+    except TradeRejected as e:
+        logger.warning(f"[{signal.symbol}] [CAPITAL WALL VETO] Trade aborted: {e}")
+        raise HTTPException(status_code=403, detail=str(e))
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
     if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
