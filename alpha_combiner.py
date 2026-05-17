@@ -67,8 +67,11 @@ class AlphaCombiner:
         # Removes market-wide bias from normalized signals
         final_scores = {}
         
-        signals_matrix = np.array([list(standardized_signals[s].values()) for s in standardized_signals])
-        cross_means = np.nanmean(signals_matrix, axis=1)
+        cross_means = []
+        for s in standardized_signals:
+            vals = [float(v) for v in standardized_signals[s].values() if not np.isnan(v)]
+            cross_means.append(np.mean(vals) if vals else 0.0)
+        cross_means = np.array(cross_means)
         
         for i, sym in enumerate(standardized_signals):
             sym_scores = list(standardized_signals[sym].values())

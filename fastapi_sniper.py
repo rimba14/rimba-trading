@@ -54,6 +54,7 @@ _LOG_FMT = '%(asctime)s [HTTP_SNIPER] %(message)s'
 # v27.0: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
 logger = logging.getLogger("HttpSniper")
 logger.setLevel(logging.INFO)
+logger.propagate = False
 if not logger.handlers:
     fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
     fh.setFormatter(logging.Formatter(_LOG_FMT))
@@ -343,7 +344,19 @@ async def execute_trade_endpoint(signal: TradeSignal):
                     execute_exit(p.ticket, p.symbol, "Mutual Excl")
 
     # 5. Execution
-    success = perform_mt5_trade(signal.symbol, signal.direction, lot_size, signal.conviction, vpin=vpin_val)
+    alpha_features = {
+        "P": signal.conviction,
+        "vpin": vpin_val,
+        "regime": signal.hmm_state
+    }
+    success = perform_mt5_trade(
+        signal.symbol,
+        signal.direction,
+        lot_size,
+        signal.conviction,
+        vpin=vpin_val,
+        alpha_features=alpha_features
+    )
     if success:
         return {"status": "success", "symbol": signal.symbol, "lot": lot_size}
     else:
@@ -671,7 +684,11 @@ def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> 
         distance = max(0.0, fractal_sl - tick.bid)
         return distance
 
-def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0):
+def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
+    if alpha_features is None:
+        alpha_features = {'P': conviction, 'vpin': vpin}
+    assert len(alpha_features) > 0, "alpha_features must be populated"
+    
     try:
         tick = mt5.symbol_info_tick(symbol)
         if not tick: 
@@ -830,8 +847,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0):
 
                                 if active_regime == "RANGE":
                                     # v27.0: 1.5x floor to ensure TP clears the spread in mean-reverting chop.
-                                    # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
-                                    tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
+                                    tp_dist = max(tp_dist * 0.45, true_atr * 0.8)
                                 elif active_regime == "HIGH_VOLATILITY":
                                     # Widen slightly to avoid noise
                                     tp_dist = tp_dist * 1.2
@@ -942,6 +958,15 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0):
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
 
             # v27.0: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
+            deals = mt5.history_deals_get(ticket=ticket)
+            if deals:
+                deal = deals[0]
+                deal_comment = deal.comment or ""
+                if AGENT_SIGNATURE not in deal_comment:
+                    logger.warning(f"[POST-EXEC VERIFY] Deal #{ticket} comment mismatch: expected '{AGENT_SIGNATURE}', got '{deal_comment}'.")
+                else:
+                    logger.info(f"[POST-EXEC VERIFY] Deal #{ticket} comment verified: '{deal_comment}'")
+                    
             positions = mt5.positions_get(ticket=ticket)
             if positions:
                 pos = positions[0]
@@ -1005,9 +1030,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0):
                         active_regime = str(active_regime).upper()
 
                     if active_regime == "RANGE":
-                        # v27.0: 1.5x floor to ensure TP clears the spread in mean-reverting chop.
-                        # Use 1.5x floor to ensure TP clears the spread in mean-reverting chop.
-                        tp_dist = max(tp_dist * 1.5, current_spread * 3.0)
+                        # v27.0: Updated to mathematically safe calculation
+                        tp_dist = max(tp_dist * 0.45, true_atr * 0.8)
                     elif active_regime == "HIGH_VOLATILITY":
                         # Widen slightly to avoid noise
                         tp_dist = tp_dist * 1.2
