@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.4 - Ironclad CADES: Model Drift Telemetry) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.4. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.5 - Ironclad CADES: HMM Calibration) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.5. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
@@ -11,6 +11,7 @@ WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 
 WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
 * Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals.
+* HMM Calibration Mandate: The HMM Regime Classifier MUST maintain >70% accuracy against structural Ground Truth (ADX > 25). If accuracy decays, autonomous trading must halt for retraining.
 * Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR, Entropy clamped to [0,1], zero NaNs) via hard assertions before ML inference.
 * Agent Quarantine (Consensus Purity): Uninitialized/untrained agents outputting default weights (0.50) artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
 * Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.

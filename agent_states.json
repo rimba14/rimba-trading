@@ -24,7 +24,7 @@
     "is_initialized": false,
     "training_episodes": 0,
     "version": null,
-    "last_updated": "2026-05-17T18:56:47.074534+00:00",
+    "last_updated": "2026-05-17T19:08:05.422257+00:00",
     "notes": "v27.0: uninitialized \u2014 quarantined"
   },
   "rl_agent": {

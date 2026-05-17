@@ -23,7 +23,7 @@ def _amnesia_lock_clear_for_all_symbols():
     return True
 
 CHECKS = [
-    ("Version string",      lambda: "v28.1" in AGENT_SIGNATURE),
+    ("Version string",      lambda: "v28.5" in AGENT_SIGNATURE),
     ("No legacy ghost",     lambda: "v27" not in AGENT_SIGNATURE and "v26" not in AGENT_SIGNATURE and "v25" not in AGENT_SIGNATURE),
     ("stdout UTF-8",        lambda: sys.stdout.encoding.lower() == "utf-8"),
     ("DDQN checkpoint",     lambda: Path(DDQN_CKPT_PATH).exists() or True), # Relaxed for testing
