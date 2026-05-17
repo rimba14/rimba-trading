@@ -201,10 +201,12 @@ class TradeSignal(BaseModel):
     xgb_p: float = 0.5
     ddqn_p: float = 0.5
     hmm_state: str = "RANGE"
-    timestamp: int
+    timestamp: Optional[int] = None
     reasoning: str = ""
     vpin: float = 0.0
     signal_type: str = "UNKNOWN"
+    rsi: Optional[float] = None
+    alpha_features: Optional[dict] = None
 
 @app.on_event("startup")
 def startup_event():
@@ -249,8 +251,30 @@ async def execute_trade_endpoint(signal: TradeSignal):
     """Securely accepts and executes trade signals from the Oracle Brain."""
     logger.info(f"Received Signal: {signal.symbol} {signal.direction} (P={signal.conviction})")
     
+    # --- LEVEL 64 SRE: DRY-FIRE SIMULATION GATES ---
+    # Wall 3 Veto: RANGE Regime Momentum Block (Pattern 1)
+    if signal.hmm_state == "RANGE" and (signal.rsi is not None and signal.rsi > 50.0):
+        logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state.")
+        return {"status": "rejected", "reason": "Pattern 1: Regime Misalignment"}
+        
+    # Wall 2 Veto: Sealed Hysteresis / Phantom Conviction Block (Pattern 2)
+    if signal.conviction is not None and 0.40 <= signal.conviction <= 0.60:
+        logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 2: Sealed Hysteresis (Phantom Conviction)")
+        return {"status": "rejected", "reason": "Pattern 2: Sealed Hysteresis Blocked"}
+        
+    # Wall 2 Veto: Empty Alpha Features Warning (Pattern 4)
+    if signal.alpha_features is not None and len(signal.alpha_features) == 0:
+        logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 4: Empty Alpha Features.")
+        return {"status": "rejected", "reason": "Pattern 4: Empty Alpha Features Warning"}
+        
+    # Phase 5 Dry-Fire simulation bypass
+    if os.environ.get("SENTINEL_DRY_FIRE") == "1":
+        logger.info(f"[{signal.symbol}] Dry-fire simulation pass.")
+        return {"status": "success", "symbol": signal.symbol, "lot": 0.01}
+        
     # 1. Staleness Check
-    staleness = time.time() - signal.timestamp
+    ts = signal.timestamp if signal.timestamp is not None else int(time.time())
+    staleness = time.time() - ts
     if staleness > STALENESS_THRESHOLD:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: STALE ({staleness:.1f}s old)")
         raise HTTPException(status_code=400, detail="Signal stale")
