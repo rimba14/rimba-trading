@@ -1,10 +1,11 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.7 - Ironclad CADES: Institutional Backtesting) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.7. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.8 - Ironclad CADES: Quantitative Rigor) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.8. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
 * Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
 * The Reality Tax: All backtests MUST mathematically deduct `1.0x spread` for slippage, plus flat commissions, plus daily overnight swap/carry costs. If a strategy lacks edge after the Reality Tax, it is discarded.
 * Zero Look-Ahead Bias: `feature_engineering.py` is strictly forbidden from using negative shifts (`.shift(-n)`), backward fills (`.bfill()`), or future-peeking roll windows. Enforced by static AST scanning.
+* Rigorous Quantitative Metrics: All strategy evaluation metrics MUST use strict institutional mathematics. Returns must be calculated relative to allocated capital (not entry price). Sharpe and Sortino ratios MUST be annualized using correctly resampled daily data, never per-trade data. Drawdown must be calculated geometrically (peak-to-trough percentage). Metric outputs must remain as raw floats for optimization algorithms.
 
 WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Singular RAM Dominance: Orchestrator MUST perform an OS-level sweep to kill legacy daemons before boot.
