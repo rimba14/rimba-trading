@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.14 - Ironclad CADES: Numerical Integrity) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.14. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.15 - Ironclad CADES: Liquidity-Tiered Horizons) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.15. This is a CODE FREEZE. Do not modify core logic without explicit SRE authorization. A trade must survive all FIVE WALLS and DIRECTIVE OMEGA to be executed.
 
 WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
 * Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
@@ -30,7 +30,6 @@ WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
 * Correlated Overconfidence Veto: If >20% of the watchlist generates extreme conviction ($P>0.90$ or $P<0.10$) simultaneously, all signals must be vetoed as a model hallucination. Divergence gating must dynamically expand to 0.40 only during valid extreme conviction events.
 * Strict Numerical Sanitization (The Bounds Mandate): All feature engineering, Z-score standardizations, and mathematical outputs MUST use safe division padding AND strict bounds clipping (e.g., np.clip(val, -3.0, 3.0)). Floating-point precision overflow (e.g., Entropy = 1.00000001) that violates bounds checks will result in immediate execution vetoes.
 
-
 WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.
 * Regime Misalignment Veto: The strategy must mathematically align with the environment. Mean-reversion signals in a TREND regime, or Momentum signals in a RANGE regime, MUST be explicitly rejected by the execution bridge.
@@ -39,7 +38,7 @@ WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Timeframe Matching: Thesis Decay exits are STRICTLY FORBIDDEN before the asset-specific minimum hold time has elapsed (e.g., 12 hours for Swing). Conviction ($P$) scoring for exits MUST match the original entry timeframe (H4 entries use H4 conviction).
 
 WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
-* ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries). 
+* ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries).
 * Naked Kill Switch: If `TRADE_ACTION_SLTP` fails 3 times, OR Profit Manager finds `SL == 0` for > 10 seconds, INSTANTLY liquidate via Market Close.
 * Risk Agent Circuit Breaker (FAIL-CLOSED STRICT): If Port 8001 times out or errors, the Fast Loop MUST explicitly reject the trade by raising `TradeRejected`.
 * Spread-Aware Armor: Baseline risk distance MUST enforce a safety floor: `true_atr = max(H1_atr, price * 0.0025, 1.5 * current_spread)`.
@@ -49,6 +48,21 @@ WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
 WALL 5: EX-ANTE MACRO SHIELD [Anti-Shock]
 * The Carry Tax: Risk Agent must query `swap_long/short`. Veto the trade if the overnight carry cost > 10% drag on the Zone 2 TP over 7 days.
 * Daily Rollover Blackout: NO new trades may be opened between 23:55 and 00:15 Broker Time to avoid catastrophic exotic spread slippage.
-* Ex-Ante Event Blackout (STRICT): Query macro/earnings calendars. NO new trades within 24 hours of a Tier-1 event. Pre-scaling or reducing lot sizes for new entries is explicitly forbidden.
+* Ex-Ante Event Blackout (STRICT): Query macro/earnings calendars. Macro blackouts MUST be liquidity-tiered. Tier 1 assets (Majors/Indices/Gold) require a 12-hour blackout. Tier 2 (Minors) require an 18-hour blackout. Tier 3 (Crosses) default to a 24-hour blackout. A blanket 24-hour global blackout is forbidden as it causes uptime death spirals. Pre-scaling or reducing lot sizes for new entries is explicitly forbidden.
 * 12-Hour Event Horizon: Active trades within 12 hours of a Tier-1 event must scale out 50% and move SL to breakeven.
 * True Swing Time-Stop: Dead-money exit after 72 H1 Candles (pause countdown Friday 23:55 to Monday 00:15). Adaptive exits at Zone 1 (+2.5 ATR), Zone 2 (+4.0 ATR), Zone 3 (+5.0 ATR Trail).
+
+DIRECTIVE OMEGA: IRONCLAD ENTRY VETO FRAMEWORK [v28.14+ SUPREME MANDATE]
+1. ZERO-SIZING ABSOLUTE VETO (Rule 1.1): Small Account Floor is abolished. Rounding 0.0 lot size to 0.1 is strictly forbidden. If risk calculation returns 0.0, trigger ZERO_SIZING_VETO and abort.
+2. AFFORDABILITY PRE-SCREEN (Rule 1.2): Before generating signals for Indices/Metals/Crypto, check affordable_lot = risk_budget / (atr * point_value * 3.0). If < broker_min_lot, trigger AFFORDABILITY_VETO and skip signal generation.
+3. DEGRADED DATA ENTRY VETO (Rule 2.1): If the pipeline triggers M1 fallback, anti-starvation loops, missing ML modules, or Z-score clipping on >3 features, flag data_quality_flag != "PRISTINE" and abort trade.
+4. DIVERGENCE TIGHTENING (Rule 2.2): If tick starvation occurs on any asset in a cycle, dynamically tighten the Wall 2 global divergence gate from 0.30 to 0.15 for all assets in that cycle.
+5. CONVICTION QUALITY GATE (Rule 3.1 & 3.2): Raise P_blend minimums to >= 0.68 (Standard), >= 0.72 (High-Vol Indices/Metals), or >= 0.75 (Degraded Sessions). Reject signals if Kronos < 0.70 OR XGBoost < 0.65 (normalized to signal direction).
+6. REGIME MINIMUM (Rule 3.3): Reject signal if HMM Regime Probability for predicted direction is < 0.60.
+7. ZERO-MFE PREVENTION (Rule 4.1): Check last 5 ticks. For BUY, (last_tick - first_tick) must be > 0. For SELL, must be < 0. Soft delay on fail; HARD_VETO if unconfirmed.
+8. SPREAD-TO-ATR RATIO (Rule 4.2): Block trade if spread/atr > Limits (GER40/HK50: 0.025, US30/NAS100: 0.020, XAUUSD: 0.015, default: 0.030).
+9. MINIMUM RISK-TO-REWARD GATE (Rule 4.3): Reject if tp_distance / sl_distance < 1.8 (or < 2.2 for High-Vol Indices).
+10. COMPOSITE PRE-FLIGHT CHECKLIST (Layer 5): Rigorously execute a 12-point boolean checklist before any mt5.order_send. Any single FAIL triggers an instant HARD_VETO.
+11. INSTRUMENT-CLASS RULES (Layer 6): Indices apply Zero-Sizing unconditionally and block all indices on one index starvation. JPY pairs tighten velocity kill to -0.20 and block openings (Tokyo/London/NY). Metals block entries 15 mins before/after USD releases.
+12. ACCOUNT EQUITY CIRCUIT BREAKERS (Layer 7): Block all entries for the day and tighten SL to 0.5 ATR if daily drawdown >= 3.0% (FORTRESS_MODE). Execute 4-hour HARD_PAUSE if consecutive losses >= 3. Permanently block High-Vol Indices if equity < 2000.
+13. ADAPTIVE POSITION MANAGEMENT (Layer 8): Lock Breakeven at +0.5 ATR. Partial scale 35% at Zone 1 (+1.5 ATR) and 35% at Zone 2 (+2.5 ATR). Trail remainder at Zone 3 (+4.0 ATR). Re-evaluate conviction every 2 hours and exit if live conviction drops > 0.12 from entry.

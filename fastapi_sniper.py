@@ -622,10 +622,24 @@ def is_in_metals_macro_blackout(symbol: str) -> bool:
         pass
     return False
 
+# Dynamic Liquidity-Tiered Event Horizons (v28.15 Rule)
+MACRO_BLACKOUT_TIERS = {
+    # Tier 1: Highly Liquid Majors & Indices & Gold (12-Hour Blackout)
+    "EURUSD": 12.0, "USDJPY": 12.0, "GBPUSD": 12.0, "XAUUSD": 12.0,
+    "GOLD": 12.0, "SP500": 12.0, "NAS100": 12.0, "US30": 12.0,
+    "GER40": 12.0, "FRA40": 12.0, "BTCUSD": 12.0, "ETHUSD": 12.0,
+    "US2000": 12.0, "SPX500": 12.0,
+    
+    # Tier 2: Moderate Liquidity Minors & Silver (18-Hour Blackout)
+    "AUDUSD": 18.0, "USDCAD": 18.0, "NZDUSD": 18.0, "USDCHF": 18.0,
+    "XAGUSD": 18.0, "SILVER": 18.0, "SOLUSD": 18.0, "XRPUSD": 18.0,
+    "LTCUSD": 18.0,
+}
+
 def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
     """
     Directive Omega: Wall 5 / Ex-Ante Macro Shield (Rule 5).
-    Enforces Currency-Specific Blackout gates for G8 basket.
+    Enforces dynamic Liquidity-Tiered Blackout gates for G8 basket.
     """
     sym_upper = symbol.upper()
     currencies_to_check = set()
@@ -646,7 +660,10 @@ def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
         else:
             currencies_to_check.add("USD")
             
-    # 2. Iterate through macro calendar in macro_state.json
+    # 2. Determine liquidity-tiered blackout horizon (Rule 5)
+    blackout_hours = MACRO_BLACKOUT_TIERS.get(sym_upper, 24.0) # Tier 3 defaults to 24.0 hours
+            
+    # 3. Iterate through macro calendar in macro_state.json
     try:
         macro_path = Path("C:/Sentinel_Project/data/macro_state.json")
         if macro_path.exists():
@@ -662,9 +679,9 @@ def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
                     
                     if currency in currencies_to_check and impact == "HIGH":
                         time_until = ev_time - now_ts
-                        if 0 < time_until <= 24 * 3600: # 24-hour blackout window
+                        if 0 < time_until <= blackout_hours * 3600: # Dynamic Tier Blackout
                             hours_until = time_until / 3600.0
-                            msg = f"[WALL 5 VETO] {symbol} blocked due to Tier-1 {currency} Event ({event_name}) in {hours_until:.1f} hours."
+                            msg = f"[WALL 5 VETO] {symbol} blocked due to Tier-1 {currency} Event ({event_name}) in {hours_until:.1f} hours (Tier Limit: {blackout_hours}h)."
                             logger.warning(msg)
                             return True, msg
     except Exception as e:

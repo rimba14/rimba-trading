@@ -55,19 +55,19 @@ def atomic_write_json(file_path: Path, data: dict):
         raise e
 
 def generate_high_fidelity_mocks() -> list:
-    """Generates a realistic set of high impact Tier-1 events relative to now for the G8 basket."""
+    """Generates a realistic set of high impact Tier-1 events relative to now for the G8 basket (2h to 48h)."""
     now_ts = int(time.time())
     mock_catalogs = [
-        {"event": "USD CPI m/m", "currency": "USD", "offset_hours": 1.5},
-        {"event": "USD FOMC Interest Rate Decision", "currency": "USD", "offset_hours": 8.0},
+        {"event": "JPY BOJ Policy Rate Decision", "currency": "JPY", "offset_hours": 2.0},
+        {"event": "AUD RBA Interest Rate Decision", "currency": "AUD", "offset_hours": 6.0},
+        {"event": "USD FOMC Interest Rate Decision", "currency": "USD", "offset_hours": 10.0},
         {"event": "GBP BOE Interest Rate Decision", "currency": "GBP", "offset_hours": 14.0},
-        {"event": "EUR ECB Interest Rate Decision", "currency": "EUR", "offset_hours": 24.0},
-        {"event": "JPY BOJ Policy Rate Decision", "currency": "JPY", "offset_hours": 4.0},
-        {"event": "AUD RBA Interest Rate Decision", "currency": "AUD", "offset_hours": 6.5},
-        {"event": "CAD BOC Interest Rate Decision", "currency": "CAD", "offset_hours": 10.0},
         {"event": "CHF SNB Policy Rate Decision", "currency": "CHF", "offset_hours": 18.0},
         {"event": "NZD RBNZ Interest Rate Decision", "currency": "NZD", "offset_hours": 22.0},
-        {"event": "USD Non-Farm Employment Change (NFP)", "currency": "USD", "offset_hours": 28.0},
+        {"event": "EUR ECB Interest Rate Decision", "currency": "EUR", "offset_hours": 26.0},
+        {"event": "CAD BOC Interest Rate Decision", "currency": "CAD", "offset_hours": 32.0},
+        {"event": "USD Non-Farm Employment Change (NFP)", "currency": "USD", "offset_hours": 40.0},
+        {"event": "GBP BOE Governor Speech", "currency": "GBP", "offset_hours": 48.0},
     ]
     
     events = []
