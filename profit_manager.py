@@ -65,6 +65,29 @@ def _calculate_macroscopic_atr(symbol: str, timeframe=mt5.TIMEFRAME_H1, period=1
     
     return float(np.mean(tr))
 
+def _get_daily_drawdown() -> float:
+    """Calculate daily drawdown relative to starting balance and peak equity of the day (Rule 7.1)."""
+    acc = mt5.account_info()
+    if not acc:
+        return 0.0
+    try:
+        now_utc = datetime.now(timezone.utc)
+        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        deals = mt5.history_deals_get(today_start, now_utc)
+        
+        today_profit = 0.0
+        if deals:
+            for d in deals:
+                if d.entry == mt5.DEAL_ENTRY_OUT:
+                    today_profit += d.profit
+                    
+        start_bal = acc.balance - today_profit
+        peak_equity = max(start_bal, acc.equity)
+        drawdown = (peak_equity - acc.equity) / peak_equity if peak_equity > 0 else 0.0
+        return drawdown
+    except Exception:
+        return 0.0
+
 def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, is_buy):
     """v25.1: Level 29 SRE Stoplevel Armor & Tick Normalization."""
     info = mt5.symbol_info(symbol)
@@ -198,6 +221,8 @@ _POSITION_EXTREMES: dict[int, float] = {}
 _CONVICTION_HISTORY: dict[int, list[float]] = defaultdict(list)
 _THESIS_DECAY_STREAK: dict[int, int] = defaultdict(int)
 _SCALED_OUT_POSITIONS: set[int] = set()
+_SCALED_OUT_ZONE1: set[int] = set()
+_SCALED_OUT_ZONE2: set[int] = set()
 LIQUIDATION_COOLDOWN_S = 60.0
 REGIME_POLL_INTERVAL = 5.0
 def get_entry_timeframe(pos) -> str:
@@ -271,6 +296,24 @@ def run_thesis_decay_check(pos, config: dict, now: float) -> bool:
     live_p = get_position_conviction_by_tf(symbol, entry_tf)
     thesis_p = live_p if pos_direction == "BUY" else (1.0 - live_p)
     
+    # Rule 8.3: Re-evaluate conviction drop (Directive Omega)
+    try:
+        import re
+        entry_conviction = 0.50
+        comment = pos.comment or ""
+        m = re.search(r"_P(0\.\d+)", comment)
+        if m:
+            entry_conviction = float(m.group(1))
+        entry_conviction = abs(entry_conviction - 0.5) + 0.5
+        
+        live_conviction = abs(live_p - 0.5) + 0.5
+        if elapsed_seconds >= 2 * 3600:
+            if (entry_conviction - live_conviction) > 0.12:
+                logger.warning(f"[THESIS DECAY DROP] {symbol} #{pos.ticket} conviction drop veto: Entry Conviction={entry_conviction:.3f}, Live Conviction={live_conviction:.3f}. Dropped by {(entry_conviction - live_conviction):.3f} (> 0.12). Liquidating.")
+                return True
+    except Exception as _tde:
+        logger.warning(f"[THESIS DECAY DROP CHECK ERR] {symbol}: {_tde}")
+        
     # Store history for streak check
     hist = _CONVICTION_HISTORY[pos.ticket]
     hist.append(thesis_p)
@@ -483,101 +526,111 @@ class SentinelProfitManager:
             else:
                 pos_ext = min(pos_ext, current_price)
             _POSITION_EXTREMES[pos.ticket] = pos_ext
-            
-            #  Mechanical Profit Locking (v23.13 Fluid Mechanics) 
+                        # Mechanical Profit Locking (Directive Omega: Rule 8.1 & 8.2)
             profit_price_delta = current_price - price_open if pos.type == 0 else price_open - current_price
             digits = info.digits if info else 5
             
-            # Fat Tail Capture: Hardcode initial physical MT5 Take-Profit to 5.0 * ATR
             target_tp = price_open + (5.0 * macro_atr) if pos.type == 0 else price_open - (5.0 * macro_atr)
             target_tp = round(target_tp, digits)
             
             target_sl = pos.sl
             modify_needed = False
             
-            active_regime = hmm_state
-            if active_regime == "RANGE":
-                # Directive 2: Entropy-Discounted Zone 2 Threshold
-                s_ent = oracle_data.get("entropy", 0.0)
-                zone_2_limit = 4.0  # v27.0: Widened from 1.75 -> 4.0 ATR for swing
-                if s_ent > 0.90:
-                    zone_2_limit = 3.4  # 15% Entropy Discount applied
-                    logger.info(f"[{symbol}] High Entropy detected ({s_ent:.2f} > 0.90). Discounting Zone 2 to {zone_2_limit}x ATR.")
-
-                if profit_price_delta >= zone_2_limit * macro_atr:
-                    # Modify Zone 2: forcefully liquidate 75% of the position volume to capture mean-reverting profits
-                    if pos.ticket not in _SCALED_OUT_POSITIONS:
-                        logger.info(f"[RANGE_SCALE_OUT] {symbol} #{pos.ticket} active_regime is RANGE and profit >= {zone_2_limit} ATR. Liquidating 75% volume.")
-                        _SCALED_OUT_POSITIONS.add(pos.ticket)
-                        close_vol = round(pos.volume * 0.75 / info.volume_step) * info.volume_step if info else pos.volume * 0.75
-                        if close_vol >= (info.volume_step if info else 0.01):
-                            close_type = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
-                            close_price = tick.bid if pos.type == 0 else tick.ask
-                            scale_req = {
-                                "action": mt5.TRADE_ACTION_DEAL,
-                                "symbol": symbol,
-                                "volume": float(close_vol),
-                                "type": close_type,
-                                "position": pos.ticket,
-                                "price": close_price,
-                                "deviation": 30,
-                                "comment": f"RANGE_SCALE_OUT_75%_S{s_ent:.2f}",
-                                "type_time": mt5.ORDER_TIME_GTC,
-                                "type_filling": mt5.ORDER_FILLING_IOC,
-                            }
-                            mt5.order_send(scale_req)
+            # Rule 7.1: Fortress Mode SL tightening if daily drawdown >= 3.0%
+            try:
+                drawdown = _get_daily_drawdown()
+                if drawdown >= 0.03:
+                    logger.warning(f"[{symbol}] FORTRESS_MODE active (drawdown {drawdown:.1%} >= 3.0%). Tightening SL to 0.5x ATR.")
+                    tight_sl = price_open - (0.5 * macro_atr) if pos.type == 0 else price_open + (0.5 * macro_atr)
+                    tight_sl = round(tight_sl, digits)
+                    if pos.type == 0 and (target_sl == 0.0 or target_sl < tight_sl):
+                        target_sl = tight_sl
+                        modify_needed = True
+                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > tight_sl):
+                        target_sl = tight_sl
+                        modify_needed = True
+            except Exception as _fme:
+                logger.warning(f"[FORTRESS_MODE ERR] {symbol}: {_fme}")
+            
+            # 1. Breakeven Lock at +0.5 ATR (Rule 8.1)
+            if profit_price_delta >= 0.5 * macro_atr:
+                be_sl = price_open
+                be_sl = round(be_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
+                    target_sl = be_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
+                    target_sl = be_sl
+                    modify_needed = True
+            
+            # 2. Partial Scale-outs & Trails (Rule 8.2)
+            # Zone 3: Trail remaining 30% tightly at +4.0 ATR
+            if profit_price_delta >= 4.0 * macro_atr:
+                trail_sl = current_price - (1.0 * macro_atr) if pos.type == 0 else current_price + (1.0 * macro_atr)
+                trail_sl = round(trail_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
                     
-                    # Leave remaining 25% at a Fee-Paid Break-Even (+0.2 ATR)
-                    be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
-                    be_sl = round(be_sl, digits)
-                    if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
-                        target_sl = be_sl
-                        modify_needed = True
-                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
-                        target_sl = be_sl
-                        modify_needed = True
-                elif profit_price_delta >= 2.5 * macro_atr:  # v27.0: Zone 1 widened 1.2 -> 2.5 ATR
-                    # Zone 1: Risk Halving (-0.4 ATR from entry)
-                    half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
-                    half_sl = round(half_sl, digits)
-                    if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
-                        target_sl = half_sl
-                        modify_needed = True
-                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
-                        target_sl = half_sl
-                        modify_needed = True
-            else:
-                # Original 3-Zone Geometric Trail for non-RANGE regimes
-                if profit_price_delta >= 5.0 * macro_atr:  # v27.0: Zone 3 Parabolic activated at +5.0 ATR
-                    # Zone 3: Parabolic Trail (Current_Price - 1.5 ATR)
-                    trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
-                    trail_sl = round(trail_sl, digits)
-                    if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
-                        target_sl = trail_sl
-                        modify_needed = True
-                    elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
-                        target_sl = trail_sl
-                        modify_needed = True
-                elif profit_price_delta >= 4.0 * macro_atr:  # v27.0: Zone 2 widened 1.75 -> 4.0 ATR
-                    # Zone 2: Fee-Paid Break-Even (+0.2 ATR)
-                    be_sl = price_open + (0.2 * macro_atr) if pos.type == 0 else price_open - (0.2 * macro_atr)
-                    be_sl = round(be_sl, digits)
-                    if pos.type == 0 and (target_sl == 0.0 or target_sl < be_sl):
-                        target_sl = be_sl
-                        modify_needed = True
-                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > be_sl):
-                        target_sl = be_sl
-                        modify_needed = True
-                elif profit_price_delta >= 2.5 * macro_atr:  # v27.0: Zone 1 widened 1.2 -> 2.5 ATR
-                    # Zone 1: Risk Halving (-0.4 ATR from entry)
-                    half_sl = price_open - (0.4 * macro_atr) if pos.type == 0 else price_open + (0.4 * macro_atr)
-                    half_sl = round(half_sl, digits)
-                    if pos.type == 0 and (target_sl == 0.0 or target_sl < half_sl):
-                        target_sl = half_sl
-                        modify_needed = True
-                    elif pos.type == 1 and (target_sl == 0.0 or target_sl > half_sl):
-                        target_sl = half_sl
-                        modify_needed = True
+            # Zone 2: Scale out 35% and start parabolic trail at +2.5 ATR
+            elif profit_price_delta >= 2.5 * macro_atr:
+                if pos.ticket not in _SCALED_OUT_ZONE2:
+                    logger.info(f"[ZONE2_SCALE_OUT] {symbol} #{pos.ticket} profit >= 2.5 ATR. scaling out 35% volume.")
+                    _SCALED_OUT_ZONE2.add(pos.ticket)
+                    close_vol = round(pos.volume * 0.35 / info.volume_step) * info.volume_step if info else pos.volume * 0.35
+                    close_vol = max(close_vol, info.volume_step if info else 0.01)
+                    if close_vol >= (info.volume_step if info else 0.01) and close_vol < pos.volume:
+                        close_type = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
+                        close_price = tick.bid if pos.type == 0 else tick.ask
+                        scale_req = {
+                            "action": mt5.TRADE_ACTION_DEAL,
+                            "symbol": symbol,
+                            "volume": float(close_vol),
+                            "type": close_type,
+                            "position": pos.ticket,
+                            "price": close_price,
+                            "deviation": 30,
+                            "comment": "ZONE2_SCALE_OUT_35%",
+                            "type_time": mt5.ORDER_TIME_GTC,
+                            "type_filling": mt5.ORDER_FILLING_IOC,
+                        }
+                        mt5.order_send(scale_req)
+                
+                trail_sl = current_price - (1.5 * macro_atr) if pos.type == 0 else current_price + (1.5 * macro_atr)
+                trail_sl = round(trail_sl, digits)
+                if pos.type == 0 and (target_sl == 0.0 or trail_sl > target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
+                elif pos.type == 1 and (target_sl == 0.0 or trail_sl < target_sl):
+                    target_sl = trail_sl
+                    modify_needed = True
+                    
+            # Zone 1: Scale out 35% at +1.5 ATR
+            elif profit_price_delta >= 1.5 * macro_atr:
+                if pos.ticket not in _SCALED_OUT_ZONE1:
+                    logger.info(f"[ZONE1_SCALE_OUT] {symbol} #{pos.ticket} profit >= 1.5 ATR. scaling out 35% volume.")
+                    _SCALED_OUT_ZONE1.add(pos.ticket)
+                    close_vol = round(pos.volume * 0.35 / info.volume_step) * info.volume_step if info else pos.volume * 0.35
+                    close_vol = max(close_vol, info.volume_step if info else 0.01)
+                    if close_vol >= (info.volume_step if info else 0.01) and close_vol < pos.volume:
+                        close_type = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
+                        close_price = tick.bid if pos.type == 0 else tick.ask
+                        scale_req = {
+                            "action": mt5.TRADE_ACTION_DEAL,
+                            "symbol": symbol,
+                            "volume": float(close_vol),
+                            "type": close_type,
+                            "position": pos.ticket,
+                            "price": close_price,
+                            "deviation": 30,
+                            "comment": "ZONE1_SCALE_OUT_35%",
+                            "type_time": mt5.ORDER_TIME_GTC,
+                            "type_filling": mt5.ORDER_FILLING_IOC,
+                        }
+                        mt5.order_send(scale_req)
                     
             current_tp = round(pos.tp, digits)
             if current_tp == 0.0 or abs(current_tp - target_tp) > (info.point * 10 if info else 0.0001):
@@ -611,13 +664,15 @@ class SentinelProfitManager:
             for val in hist[1:]:
                 ema_p = alpha * val + (1.0 - alpha) * ema_p
                 
-            # Directive 3: Velocity Override (dP/dt)
+            # Directive 3: Velocity Override (dP/dt) (Rule 6.1)
             is_velocity_kill = False
             if len(hist) >= 3:
                 delta_p = hist[-1] - hist[-3]
-                if delta_p < -0.30:
+                jpy_pairs = {"USDJPY", "GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CHFJPY", "CADJPY"}
+                vel_limit = -0.20 if symbol.upper() in jpy_pairs else -0.30
+                if delta_p < vel_limit:
                     is_velocity_kill = True
-                    logger.warning(f"[{symbol}] Violent Conviction Velocity Drop detected: dP={delta_p:.2f} over last 3 ticks. Triggering immediate [VELOCITY KILL].")
+                    logger.warning(f"[{symbol}] Violent Conviction Velocity Drop detected: dP={delta_p:.2f} over last 3 ticks (Limit={vel_limit:.2f}). Triggering immediate [VELOCITY KILL].")
             
             # v24.0 Directive 2: Alternative Data Virtual Exits [MACRO SHOCK] kill switch
             try:

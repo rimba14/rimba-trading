@@ -175,6 +175,37 @@ class RiskAgent:
         if self.circuit_breaker_active:
             return False, "Circuit breaker active. Daily drawdown limit hit."
 
+        # Rule 1.1: ZERO-SIZING VETO
+        if size_usd <= 0.0:
+            return False, "[ZERO_SIZING_VETO] Sizing is zero."
+
+        # Rule 1.2: AFFORDABILITY VETO Pre-screen for Indices/Metals/Crypto
+        if not mt5.initialize():
+            logger.error("[RISK_AGENT] MT5 Init failed during pre-screen. Failing safe.")
+            return False, "MT5 connection failure in Risk Agent."
+
+        info = mt5.symbol_info(symbol)
+        acc = mt5.account_info()
+        equity = acc.equity if acc else 1000.0
+        if info:
+            atr = 0.0010
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 20)
+            if rates is not None and len(rates) > 0:
+                atr = sum([r['high'] - r['low'] for r in rates]) / len(rates)
+            
+            point_value = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
+            sym_upper = symbol.upper()
+            is_indices_metals_crypto = (
+                any(idx in sym_upper for idx in ["NAS100", "US30", "SPX500", "SP500", "GER40", "US2000", "HK50"]) or
+                any(m in sym_upper for m in ["XAU", "XAG", "GOLD", "SILVER", "XPT", "XPD"]) or
+                any(c in sym_upper for c in ["BTC", "ETH", "SOL", "XRP", "LTC", "TRX", "UNI", "DOGE"])
+            )
+            if is_indices_metals_crypto:
+                risk_budget = equity * 0.02
+                affordable_lot = risk_budget / (atr * point_value * 3.0 + 1e-12)
+                if affordable_lot < info.volume_min:
+                    return False, f"[AFFORDABILITY_VETO] Affordable lot {affordable_lot:.4f} < broker min {info.volume_min} for {symbol}."
+
         MAX_COGNITIVE_DISSONANCE = 0.55
         dissonance = abs(xgb_p - ddqn_p)
         if dissonance > MAX_COGNITIVE_DISSONANCE:

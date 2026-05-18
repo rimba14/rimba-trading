@@ -833,20 +833,35 @@ def run_composite_preflight_checklist(
     if model_divergence > div_limit:
         return False, f"Point 6 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
 
-    # Point 7: Regime Probability Minimum
+    # Point 7: Regime Probability Minimum (Rule 3.3)
     if hmm_state not in ["BULL", "BEAR", "RANGE"]:
         return False, f"Point 7 Fail: Invalid HMM state {hmm_state}"
+    
+    hmm_prob = 1.0
+    try:
+        from arcticdb import Arctic
+        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+        row = store["oracle_cache"].read(f"{symbol}_hmm").data.iloc[-1]
+        hmm_prob = float(row["prob"])
+    except:
+        pass
+    sym_upper = symbol.upper()
+    is_index = any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"])
+    min_regime_prob = 0.65 if is_index else 0.60
+    if hmm_prob < min_regime_prob:
+        return False, f"Point 7 Fail: [HARD_VETO] [REGIME_MINIMUM_VETO] HMM regime probability {hmm_prob:.3f} < required {min_regime_prob:.3f}"
 
     # Point 8: Zero-MFE Prevention (Rule 4.1)
     retries = 5
     momentum_confirmed = False
     tick = mt5.symbol_info_tick(symbol)
+    ticks_count = 8 if is_index else 5
     if tick:
         for attempt in range(retries):
-            ticks = mt5.copy_ticks_from(symbol, datetime.now(), 5, mt5.COPY_TICKS_ALL)
-            if ticks is not None and len(ticks) >= 5:
-                last_val = ticks[-1].ask if direction == "BUY" else ticks[-1].bid
-                first_val = ticks[0].ask if direction == "BUY" else ticks[0].bid
+            ticks = mt5.copy_ticks_from(symbol, datetime.now(), ticks_count, mt5.COPY_TICKS_ALL)
+            if ticks is not None and len(ticks) >= ticks_count:
+                last_val = ticks[-1]['ask'] if direction == "BUY" else ticks[-1]['bid']
+                first_val = ticks[0]['ask'] if direction == "BUY" else ticks[0]['bid']
                 diff = last_val - first_val
                 if (direction == "BUY" and diff > 0) or (direction == "SELL" and diff < 0):
                     momentum_confirmed = True
@@ -855,12 +870,11 @@ def run_composite_preflight_checklist(
             time.sleep(0.1)
             
         if not momentum_confirmed:
-            return False, f"Point 8 Fail: Zero-MFE check failed after {retries} retries."
+            return False, f"Point 8 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
 
     # Point 9: Spread-to-ATR Ratio (Rule 4.2)
     if tick:
         current_spread = tick.ask - tick.bid
-        sym_upper = symbol.upper()
         if "GER40" in sym_upper or "HK50" in sym_upper:
             spread_atr_limit = 0.025
         elif "US30" in sym_upper or "NAS100" in sym_upper:
@@ -888,7 +902,6 @@ def run_composite_preflight_checklist(
     tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
     tp_dist = current_atr * tp_multiplier
     
-    is_index = any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"])
     min_rr = 2.2 if is_index else 1.8
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
     if prospective_rr < min_rr:
@@ -896,8 +909,16 @@ def run_composite_preflight_checklist(
 
     # Point 11: Macro & DNA Blackout (Rule 6.2 & 6.3)
     jpy_pairs = {"USDJPY", "GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CHFJPY", "CADJPY"}
-    if sym_upper in jpy_pairs and is_in_jpy_blackout():
-        return False, "Point 11 Fail: JPY pair session open blackout"
+    if sym_upper in jpy_pairs:
+        if is_in_jpy_blackout():
+            return False, "Point 11 Fail: JPY pair session open blackout"
+        
+        # dP/dt velocity check
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 2)
+        if rates is not None and len(rates) >= 2:
+            dp_dt = (rates[-1]['close'] - rates[-2]['close']) / (rates[-2]['close'] + 1e-9) * 100.0
+            if dp_dt <= -0.20:
+                return False, f"Point 11 Fail: JPY pair dP/dt velocity kill switch active ({dp_dt:.3f}% <= -0.20%)"
         
     if is_in_metals_macro_blackout(symbol):
         return False, "Point 11 Fail: Metals major USD release blackout"

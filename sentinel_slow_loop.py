@@ -44,6 +44,10 @@ _LAST_CYCLE_PRICES = {}
 _LAST_CYCLE_ATRs = {}
 _IS_STARTUP_OR_SHOCK = True
 
+# Directive Omega Global Trackers
+_TICK_STARVATION_DETECTED = False
+_INDEX_STARVATION_DETECTED = False
+
 
 
 def _pre_scan_watchlist(watchlist: list):
@@ -591,6 +595,8 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
         return
 
+    data_quality_flag = "PRISTINE"
+
     now = time.time()
     if now - _LAST_UPDATE.get(symbol, 0) < ORACLE_COOLDOWN:
         return
@@ -670,6 +676,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         if df_m15 is None or len(df_m15) < 512:
             # Directive 2: M1 OHLCV Anti-Starvation Fallback
             logging.warning(f"[TICKER_ERROR] {symbol}: insufficient ticks after {max_retries} attempts. Attempting M1 OHLCV fallback...")
+            data_quality_flag = "DEGRADED"
+            global _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED
+            _TICK_STARVATION_DETECTED = True
+            _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
+            if symbol.upper() in _INDICES:
+                _INDEX_STARVATION_DETECTED = True
+
             try:
                 rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 750)
                 if rates is not None and len(rates) >= 512:
@@ -711,12 +724,26 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         df_ta["S_struct"]  = 0.5
 
         df_ml = df_ta.copy()
+        clipped_features_count = 0
         for col in ["open", "high", "low", "close"]:
             opt_d, fd = optimize_fracdiff_d(df_ta[col].values)
             pad = len(df_ta) - len(fd)
+            
+            # Audit Z-score bounds clipping on final row (Rule 2.1)
+            mean_val = np.mean(fd)
+            std_val = np.std(fd) + 1e-9
+            final_fd_val = fd[-1]
+            z_score = (final_fd_val - mean_val) / std_val
+            if abs(z_score) >= 5.0:
+                clipped_features_count += 1
+                
             norm_fd = sigproc.strict_normalize(fd)
             df_ml[col] = np.pad(norm_fd, (pad, 0), mode="edge")
-        logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied.")
+            
+        if clipped_features_count > 3:
+            data_quality_flag = "DEGRADED"
+            logging.warning(f"[{symbol}] DEGRADED_DATA_VETO: Z-score clipping on {clipped_features_count} (>3) features.")
+        logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied. Clipped features: {clipped_features_count}")
 
         # ── v22.4: Institutional Feature Engineering (Data Warm-Up) ────────
         # Append frac_diff_price (López de Prado), FFT spectral amplitudes,
@@ -838,8 +865,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 p_blend = 0.500
                 
             # Directive 1: Dynamic Divergence Gating
+            vals = [float(v) for v in active_scores.values() if not np.isnan(v)]
+            model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
+
             import alpha_combiner
-            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend)
+            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=_TICK_STARVATION_DETECTED)
             if not is_consensus:
                 logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
                 p_blend = 0.500
@@ -848,9 +878,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             
         except Exception as e:
             logging.warning(f"[{symbol}] ML Bypass in effect. Reason: {e}")
+            data_quality_flag = "DEGRADED"
             x_prob = 0.500
             ddqn_p = 0.500
             k_prob = 0.500
+            model_divergence = 0.0
             print(f"[ML BYPASS] Shape mismatch detected. Falling back to Heuristic Swing Routing for {symbol}.")
             x_prob = 0.500
             ddqn_p = 0.500
@@ -984,9 +1016,20 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
         
+        # Rule 3.1: Minimum Conviction Gate (Directive Omega)
+        high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
+        is_degraded = (data_quality_flag != "PRISTINE") or _TICK_STARVATION_DETECTED
+        if is_degraded:
+            min_p_gate = 0.75
+        elif symbol.upper() in high_vol_assets:
+            min_p_gate = 0.72
+        else:
+            min_p_gate = 0.68
+        current_gate = max(current_gate, min_p_gate)
+        
         if is_graveyard: meta_p = 0.50
         
-        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f})")
+        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, MinGate={min_p_gate:.2f})")
 
         # ── Directive 2: P-Score Telemetry & Drift Detection ─────────────────
         if float(meta_p) != 0.50:  # Ignore forced SRE safety overrides
@@ -1045,8 +1088,65 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             logging.info(f"[GATE] {symbol}: P={meta_p:.6f} falls in DEAD-ZONE (0.40-0.60). HARD BLOCKED.")
             # Skip the signal dispatch block
         elif norm_p >= current_gate and primary_dir != 0:
-            # Direction: BUY for P > 0.5, SELL for P < 0.5 — always from raw meta_p
             signal_dir = "BUY" if meta_p > 0.5 else "SELL"
+            
+            # --- DIRECTIVE OMEGA PRE-ENTRY VETOES ---
+            
+            # 1. Zero-Sizing Pre-Screen Check (Rule 1.2)
+            acc_info = mt5.account_info()
+            sym_info = mt5.symbol_info(symbol)
+            if acc_info and sym_info:
+                risk_budget = acc_info.balance * 0.02
+                point_value = sym_info.trade_tick_value / (sym_info.trade_tick_size / sym_info.point) if sym_info.trade_tick_size > 0 else sym_info.trade_tick_value
+                affordable_lot = risk_budget / (atr * point_value * 3.0 + 1e-12)
+                if affordable_lot < sym_info.volume_min:
+                    logging.warning(f"[{symbol}] AFFORDABILITY_VETO: Affordable lot size {affordable_lot:.4f} < broker min {sym_info.volume_min}. Skipping signal.")
+                    return
+            
+            # 2. Weak Model Floor Check (Rule 3.2)
+            k_score = active_scores.get('kronos', 0.5)
+            x_score = active_scores.get('xgb', 0.5)
+            predicted_dir = "BUY" if meta_p > 0.5 else "SELL"
+            kronos_conf = k_score if predicted_dir == "BUY" else (1.0 - k_score)
+            xgb_conf = x_score if predicted_dir == "BUY" else (1.0 - x_score)
+            if kronos_conf < 0.70 or xgb_conf < 0.65:
+                logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
+                return
+            
+            # 3. Regime Minimum Check (Rule 3.3)
+            regime_prob = label_probs.get(hmm_state, 0.0)
+            if regime_prob < 0.60:
+                logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {hmm_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
+                return
+            if (predicted_dir == "BUY" and hmm_state == "BEAR") or (predicted_dir == "SELL" and hmm_state == "BULL"):
+                logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {hmm_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
+                return
+            
+            # 4. Pristine Data Check (Rule 2.1)
+            entropy_val = 0.0
+            if 'df_ml' in locals() and df_ml is not None:
+                try:
+                    entropy_val = float(df_ml.iloc[-1].get("order_flow_entropy", 0.0))
+                except:
+                    pass
+            if 'latest_swing' in locals() and latest_swing is not None:
+                try:
+                    entropy_val = max(entropy_val, float(latest_swing.get('entropy', 0.0)))
+                except:
+                    pass
+            if entropy_val > 1.0:
+                data_quality_flag = "DEGRADED"
+                logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Order Flow Entropy {entropy_val:.3f} > 1.0.")
+
+            if data_quality_flag != "PRISTINE":
+                logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag}. Blocking signal.")
+                return
+            
+            # 5. Index Starvation Check (Layer 6)
+            _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
+            if symbol.upper() in _INDICES and _INDEX_STARVATION_DETECTED:
+                logging.warning(f"[{symbol}] [HARD_VETO] [INDEX_STARVATION_VETO] An index has tick starvation in this cycle. Blocking all index entries.")
+                return
             
             signal_type = "MEAN_REVERSION" if w_range > w_trend else "MOMENTUM"
             with _CYCLE_LOCK:
@@ -1059,10 +1159,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                     "hmm_state": hmm_state,
                     "atr": float(atr),
                     "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                    "version": "v28.11-IRONCLAD-CADES",
-                    "signal_type": signal_type
+                    "version": "v28.14-IRONCLAD-CADES",
+                    "signal_type": signal_type,
+                    "model_divergence": float(model_divergence)
                 })
-            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
+            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
         else:
             if hmm_state == "RANGE":
                 logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
@@ -1095,7 +1196,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
 async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
     """Runs update_slow_oracles concurrently using Micro-Batching."""
-    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS
+    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED
+    _TICK_STARVATION_DETECTED = False
+    _INDEX_STARVATION_DETECTED = False
     with _CYCLE_LOCK:
         _CYCLE_P_SCORES = {}
         _CYCLE_PENDING_SIGNALS = []
@@ -1123,6 +1226,19 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
             if len(batch) == 10:
                 await asyncio.sleep(0.5)
             batch_idx += 1
+
+    # Rule 2.2: Retrospective consensus gate tightening if tick starvation occurred (Directive Omega)
+    if _TICK_STARVATION_DETECTED:
+        logging.warning("[SRE] TICK STARVATION DETECTED in this cycle. Tightening global divergence gate to 0.15 retrospectively!")
+        with _CYCLE_LOCK:
+            filtered_sigs = []
+            for sig in _CYCLE_PENDING_SIGNALS:
+                div = sig.get("model_divergence", 0.0)
+                if div > 0.15:
+                    logging.warning(f"[{sig['symbol']}] RETROSPECTIVE WALL 2 VETO: Divergence {div:.3f} > 0.15 (Starved Session)")
+                else:
+                    filtered_sigs.append(sig)
+            _CYCLE_PENDING_SIGNALS = filtered_sigs
 
     # Directive 2: The Correlated Overconfidence Veto
     extreme_count = sum(1 for p in _CYCLE_P_SCORES.values() if p > 0.90 or p < 0.10)

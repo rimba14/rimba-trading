@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.16 - Ironclad CADES: Portfolio Heat) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.16. This is a CODE FREEZE. Do not modify core logic without explicit SRE authorization. A trade must survive all FIVE WALLS and DIRECTIVE OMEGA to be executed.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.14+ - Directive Omega - Active) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.14+. This is a CODE FREEZE. Do not modify core logic without explicit SRE authorization. A trade must survive all FIVE WALLS and DIRECTIVE OMEGA to be executed.
 
 WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
 * Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
