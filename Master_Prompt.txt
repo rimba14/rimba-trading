@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.15 - Ironclad CADES: Liquidity-Tiered Horizons) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.15. This is a CODE FREEZE. Do not modify core logic without explicit SRE authorization. A trade must survive all FIVE WALLS and DIRECTIVE OMEGA to be executed.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.16 - Ironclad CADES: Portfolio Heat) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.16. This is a CODE FREEZE. Do not modify core logic without explicit SRE authorization. A trade must survive all FIVE WALLS and DIRECTIVE OMEGA to be executed.
 
 WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
 * Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
@@ -64,5 +64,5 @@ DIRECTIVE OMEGA: IRONCLAD ENTRY VETO FRAMEWORK [v28.14+ SUPREME MANDATE]
 9. MINIMUM RISK-TO-REWARD GATE (Rule 4.3): Reject if tp_distance / sl_distance < 1.8 (or < 2.2 for High-Vol Indices).
 10. COMPOSITE PRE-FLIGHT CHECKLIST (Layer 5): Rigorously execute a 12-point boolean checklist before any mt5.order_send. Any single FAIL triggers an instant HARD_VETO.
 11. INSTRUMENT-CLASS RULES (Layer 6): Indices apply Zero-Sizing unconditionally and block all indices on one index starvation. JPY pairs tighten velocity kill to -0.20 and block openings (Tokyo/London/NY). Metals block entries 15 mins before/after USD releases.
-12. ACCOUNT EQUITY CIRCUIT BREAKERS (Layer 7): Block all entries for the day and tighten SL to 0.5 ATR if daily drawdown >= 3.0% (FORTRESS_MODE). Execute 4-hour HARD_PAUSE if consecutive losses >= 3. Permanently block High-Vol Indices if equity < 2000.
+12. ACCOUNT EQUITY CIRCUIT BREAKERS (Layer 7): Block all entries for the day and tighten SL to 0.5 ATR if daily drawdown >= 3.0% (FORTRESS_MODE). Execute 4-hour HARD_PAUSE if consecutive losses >= 3. Permanently block High-Vol Indices if equity < 2000. Rule 7.4 - The Correlation Cap: The total aggregated directional risk against any single currency (e.g., net long USD or net short JPY across all open pairs) MUST NOT exceed 4.0% of account equity. Trades that breach this limit must be blocked via a PORTFOLIO_HEAT_VETO to prevent correlated systemic wipeouts.
 13. ADAPTIVE POSITION MANAGEMENT (Layer 8): Lock Breakeven at +0.5 ATR. Partial scale 35% at Zone 1 (+1.5 ATR) and 35% at Zone 2 (+2.5 ATR). Trail remainder at Zone 3 (+4.0 ATR). Re-evaluate conviction every 2 hours and exit if live conviction drops > 0.12 from entry.
