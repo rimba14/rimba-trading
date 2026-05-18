@@ -415,7 +415,9 @@ async def execute_trade_endpoint(signal: TradeSignal):
     alpha_features = {
         "P": signal.conviction,
         "vpin": vpin_val,
-        "regime": signal.hmm_state
+        "regime": signal.hmm_state,
+        "xgb_p": signal.xgb_p,
+        "ddqn_p": signal.ddqn_p
     }
     success = perform_mt5_trade(
         signal.symbol,
@@ -581,6 +583,326 @@ def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5,
 
     return True
 
+# --- DIRECTIVE OMEGA HELPERS & LAYER 5 COMPOSITE PRE-FLIGHT CHECKLIST ---
+
+def is_in_jpy_blackout() -> bool:
+    """Check if JPY pairs open hour blackout is active (Rule 6.2)."""
+    now_utc = datetime.now(timezone.utc)
+    now_mins = now_utc.hour * 60 + now_utc.minute
+    # Tokyo Open: 00:00 UTC, London Open: 07:00 UTC, NY Open: 13:30 UTC
+    for target in [0, 420, 810]:
+        diff = abs(now_mins - target)
+        diff = min(diff, 1440 - diff)
+        if diff <= 15: # +/- 15 mins
+            return True
+    return False
+
+def is_in_metals_macro_blackout(symbol: str) -> bool:
+    """Check if Metals USD macro release blackout is active (Rule 6.3)."""
+    sym_upper = symbol.upper()
+    metals = {"XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
+    if sym_upper not in metals:
+        return False
+        
+    try:
+        macro_path = Path("C:/Sentinel_Project/data/macro_state.json")
+        if macro_path.exists():
+            with open(macro_path, "r") as f:
+                m_state = json.load(f)
+                events = m_state.get("upcoming_events", [])
+                now_ts = time.time()
+                for ev in events:
+                    ev_time = ev.get("time", 0)
+                    impact = ev.get("impact", "").upper()
+                    currency = ev.get("currency", "").upper()
+                    if currency == "USD" and impact in ["HIGH", "TIB-1", "TIER-1"]:
+                        if abs(now_ts - ev_time) <= 15 * 60: # +/- 15 mins
+                            return True
+    except Exception:
+        pass
+    return False
+
+def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
+    """
+    Directive Omega: Wall 5 / Ex-Ante Macro Shield (Rule 5).
+    Enforces Currency-Specific Blackout gates for G8 basket.
+    """
+    sym_upper = symbol.upper()
+    currencies_to_check = set()
+    
+    # 1. Parse/Split currencies (EURUSD -> EUR, USD)
+    metals = {"XAUUSD", "XAGUSD", "GOLD", "SILVER"}
+    if any(m in sym_upper for m in metals):
+        currencies_to_check.add("USD")
+    elif len(sym_upper) == 6 and not any(c.isdigit() for c in sym_upper):
+        currencies_to_check.add(sym_upper[:3])
+        currencies_to_check.add(sym_upper[3:])
+    else:
+        # Default index/crypto mapping
+        if any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "US2000", "BTC", "ETH", "SOL", "XRP"]):
+            currencies_to_check.add("USD")
+        elif "GER40" in sym_upper:
+            currencies_to_check.add("EUR")
+        else:
+            currencies_to_check.add("USD")
+            
+    # 2. Iterate through macro calendar in macro_state.json
+    try:
+        macro_path = Path("C:/Sentinel_Project/data/macro_state.json")
+        if macro_path.exists():
+            with open(macro_path, "r", encoding="utf-8") as f:
+                m_state = json.load(f)
+                events = m_state.get("upcoming_events", [])
+                now_ts = time.time()
+                for ev in events:
+                    ev_time = ev.get("time", 0)
+                    impact = ev.get("impact", "").upper()
+                    currency = ev.get("currency", "").upper()
+                    event_name = ev.get("event", "")
+                    
+                    if currency in currencies_to_check and impact == "HIGH":
+                        time_until = ev_time - now_ts
+                        if 0 < time_until <= 24 * 3600: # 24-hour blackout window
+                            hours_until = time_until / 3600.0
+                            msg = f"[WALL 5 VETO] {symbol} blocked due to Tier-1 {currency} Event ({event_name}) in {hours_until:.1f} hours."
+                            logger.warning(msg)
+                            return True, msg
+    except Exception as e:
+        logger.warning(f"[WALL 5 SHIELD ERR] Failed to parse macro shield: {e}")
+        
+    return False, ""
+
+def get_daily_drawdown() -> float:
+    """Calculate daily drawdown relative to starting balance and peak equity of the day (Rule 7.1)."""
+    acc = mt5.account_info()
+    if not acc:
+        return 0.0
+    try:
+        now_utc = datetime.now(timezone.utc)
+        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        deals = mt5.history_deals_get(today_start, now_utc)
+        
+        today_profit = 0.0
+        if deals:
+            for d in deals:
+                if d.entry == mt5.DEAL_ENTRY_OUT:
+                    today_profit += d.profit
+                    
+        start_bal = acc.balance - today_profit
+        peak_equity = max(start_bal, acc.equity)
+        drawdown = (peak_equity - acc.equity) / peak_equity if peak_equity > 0 else 0.0
+        return drawdown
+    except Exception:
+        return 0.0
+
+def get_consecutive_losses() -> int:
+    """Calculate the number of consecutive losing trades for Sentinel (Rule 7.2)."""
+    try:
+        now = datetime.now(timezone.utc)
+        deals = mt5.history_deals_get(now - timedelta(days=2), now)
+        if not deals:
+            return 0
+        sentinel_deals = [d for d in deals if d.magic in [MAGIC_NUMBER, 142, 17300] and d.entry == mt5.DEAL_ENTRY_OUT]
+        sentinel_deals.sort(key=lambda x: x.time, reverse=True)
+        
+        consec_losses = 0
+        for d in sentinel_deals:
+            if d.profit < 0:
+                consec_losses += 1
+            else:
+                break
+        return consec_losses
+    except Exception:
+        return 0
+
+def is_consec_losses_paused() -> Tuple[bool, float]:
+    """Check if the SRE Hard Pause is active due to >= 3 consecutive losses (Rule 7.2)."""
+    try:
+        now = datetime.now(timezone.utc)
+        deals = mt5.history_deals_get(now - timedelta(days=2), now)
+        if not deals:
+            return False, 0.0
+        sentinel_deals = [d for d in deals if d.magic in [MAGIC_NUMBER, 142, 17300] and d.entry == mt5.DEAL_ENTRY_OUT]
+        sentinel_deals.sort(key=lambda x: x.time, reverse=True)
+        
+        consec_losses = 0
+        last_loss_time = 0
+        for d in sentinel_deals:
+            if d.profit < 0:
+                consec_losses += 1
+                if last_loss_time == 0:
+                    last_loss_time = d.time
+            else:
+                break
+                
+        if consec_losses >= 3:
+            elapsed = time.time() - last_loss_time
+            if elapsed < 4 * 3600:
+                return True, (4 * 3600 - elapsed)
+    except Exception:
+        pass
+    return False, 0.0
+
+def run_composite_preflight_checklist(
+    symbol: str,
+    direction: str,
+    lot: float,
+    conviction: float,
+    vpin: float,
+    hmm_state: str,
+    xgb_p: float,
+    ddqn_p: float,
+) -> Tuple[bool, str]:
+    """
+    Directive Omega: Layer 5 - Composite Pre-Flight Checklist.
+    Verifies 12 critical protections before dispatching order.
+    """
+    logger.info(f"[{symbol}] Running 12-point Composite Pre-Flight Checklist...")
+
+    # Point 1: Sizing > 0
+    if lot <= 0.0:
+        return False, "Point 1 Fail: Sizing <= 0 (Zero-Sizing Veto)"
+
+    # Point 2: Affordability Check
+    acc = mt5.account_info()
+    info = mt5.symbol_info(symbol)
+    if not acc or not info:
+        return False, "Point 2 Fail: Failed to fetch account/symbol info"
+
+    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    point_val = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
+    risk_budget = acc.balance * 0.02
+    affordable_lot = risk_budget / (current_atr * point_val * 3.0 + 1e-12)
+    if affordable_lot < info.volume_min:
+        return False, f"Point 2 Fail: Affordability pre-screen check failed ({affordable_lot:.4f} < broker min {info.volume_min})"
+
+    # Point 3: Pristine Data
+    if current_atr <= 0:
+        return False, "Point 3 Fail: Ingestion data degraded (ATR <= 0)"
+
+    # Point 4: P_blend Threshold
+    norm_p = abs(conviction - 0.5) + 0.5
+    high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER"}
+    
+    # Retrieve tick starvation flag from slow loop module if active
+    try:
+        import sentinel_slow_loop
+        is_starved = getattr(sentinel_slow_loop, "_TICK_STARVATION_DETECTED", False)
+    except Exception:
+        is_starved = False
+        
+    if is_starved:
+        min_p = 0.75
+    elif symbol.upper() in high_vol_assets:
+        min_p = 0.72
+    else:
+        min_p = 0.68
+        
+    if norm_p < min_p:
+        return False, f"Point 4 Fail: Blended conviction {norm_p:.3f} < threshold {min_p:.3f}"
+
+    # Point 5: Model Floors
+    predicted_dir = direction
+    kronos_conf = conviction if predicted_dir == "BUY" else (1.0 - conviction)
+    xgb_conf = xgb_p if predicted_dir == "BUY" else (1.0 - xgb_p)
+    if kronos_conf < 0.70:
+        return False, f"Point 5 Fail: Kronos conviction {kronos_conf:.3f} < 0.70 floor"
+    if xgb_conf < 0.65:
+        return False, f"Point 5 Fail: XGB conviction {xgb_conf:.3f} < 0.65 floor"
+
+    # Point 6: Divergence Gate
+    model_divergence = abs(kronos_conf - xgb_conf)
+    div_limit = 0.15 if is_starved else 0.30
+    if model_divergence > div_limit:
+        return False, f"Point 6 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
+
+    # Point 7: Regime Probability Minimum
+    if hmm_state not in ["BULL", "BEAR", "RANGE"]:
+        return False, f"Point 7 Fail: Invalid HMM state {hmm_state}"
+
+    # Point 8: Zero-MFE Prevention (Rule 4.1)
+    retries = 5
+    momentum_confirmed = False
+    tick = mt5.symbol_info_tick(symbol)
+    if tick:
+        for attempt in range(retries):
+            ticks = mt5.copy_ticks_from(symbol, datetime.now(), 5, mt5.COPY_TICKS_ALL)
+            if ticks is not None and len(ticks) >= 5:
+                last_val = ticks[-1].ask if direction == "BUY" else ticks[-1].bid
+                first_val = ticks[0].ask if direction == "BUY" else ticks[0].bid
+                diff = last_val - first_val
+                if (direction == "BUY" and diff > 0) or (direction == "SELL" and diff < 0):
+                    momentum_confirmed = True
+                    break
+            logger.info(f"[{symbol}] Point 8 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
+            time.sleep(0.1)
+            
+        if not momentum_confirmed:
+            return False, f"Point 8 Fail: Zero-MFE check failed after {retries} retries."
+
+    # Point 9: Spread-to-ATR Ratio (Rule 4.2)
+    if tick:
+        current_spread = tick.ask - tick.bid
+        sym_upper = symbol.upper()
+        if "GER40" in sym_upper or "HK50" in sym_upper:
+            spread_atr_limit = 0.025
+        elif "US30" in sym_upper or "NAS100" in sym_upper:
+            spread_atr_limit = 0.020
+        elif "XAUUSD" in sym_upper or "GOLD" in sym_upper:
+            spread_atr_limit = 0.015
+        else:
+            spread_atr_limit = 0.030
+            
+        spread_atr_ratio = current_spread / (current_atr + 1e-12)
+        if spread_atr_ratio > spread_atr_limit:
+            return False, f"Point 9 Fail: Spread-to-ATR ratio {spread_atr_ratio:.4f} > limit {spread_atr_limit:.4f}"
+
+    # Point 10: Minimum R:R Gate (Rule 4.3)
+    distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
+    calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
+    broker_minimum_sl = info.trade_stops_level * info.point
+    final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
+    
+    p_entry = conviction if direction == "BUY" else (1.0 - conviction)
+    if p_entry < 0.5:
+        p_entry = abs(conviction - 0.5) + 0.5
+    p_entry = max(p_entry, 0.60)
+    normalized_p = (p_entry - 0.60) / 0.40
+    tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
+    tp_dist = current_atr * tp_multiplier
+    
+    is_index = any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"])
+    min_rr = 2.2 if is_index else 1.8
+    prospective_rr = tp_dist / (final_sl_dist + 1e-12)
+    if prospective_rr < min_rr:
+        return False, f"Point 10 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f}"
+
+    # Point 11: Macro & DNA Blackout (Rule 6.2 & 6.3)
+    jpy_pairs = {"USDJPY", "GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CHFJPY", "CADJPY"}
+    if sym_upper in jpy_pairs and is_in_jpy_blackout():
+        return False, "Point 11 Fail: JPY pair session open blackout"
+        
+    if is_in_metals_macro_blackout(symbol):
+        return False, "Point 11 Fail: Metals major USD release blackout"
+
+    is_blackout, veto_reason = is_wall5_macro_blackout(symbol)
+    if is_blackout:
+        return False, f"Point 11 Fail: {veto_reason}"
+
+    # Point 12: Account Equity & Circuit Breakers (Rule 7.1, 7.2, 7.3)
+    if get_daily_drawdown() >= 0.03:
+        return False, "Point 12 Fail: Daily drawdown >= 3.0% (FORTRESS_MODE active)"
+        
+    is_paused, time_left = is_consec_losses_paused()
+    if is_paused:
+        return False, f"Point 12 Fail: SRE Hard Pause active due to consecutive losses ({time_left:.1f}s remaining)"
+        
+    if is_index and acc.equity < 2000.0:
+        return False, f"Point 12 Fail: Equity ${acc.equity:.2f} < $2000 floor for indices"
+
+    logger.info(f"[{symbol}] Composite Pre-Flight Checklist PASSED successfully!")
+    return True, "Passed"
+
 def is_weekend_blackout(symbol):
     crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX"]
     if any(k in symbol.upper() for k in crypto_keywords):
@@ -654,13 +976,10 @@ def calculate_kelly_lot(symbol, conviction):
     
     logger.info(f"[{symbol}] DEBUG LOT: Balance={acc.balance:.2f} | MaxRisk=${max_dollar_risk:.2f} | KellyLot={kelly_lot} | AtrLot={atr_adjusted_lot} | FinalLot={lot}")
 
-    if lot < info.volume_min and (risk_usd > 0 or max_dollar_risk > 0):
-        # Verify if account can handle the margin for volume_min
-        action_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
-        margin_req = mt5.order_calc_margin(action_type, symbol, info.volume_min, tick.ask)
-        if margin_req and margin_req < acc.margin_free * 0.8:
-            logger.info(f"[{symbol}] Small Account Floor: Forcing {lot} -> {info.volume_min}")
-            lot = info.volume_min
+    # Directive Omega: Rule 1.1 - Small Account Floor Sizing Veto
+    if lot < info.volume_min:
+        logger.warning(f"[{symbol}] ZERO_SIZING_VETO: Calculated lot size {lot:.4f} < broker min {info.volume_min}. Abolishing small account floor; returning 0.0.")
+        return 0.0
         
     lot = max(min(lot, info.volume_max), 0.0) 
     return lot
@@ -804,6 +1123,18 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
     deal_comment = f"{AGENT_SIGNATURE}_TF{entry_tf}_P{conviction:.2f}"[:29]
     
     try:
+        # Extract model scores from alpha_features for the checklist
+        xgb_p = alpha_features.get("xgb_p", 0.5) if alpha_features else 0.5
+        ddqn_p = alpha_features.get("ddqn_p", 0.5) if alpha_features else 0.5
+        hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
+        
+        passed, reason = run_composite_preflight_checklist(
+            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p
+        )
+        if not passed:
+            logger.warning(f"[{symbol}] COMPOSITE_PREFLIGHT_VETO: Trade rejected. Reason: {reason}")
+            return False
+
         tick = mt5.symbol_info_tick(symbol)
         if not tick: 
             logger.error(f"[{symbol}] Failed to get tick for execution.")
