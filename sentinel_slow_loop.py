@@ -36,6 +36,16 @@ _LAST_CS_REFRESH = 0
 _P_SCORE_HISTORY = []
 _MODEL_DRIFT_HALT = False
 
+_CYCLE_P_SCORES = {}
+_CYCLE_PENDING_SIGNALS = []
+_CYCLE_LOCK = threading.Lock()
+
+_LAST_CYCLE_PRICES = {}
+_LAST_CYCLE_ATRs = {}
+_IS_STARTUP_OR_SHOCK = True
+
+
+
 def _pre_scan_watchlist(watchlist: list):
     """
     Directive 3: Global Pre-Scan for Market Neutralization.
@@ -203,8 +213,21 @@ def get_xgb_prediction(features_df):
         return 0.500000
     try:
         # Prepare DMatrix from the last row of the feature-engineered dataframe
-        # We use a 128-dim compressed vector if available, otherwise raw features
-        latest_features = features_df.tail(1).select_dtypes(include=[np.number])
+        latest_features = features_df.tail(1)
+        if _XGB_MODEL.feature_names is not None:
+            # Self-healing feature alignment: fill any missing model columns with 0.0
+            cols = []
+            for col in _XGB_MODEL.feature_names:
+                if col in latest_features.columns:
+                    cols.append(latest_features[col])
+                else:
+                    # Inject safe default Series matching the dataframe index
+                    cols.append(pd.Series([0.0], index=latest_features.index, name=col))
+            latest_features = pd.concat(cols, axis=1)
+            latest_features.columns = _XGB_MODEL.feature_names
+        else:
+            latest_features = latest_features.select_dtypes(include=[np.number])
+        
         dmat = xgb.DMatrix(latest_features)
         pred = _XGB_MODEL.predict(dmat)[0]
         return float(pred)
@@ -814,6 +837,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             else:
                 p_blend = 0.500
                 
+            # Directive 1: Dynamic Divergence Gating
+            import alpha_combiner
+            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend)
+            if not is_consensus:
+                logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
+                p_blend = 0.500
+                
             logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f} (Agents: {list(active_scores.keys())})")
             
         except Exception as e:
@@ -880,14 +910,14 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 k_hist = k_hist_item.data.tail(50)
                 xgb_vals = k_hist['xgboost_prob'].values
                 k_vals = k_hist['kronos_prob'].values
-                z_xgb = (float(x_prob) - np.mean(xgb_vals)) / (np.std(xgb_vals) + 1e-9)
-                z_kronos = (float(k_prob) - np.mean(k_vals)) / (np.std(k_vals) + 1e-9)
+                z_xgb = np.clip((float(x_prob) - np.mean(xgb_vals)) / (np.std(xgb_vals) + 1e-9), -3.0, 3.0)
+                z_kronos = np.clip((float(k_prob) - np.mean(k_vals)) / (np.std(k_vals) + 1e-9), -3.0, 3.0)
             else:
-                z_xgb = (float(x_prob) - 0.5) / 0.15
-                z_kronos = (float(k_prob) - 0.5) / 0.15
+                z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
+                z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
         except Exception as e:
-            z_xgb = (float(x_prob) - 0.5) / 0.15
-            z_kronos = (float(k_prob) - 0.5) / 0.15
+            z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
+            z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
 
         # v22.4: Extract Alpha Factory features from the FINAL ROW only.
         # The upstream warm-up validation guarantees these are valid floats.
@@ -950,20 +980,23 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         meta_p = (w_trend * p_trend) + (w_range * p_range)
         
         # Dynamic Epistemic Gate Blending
-        # Trend Gate (Default) vs Range Gate (0.75 override)
-        current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * 0.75)
+        # Trend Gate (Default) vs Range Gate (0.75 override, lowered to EPISTEMIC_GATE for boot/shocks)
+        range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
+        current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
         
-        # Post-processing: Regime Alignment & Graveyard
-        # v24.3 Constitution: Eradicated legacy v17.9 regime overrides. 
-        # MixTS handles regime alignment natively via Bayesian weighting.
         if is_graveyard: meta_p = 0.50
         
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f})")
 
         # ── Directive 2: P-Score Telemetry & Drift Detection ─────────────────
-        _P_SCORE_HISTORY.append(float(meta_p))
-        if len(_P_SCORE_HISTORY) > 100:
-            _P_SCORE_HISTORY.pop(0)
+        if float(meta_p) != 0.50:  # Ignore forced SRE safety overrides
+            _P_SCORE_HISTORY.append(float(meta_p))
+            if len(_P_SCORE_HISTORY) > 100:
+                _P_SCORE_HISTORY.pop(0)
+
+        with _CYCLE_LOCK:
+            _CYCLE_P_SCORES[symbol] = float(meta_p)
+
 
         # Log P-score to structured history ledger file for telemetry diagnosis
         p_history_path = Path(PROJECT_ROOT) / "data" / "p_score_history.jsonl"
@@ -1016,19 +1049,20 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             signal_dir = "BUY" if meta_p > 0.5 else "SELL"
             
             signal_type = "MEAN_REVERSION" if w_range > w_trend else "MOMENTUM"
-            push_to_orchestrator({
-                "symbol": symbol,
-                "direction": signal_dir,
-                "conviction": round(float(meta_p), 6),
-                "xgb_p": float(x_prob),
-                "ddqn_p": float(ddqn_p),
-                "hmm_state": hmm_state,
-                "atr": float(atr),
-                "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                "version": "v28.0-TRADE-QUALITY",
-                "signal_type": signal_type
-            })
-            logging.info(f"[OK] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
+            with _CYCLE_LOCK:
+                _CYCLE_PENDING_SIGNALS.append({
+                    "symbol": symbol,
+                    "direction": signal_dir,
+                    "conviction": round(float(meta_p), 6),
+                    "xgb_p": float(x_prob),
+                    "ddqn_p": float(ddqn_p),
+                    "hmm_state": hmm_state,
+                    "atr": float(atr),
+                    "timestamp": int(datetime.now(timezone.utc).timestamp()),
+                    "version": "v28.11-IRONCLAD-CADES",
+                    "signal_type": signal_type
+                })
+            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f}")
         else:
             if hmm_state == "RANGE":
                 logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
@@ -1061,6 +1095,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
 async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
     """Runs update_slow_oracles concurrently using Micro-Batching."""
+    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS
+    with _CYCLE_LOCK:
+        _CYCLE_P_SCORES = {}
+        _CYCLE_PENDING_SIGNALS = []
+
     def chunked(iterable, n):
         it = iter(iterable)
         while True:
@@ -1085,13 +1124,93 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
                 await asyncio.sleep(0.5)
             batch_idx += 1
 
+    # Directive 2: The Correlated Overconfidence Veto
+    extreme_count = sum(1 for p in _CYCLE_P_SCORES.values() if p > 0.90 or p < 0.10)
+    veto_threshold = 0.20 * len(watchlist)
+    
+    if extreme_count > veto_threshold:
+        logging.critical(
+            f"[CRITICAL] Overconfidence Veto Engaged: {extreme_count}/{len(watchlist)} assets "
+            f"generated extreme conviction (P > 0.90 or P < 0.10), exceeding 20% limit. "
+            f"Possible Correlated Overconfidence Hallucination detected! Zeroing out all P-scores."
+        )
+        
+        # Zero out P-scores in database
+        for symbol in watchlist:
+            try:
+                item = _arctic_read(f"{symbol}_meta")
+                if item is not None:
+                    df = item.data.copy()
+                    df.loc[df.index[-1], "meta_conviction"] = 0.50
+                    df.loc[df.index[-1], "primary_dir"] = 0
+                    _arctic_write(f"{symbol}_meta", df)
+            except Exception as e:
+                logging.warning(f"[VETO_DB_WRITE_ERR] Failed to zero out {symbol}: {e}")
+                
+        # Refuse to pass signals to Fast Loop by clearing pending signals
+        with _CYCLE_LOCK:
+            _CYCLE_PENDING_SIGNALS = []
+    else:
+        # No veto engaged: safely dispatch all pending signals
+        logging.info(f"[SRE] Veto check passed. Dispatching {len(_CYCLE_PENDING_SIGNALS)} qualified signals.")
+        for sig in _CYCLE_PENDING_SIGNALS:
+            try:
+                push_to_orchestrator(sig)
+            except Exception as e:
+                logging.error(f"[SIGNAL_DISPATCH_ERR] Failed to dispatch signal for {sig['symbol']}: {e}")
+
+
 def execute_historical_backfill(watchlist: list):
     logging.info(f"[SRE] Cache-based backfill verification ({len(watchlist)} assets)...")
     pass
 
+def should_trigger_evaluation(watchlist: list, last_run_hour: int):
+    global _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs
+    now = datetime.now()
+    
+    # 1. H1 Candle Close Fallback
+    if now.hour != last_run_hour:
+        logging.info(f"[EVENT-TRIGGER] H1 Candle Close detected (Prev Hour: {last_run_hour}, Current Hour: {now.hour}). Triggering evaluation.")
+        return True, "H1_CLOSE"
+        
+    # 2. Volatility Shock Check (> 0.5 ATR price movement)
+    import MetaTrader5 as mt5
+    for symbol in watchlist:
+        try:
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick:
+                continue
+            current_price = (tick.bid + tick.ask) / 2
+            
+            atr = 0.0
+            if symbol in _LAST_CYCLE_ATRs:
+                atr = _LAST_CYCLE_ATRs[symbol]
+            else:
+                meta_item = _arctic_read(f"{symbol}_meta")
+                if meta_item is not None:
+                    atr = float(meta_item.data.iloc[-1].get("atr", 0.0))
+                    _LAST_CYCLE_ATRs[symbol] = atr
+            
+            if atr <= 0:
+                continue
+                
+            last_price = _LAST_CYCLE_PRICES.get(symbol, 0.0)
+            if last_price <= 0:
+                _LAST_CYCLE_PRICES[symbol] = current_price
+                continue
+                
+            price_delta = abs(current_price - last_price)
+            threshold = 0.5 * atr
+            if price_delta >= threshold:
+                logging.info(f"[EVENT-TRIGGER] Volatility Shock detected on {symbol}! Move: {price_delta:.5f} >= 0.5*ATR ({threshold:.5f}). Triggering evaluation.")
+                return True, f"VOLATILITY_SHOCK_{symbol}"
+        except Exception as e:
+            logging.debug(f"[TRIGGER_CHECK_ERR] Error checking trigger for {symbol}: {e}")
+            
+    return False, None
+
 def main():
-    global _LAST_CS_REFRESH
-    # v23.6 RAM Audit
+    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK
     print("=" * 60)
     print(f"  ACTIVE MATRIX SIZE: {len(WATCHLIST)} ASSETS")
     print("=" * 60)
@@ -1102,26 +1221,63 @@ def main():
         sys.exit(1)
         
     execute_historical_backfill(watchlist)
-    logging.info("[SYSTEM] Cache warm-up (parallel, force_refresh=True)...")
+    
+    # Directive 1: Immediate startup evaluation cycle (Cycle 0)
+    logging.info("[SYSTEM] Startup Immediate Evaluation (Cycle 0, parallel, force_refresh=True)...")
+    _IS_STARTUP_OR_SHOCK = True
     asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
     _LAST_CS_REFRESH = time.time()
-    logging.info("[SYSTEM] Warm-up complete. Entering event-driven dollar-bar cycle.")
+    
+    # Store initial prices and ATRs after the first cycle
+    import MetaTrader5 as mt5
+    for symbol in watchlist:
+        try:
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
+            meta_item = _arctic_read(f"{symbol}_meta")
+            if meta_item is not None:
+                _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
+        except Exception as e:
+            logging.debug(f"[INIT_PRICE_ERR] {symbol}: {e}")
+            
+    last_run_hour = datetime.now().hour
+    _IS_STARTUP_OR_SHOCK = False
+    logging.info("[SYSTEM] Cycle 0 execution completed. Entering short-polling event loop.")
 
-    # Directive 3: The 1-Hour Heartbeat (Anti-Scalp Lock)
+    # Directive 2: Information-Driven Awakening (Short polling volume/volatility loop)
     while True:
         try:
-            logging.info(f"[HEARTBEAT] Starting H1 Swing Evaluation Cycle ({len(watchlist)} assets)...")
-            asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
-            _pre_scan_watchlist(watchlist)
+            time.sleep(10)
             
-            # Sleep until the top of the next hour
-            now = datetime.now()
-            seconds_to_wait = 3600 - (now.minute * 60 + now.second)
-            logging.info(f"[HEARTBEAT] Cycle complete. Sleeping for {seconds_to_wait} seconds until next H1 close.")
-            time.sleep(seconds_to_wait)
+            trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
+            if trigger:
+                logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
+                if "VOLATILITY_SHOCK" in reason:
+                    _IS_STARTUP_OR_SHOCK = True
+                else:
+                    _IS_STARTUP_OR_SHOCK = False
+                    
+                asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
+                _pre_scan_watchlist(watchlist)
+                
+                # Update loop states
+                last_run_hour = datetime.now().hour
+                _IS_STARTUP_OR_SHOCK = False
+                for symbol in watchlist:
+                    try:
+                        tick = mt5.symbol_info_tick(symbol)
+                        if tick:
+                            _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
+                        meta_item = _arctic_read(f"{symbol}_meta")
+                        if meta_item is not None:
+                            _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
+                    except Exception as e:
+                        logging.debug(f"[UPDATE_PRICE_ERR] {symbol}: {e}")
         except Exception as e:
             logging.error(f"[HEARTBEAT_ERROR] {e}")
-            time.sleep(60)
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
+

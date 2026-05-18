@@ -4,5 +4,27 @@
   "epistemic_gate_threshold": 0.60,
   "atr_multiplier_sl": 3.0,
   "tp_multiplier_range_min": 2.5,
-  "tp_multiplier_range_max": 5.0
+  "tp_multiplier_range_max": 5.0,
+  "thesis_decay_rules": {
+    "default": {
+      "min_hold_hours": 4,
+      "decay_threshold": 0.45
+    },
+    "FOREX": {
+      "min_hold_hours": 12,
+      "decay_threshold": 0.42
+    },
+    "CRYPTO": {
+      "min_hold_hours": 6,
+      "decay_threshold": 0.40
+    },
+    "INDEX": {
+      "min_hold_hours": 8,
+      "decay_threshold": 0.45
+    },
+    "COMMODITY": {
+      "min_hold_hours": 12,
+      "decay_threshold": 0.42
+    }
+  }
 }

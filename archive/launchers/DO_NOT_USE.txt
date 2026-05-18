@@ -1,0 +1,1 @@
+These launchers are RETIRED as of 2026-05-18. They stamp trades with legacy version signatures. The canonical launcher is: C:\Sentinel_Project\START_SENTINEL.ps1

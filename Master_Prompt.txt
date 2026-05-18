@@ -1,5 +1,5 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.9 - Ironclad CADES: Monte Carlo Path Stress) 🚨
-CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.9. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v28.14 - Ironclad CADES: Numerical Integrity) 🚨
+CRITICAL AI INSTRUCTION: Purge all prior architectures. Strictly obey v28.14. This is a CODE FREEZE. Do not modify core logic without explicit user authorization. A trade must survive all FIVE WALLS to be executed. 
 
 WALL 0: MODEL ORIGINATION & BACKTESTING [Anti-Curve Fitting]
 * Walk-Forward Validation ONLY: Models MUST be trained using expanding or rolling chronological windows. Random K-Fold splits are strictly forbidden due to serial correlation. Only Out-Of-Sample (OOS) metrics may be reported.
@@ -15,21 +15,28 @@ WALL 1: ARCHITECTURAL & SIGNATURE INTEGRITY [Anti-Ghosting]
 * Absolute Signature Mandate: Hardcoded versions are forbidden. Dynamically import `AGENT_SIGNATURE` from `sentinel/version_manifest.py`. MT5 comments MUST be < 31 chars and match the signature exactly.
 * CI/CD Self-Cert: `self_cert.py` must pass; git pre-commit hooks must block legacy strings.
 * Continuous Temporal Indexing: Dataframes MUST forward-fill price and zero-fill volume for broker maintenance gaps prior to feature engineering.
+* Information-Driven Heartbeat: The Slow Loop MUST NOT lock the main thread with long chronological sleep periods (>60s). It must utilize event-driven polling or volume/volatility thresholds to trigger intra-bar evaluation during macro shocks, while always executing a mandatory cycle immediately upon boot.
+* Silent Fallback Veto: Missing model weight files (.json, .pt, .pkl) MUST trigger a hard [SRE HALT] and exit. The system is strictly forbidden from defaulting to 0.50 or dummy logic to keep the pipeline running.
+* Stale Cache Veto: Daemons reading from the database must verify timestamp freshness. Reading a stale cache value and writing it back unchanged to simulate a live cycle (Feedback Locking) is strictly forbidden.
 
 WALL 2: EPISTEMIC & TOXIC GATING [Anti-Noise & Anti-Drift]
 * Model Edge Baseline: All active models (XGBoost, DDQN) MUST maintain an Out-of-Sample AUC-ROC > 0.55.
-* Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals.
+* Model Drift Telemetry: The system MUST monitor the rolling standard deviation of the last 100 Alpha Combiner $P$ scores. If `std < 0.05`, the models have suffered mode collapse. The system MUST halt autonomous trading. Extreme conviction ($P > 0.85$) is mathematically capped to occur in < 15% of signals. Drift Telemetry MUST strictly measure the variance of RAW model predictions. Any signals mathematically forced to 0.50 by structural safety gates (like Divergence or Overconfidence vetos) MUST be excluded from the rolling standard deviation calculation to prevent false-positive halts.
 * Feature Integrity Assertions: All engineered dataframes MUST pass strict mathematical bounds checks (e.g., RSI clamped to [0,100], strictly positive ATR) via hard assertions before ML inference.
 * Agent Quarantine (Consensus Purity): Uninitialized/untrained agents artificially dilute conviction. All models MUST pass through the `agent_quarantine.py` registry.
 * Sealed Hysteresis: Ensemble scores of 0.40 <= P <= 0.60 are HARD BLOCKED as phantom conviction.
 * Combiner Integrity: Cross-sectional asset scoring MUST utilize `NaN`-safe math (`np.nanmean`, `np.nanstd`).
 * Toxicity Blindness Veto: The system MUST evaluate VPIN/Order-Flow Toxicity. Trades firing into highly adversarial flow must be rejected.
+* Correlated Overconfidence Veto: If >20% of the watchlist generates extreme conviction ($P>0.90$ or $P<0.10$) simultaneously, all signals must be vetoed as a model hallucination. Divergence gating must dynamically expand to 0.40 only during valid extreme conviction events.
+* Strict Numerical Sanitization (The Bounds Mandate): All feature engineering, Z-score standardizations, and mathematical outputs MUST use safe division padding AND strict bounds clipping (e.g., np.clip(val, -3.0, 3.0)). Floating-point precision overflow (e.g., Entropy = 1.00000001) that violates bounds checks will result in immediate execution vetoes.
+
 
 WALL 3: REGIME ALIGNMENT [Anti-Decay]
 * Double Mutex Amnesia Lock: 86,400s (24 Hours) post-exit embargo to prevent noise chop.
 * Regime Misalignment Veto: The strategy must mathematically align with the environment. Mean-reversion signals in a TREND regime, or Momentum signals in a RANGE regime, MUST be explicitly rejected by the execution bridge.
 * HMM Calibration: The HMM Regime Classifier MUST maintain >70% accuracy against structural Ground Truth (ADX > 25).
 * Heuristic Override: If legacy ML models crash due to H1/H4 dimension mismatch, route raw Swing Alpha signals directly to execution via hardcoded scores.
+* Timeframe Matching: Thesis Decay exits are STRICTLY FORBIDDEN before the asset-specific minimum hold time has elapsed (e.g., 12 hours for Swing). Conviction ($P$) scoring for exits MUST match the original entry timeframe (H4 entries use H4 conviction).
 
 WALL 4: STRUCTURAL MATH & EXECUTION [Anti-Slippage]
 * ZERO NAKED TRADES: Execute via ECN 2-Step wrapped in an atomic retry block (max 3 retries). 

@@ -214,9 +214,53 @@ def startup_event():
     assert len(AGENT_SIGNATURE) < 31, f"MT5 Comment exceeds 31 chars: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)"
     logger.info(f"[BOOT] Agent Signature verified: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)")
 
-    if not mt5.initialize():
-        logger.critical("MT5 Initialization failed. Sniper cannot proceed.")
+    # Tripwire 1: Assert AGENT_SIGNATURE against LEGACY_BANNED list. Exit Code 1 on fail.
+    try:
+        from sentinel.version_manifest import LEGACY_BANNED
+        for banned in LEGACY_BANNED:
+            if banned in AGENT_SIGNATURE:
+                logger.critical(f"[BOOT TRIPWIRE 1] Legacy signature token detected: {banned} in {AGENT_SIGNATURE}!")
+                sys.exit(1)
+        logger.info(f"[BOOT TRIPWIRE 1] Signature clean. Banned list cleared.")
+    except Exception as e:
+        logger.critical(f"[BOOT TRIPWIRE 1] Signature check failed: {e}")
         sys.exit(1)
+
+    # Tripwire 2: Assert sys.stdout.encoding is utf-8. Exit Code 1 on fail.
+    encoding = getattr(sys.stdout, 'encoding', '') or ''
+    if encoding.lower().replace('-', '') != 'utf8':
+        logger.critical(f"[BOOT TRIPWIRE 2] Encoding breach: sys.stdout.encoding is {encoding} (expected UTF-8)!")
+        sys.exit(1)
+    logger.info("[BOOT TRIPWIRE 2] Encoding verified: UTF-8")
+
+    # Tripwire 3: Use psutil to scan for competing sentinel Python processes. Log a critical warning if sentinel_pids > 0.
+    try:
+        import psutil
+        current_pid = os.getpid()
+        competing = []
+        for proc in psutil.process_iter(['pid', 'cmdline']):
+            try:
+                if proc.pid == current_pid:
+                    continue
+                cmd = proc.info.get('cmdline') or []
+                cmd_str = " ".join(cmd)
+                # Match sentinel running daemons
+                if any(s in cmd_str for s in ['fastapi_sniper.py', 'sentinel_slow_loop.py', 'profit_manager.py']):
+                    competing.append(proc.pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if len(competing) > 0:
+            logger.critical(f"[BOOT TRIPWIRE 3] WARNING: Competing Sentinel processes detected: PIDs {competing}!")
+        else:
+            logger.info("[BOOT TRIPWIRE 3] Process dominance verified: No competing Sentinel daemons.")
+    except Exception as e:
+        logger.warning(f"[BOOT TRIPWIRE 3] Process scan failed: {e}")
+
+    # Tripwire 4: Assert mt5.initialize() succeeds. Exit Code 1 on fail.
+    if not mt5.initialize():
+        logger.critical("[BOOT TRIPWIRE 4] MT5 Initialization failed. Sniper cannot proceed.")
+        sys.exit(1)
+    logger.info("[BOOT TRIPWIRE 4] MT5 connection verified.")
     
     # Level 6 SRE Patch: Explicitly subscribe to target portfolio symbols in MT5 Market Watch
     logger.info(f"[BOOT] Forcing MT5 Market Watch selection for {len(WATCHLIST)} portfolio symbols...")
@@ -225,7 +269,7 @@ def startup_event():
         if not selected:
             logger.warning(f"[WARN] Failed to select {sym} in MT5 Market Watch.")
             
-    # Directive 2: Terminal Status Check (v23.6)
+    # Terminal Status Check
     info = mt5.terminal_info()
     logger.info(f"[BOOT] MT5 Terminal Info: Connected={info.connected} | TradeAllowed={info.trade_allowed}")
     if not info.trade_allowed:
@@ -708,10 +752,56 @@ def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> 
         distance = max(0.0, fractal_sl - tick.bid)
         return distance
 
+def verify_execution_signature(ticket: int):
+    """
+    Directive 4: Post-Execution Signature Audit.
+    Assures that the deal comment contains the active AGENT_SIGNATURE.
+    If not, flags an identity breach and writes the emergency shutdown flag.
+    """
+    logger.info(f"[POST-EXEC AUDIT] Verification signature for ticket #{ticket}...")
+    import MetaTrader5 as mt5
+    # Query MT5 history for the deal/order ticket
+    deals = mt5.history_deals_get(ticket=ticket)
+    if not deals:
+        deals = mt5.history_deals_get(position=ticket)
+        
+    if deals:
+        deal = deals[-1]
+        comment = deal.comment or ""
+        logger.info(f"[POST-EXEC AUDIT] Found deal #{deal.ticket} with comment '{comment}'")
+        
+        # Check signature breach (allowing version prefix fallback to handle severe broker-side truncation)
+        from sentinel.version_manifest import SENTINEL_VERSION
+        if AGENT_SIGNATURE not in comment and f"SENTINEL_{SENTINEL_VERSION}" not in comment:
+            logger.critical(f"[IDENTITY BREACH] Rogue execution detected! Deal comment '{comment}' does not match active '{AGENT_SIGNATURE}'!")
+            
+            # Write the emergency shutdown flag
+            flag_path = r"C:\Sentinel_Project\IDENTITY_BREACH.flag"
+            with open(flag_path, "w", encoding="utf-8") as flag_file:
+                flag_file.write(
+                    f"IDENTITY BREACH: Ticket #{ticket} was executed with legacy/rogue comment '{comment}'.\n"
+                    f"Expected active signature: '{AGENT_SIGNATURE}'.\n"
+                    f"Time of breach: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
+            
+            logger.critical(f"[IDENTITY BREACH] Emergency boot block file written: {flag_path}")
+            sys.exit(1)
+        else:
+            logger.info(f"[POST-EXEC AUDIT] Signature verified successfully for ticket #{ticket}")
+    else:
+        logger.warning(f"[POST-EXEC AUDIT] No matching deal found for ticket #{ticket} to audit signature.")
+
 def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
     if alpha_features is None:
         alpha_features = {'P': conviction, 'vpin': vpin}
     assert len(alpha_features) > 0, "alpha_features must be populated"
+    
+    # Extract timeframe from alpha_features, default to 'H4'
+    entry_tf = "H4"
+    if alpha_features and isinstance(alpha_features, dict):
+        entry_tf = alpha_features.get("timeframe", alpha_features.get("tf", "H4"))
+    
+    deal_comment = f"{AGENT_SIGNATURE}_TF{entry_tf}_P{conviction:.2f}"[:29]
     
     try:
         tick = mt5.symbol_info_tick(symbol)
@@ -797,7 +887,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                     "sl":           0.0,
                     "tp":           0.0,
                     "magic":        MAGIC_NUMBER,
-                    "comment":      f"SENTINEL_AC_{i+1}of{len(valid_slices)}_P{conviction:.2f}",
+                    "comment":      f"SENTINEL_AC_{i+1}of{len(valid_slices)}_P{conviction:.2f}"[:29],
                     "type_time":    mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,
                 }
@@ -810,6 +900,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                     if res.retcode == mt5.TRADE_RETCODE_DONE:
                         ticket = getattr(res, 'order', getattr(res, 'deal', 0))
                         logger.info(f"[AC] Child order {i+1}/{len(valid_slices)} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
+                        verify_execution_signature(ticket)
                         positions = mt5.positions_get(ticket=ticket)
                         if positions:
                             pos = positions[0]
@@ -944,7 +1035,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
             "sl":           0.0,
             "tp":           0.0,
             "magic":        MAGIC_NUMBER,
-            "comment":      AGENT_SIGNATURE,
+            "comment":      deal_comment,
             "type_time":    time_type,
             "expiration":   expiration,
             "type_filling": mt5.ORDER_FILLING_IOC,
@@ -967,7 +1058,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
             request["price"] = price
             request["type_time"] = mt5.ORDER_TIME_GTC
             request["expiration"] = 0
-            request["comment"] = f"SENTINEL_FALLBACK_P{conviction:.2f}"
+            request["comment"] = f"SENTINEL_{SENTINEL_VERSION}_TF{entry_tf}_P{conviction:.2f}"[:29]
             
             res = mt5.order_send(request)
 
@@ -980,6 +1071,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         if res.retcode == mt5.TRADE_RETCODE_DONE:
             ticket = getattr(res, 'order', getattr(res, 'deal', 0))
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
+            verify_execution_signature(ticket)
 
             # v27.0: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
             deals = mt5.history_deals_get(ticket=ticket)

@@ -125,7 +125,8 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     # 3. Order Flow Entropy (Shannon Entropy of directional probabilities)
     pos_p = (returns > 0).rolling(window=20, min_periods=1).mean() + 1e-9
     neg_p = (returns < 0).rolling(window=20, min_periods=1).mean() + 1e-9
-    df['order_flow_entropy'] = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
+    entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
+    df['order_flow_entropy'] = np.clip(entropy_raw, 0.0, 1.0)
     
     return df
 

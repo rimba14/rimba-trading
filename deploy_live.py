@@ -7,7 +7,7 @@ import MetaTrader5 as mt5
 
 def main():
     print("="*60)
-    print("      🛡️ SENTINEL v28.9 MASTER ORCHESTRATOR COLD-BOOT 🛡️")
+    print("      [BOOT] SENTINEL v28.9 MASTER ORCHESTRATOR COLD-BOOT")
     print("="*60)
 
     # -------------------------------------------------------------
@@ -22,8 +22,8 @@ def main():
                 continue
             cmd = proc.info.get('cmdline') or []
             cmd_str = " ".join(cmd)
-            # Find and SIGKILL fastapi_sniper, profit_manager, sentinel_slow_loop
-            if any(daemon in cmd_str for daemon in ['sentinel_slow_loop.py', 'fastapi_sniper.py', 'profit_manager.py']):
+            # Find and SIGKILL fastapi_sniper, profit_manager, sentinel_slow_loop, risk_agent
+            if any(daemon in cmd_str for daemon in ['sentinel_slow_loop', 'fastapi_sniper', 'profit_manager', 'risk_agent']):
                 print(f"[PURGE] Forcefully terminating legacy process {proc.pid}: {proc.name()} ({cmd_str})")
                 proc.kill()
                 purged_count += 1
@@ -82,6 +82,10 @@ def main():
     print("[IGNITION] Starting fastapi_sniper.py (Execution Bridge)...")
     fastapi_proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "fastapi_sniper:app", "--port", "8000", "--host", "127.0.0.1"])
     
+    # 1b. agents/risk_agent.py (The Sovereign Risk Agent / Wall 4 on Port 8001)
+    print("[IGNITION] Starting risk_agent.py (Portfolio Guardian / Port 8001)...")
+    risk_proc = subprocess.Popen([sys.executable, "agents/risk_agent.py"])
+    
     # 2. profit_manager.py (The Naked Kill Switch)
     print("[IGNITION] Starting profit_manager.py (Naked Kill Switch)...")
     profit_proc = subprocess.Popen([sys.executable, "profit_manager.py"])
@@ -94,7 +98,7 @@ def main():
     slow_proc = subprocess.Popen([sys.executable, "sentinel_slow_loop.py"])
     
     print("\n" + "="*60)
-    print("      🛡️ ADAPTIVE SENTINEL TRADING DEPLOYED SUCCESSFULLY 🛡️")
+    print("      [OK] ADAPTIVE SENTINEL TRADING DEPLOYED SUCCESSFULLY")
     print("="*60 + "\n")
 
     try:
@@ -102,7 +106,7 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n[SHUTDOWN] Orchestrator intercepted shutdown signal. Terminating background trading daemons...")
-        for name, p in [("fastapi_sniper", fastapi_proc), ("profit_manager", profit_proc), ("sentinel_slow_loop", slow_proc)]:
+        for name, p in [("fastapi_sniper", fastapi_proc), ("risk_agent", risk_proc), ("profit_manager", profit_proc), ("sentinel_slow_loop", slow_proc)]:
             try:
                 print(f"[SHUTDOWN] Terminating process {name} (PID {p.pid})...")
                 p.terminate()

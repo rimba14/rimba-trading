@@ -200,6 +200,118 @@ _THESIS_DECAY_STREAK: dict[int, int] = defaultdict(int)
 _SCALED_OUT_POSITIONS: set[int] = set()
 LIQUIDATION_COOLDOWN_S = 60.0
 REGIME_POLL_INTERVAL = 5.0
+def get_entry_timeframe(pos) -> str:
+    comment = pos.comment or ""
+    import re
+    match = re.search(r"_TF([A-Za-z0-9]+)", comment)
+    if match:
+        return match.group(1)
+    return "H4"
+
+def get_decay_rules(symbol: str, config: dict) -> dict:
+    rules = config.get("thesis_decay_rules", {})
+    symbol_upper = symbol.upper()
+    
+    crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"]
+    is_crypto = any(k in symbol_upper for k in crypto_keywords)
+    
+    index_keywords = ["SP500", "US2000", "GER40", "US500", "US30", "NAS100", "UK100", "JPN225"]
+    is_index = any(k in symbol_upper for k in index_keywords)
+    
+    commodity_keywords = ["XAU", "XAG", "OIL", "CL-OIL", "XPT", "XPD", "GAS", "NGAS"]
+    is_commodity = any(k in symbol_upper for k in commodity_keywords)
+    
+    if is_crypto:
+        return rules.get("CRYPTO", rules.get("default", {"min_hold_hours": 6, "decay_threshold": 0.40}))
+    elif is_index:
+        return rules.get("INDEX", rules.get("default", {"min_hold_hours": 8, "decay_threshold": 0.45}))
+    elif is_commodity:
+        return rules.get("COMMODITY", rules.get("default", {"min_hold_hours": 12, "decay_threshold": 0.42}))
+    else:
+        return rules.get("FOREX", rules.get("default", {"min_hold_hours": 12, "decay_threshold": 0.42}))
+
+def get_position_conviction_by_tf(symbol: str, entry_tf: str) -> float:
+    try:
+        from arcticdb import Arctic
+        store = Arctic(ARCTIC_DIR)
+        lib   = store["oracle_cache"]
+        item  = lib.read(f"{symbol}_meta")
+        row   = item.data.iloc[-1]
+        
+        # Try to pull timeframe-specific conviction from ArcticDB row
+        tf_key = f"conviction_{entry_tf.lower()}"
+        if tf_key in row:
+            return float(row[tf_key])
+        
+        return float(row["meta_conviction"])
+    except Exception as e:
+        logger.warning(f"[TF_CONVICTION_READ_ERR] {symbol} for TF {entry_tf}: {e}")
+        return 0.50
+
+def run_thesis_decay_check(pos, config: dict, now: float) -> bool:
+    """
+    Directive 4: Rewrite the Thesis Decay Loop.
+    Enforces the 4 CADES Thesis Decay exit conditions.
+    """
+    symbol = pos.symbol
+    pos_direction = "BUY" if pos.type == 0 else "SELL"
+    
+    # CONDITION 1: hold_secs >= min_hold_secs
+    elapsed_seconds = now - pos.time
+    decay_rules = get_decay_rules(symbol, config)
+    min_hold_hours = decay_rules.get("min_hold_hours", 4)
+    min_hold_secs = min_hold_hours * 3600
+    
+    if elapsed_seconds < min_hold_secs:
+        logger.info(f"[THESIS GUARD] {symbol} held {elapsed_seconds/3600:.1f}h — minimum hold is {min_hold_hours}h. Thesis decay blocked.")
+        return False
+        
+    # CONDITION 2: Conviction is pulled for the correct timeframe (get_position_conviction_by_tf)
+    entry_tf = get_entry_timeframe(pos)
+    live_p = get_position_conviction_by_tf(symbol, entry_tf)
+    thesis_p = live_p if pos_direction == "BUY" else (1.0 - live_p)
+    
+    # Store history for streak check
+    hist = _CONVICTION_HISTORY[pos.ticket]
+    hist.append(thesis_p)
+    if len(hist) > 50:
+        hist.pop(0)
+        
+    # CONDITION 3: P score is below the threshold for the required number of consecutive checks
+    decay_threshold = decay_rules.get("decay_threshold", 0.45)
+    
+    if thesis_p < decay_threshold:
+        _THESIS_DECAY_STREAK[pos.ticket] += 1
+    else:
+        _THESIS_DECAY_STREAK[pos.ticket] = 0
+        
+    is_decay_streak = _THESIS_DECAY_STREAK[pos.ticket] >= 3
+    
+    # CONDITION 4: The trade is not currently managed by the Event Horizon macro shield
+    has_event = False
+    try:
+        has_event, _ = check_upcoming_tier1_events(symbol, threshold_hours=12.0)
+    except Exception as e:
+        logger.warning(f"[EVENT_HORIZON_CHECK_ERR] {symbol}: {e}")
+        
+    if has_event:
+        logger.info(f"[{symbol}] #{pos.ticket} under Event Horizon shield. Suppressing thesis decay exit.")
+        return False
+        
+    if is_decay_streak:
+        logger.warning(f"[THESIS DECAY] {symbol} #{pos.ticket} triggered: TF={entry_tf} | P={thesis_p:.4f} < Threshold={decay_threshold} for {_THESIS_DECAY_STREAK[pos.ticket]} checks.")
+        return True
+        
+    return False
+
+def load_risk_config() -> dict:
+    try:
+        import json
+        with open("dynamic_risk_params.json", "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as e:
+        logger.warning(f"[CONFIG_LOAD_ERR] Failed to load dynamic_risk_params.json: {e}")
+        return {}
 
 class SentinelProfitManager:
     """
@@ -286,6 +398,7 @@ class SentinelProfitManager:
         Immediately liquidates any position whose direction conflicts with the regime.
         """
         now = time.time()
+        config = load_risk_config()
 
         for pos in positions:
             symbol = pos.symbol
@@ -307,8 +420,9 @@ class SentinelProfitManager:
                 continue  # Stale or unavailable - skip
             
             hmm_state = oracle_data["hmm_state"]
-            live_p    = oracle_data["conviction"]
-            atr       = oracle_data["atr"]
+            entry_tf = get_entry_timeframe(pos)
+            live_p = get_position_conviction_by_tf(symbol, entry_tf)
+            atr = oracle_data["atr"]
 
             pos_direction = "BUY" if pos.type == 0 else "SELL"
             price_open = pos.price_open
@@ -570,17 +684,8 @@ class SentinelProfitManager:
             else:
                 self._regime_persistence_counter[pos.ticket] = 0
 
-            # Directive 3: Dynamic Thesis Decay
-            tp_atr_dist = abs(pos.tp - price_open) / macro_atr if pos.tp > 0.0 else 4.0
-            profit_atr = profit_price_delta / macro_atr
-            dynamic_threshold = max(0.15, 0.45 - (max(0.0, profit_atr) / max(0.1, tp_atr_dist)) * 0.30)
-            
-            if ema_p < dynamic_threshold:
-                _THESIS_DECAY_STREAK[pos.ticket] += 1
-            else:
-                _THESIS_DECAY_STREAK[pos.ticket] = 0
-                
-            is_thesis_decay = _THESIS_DECAY_STREAK[pos.ticket] >= 3
+            # Directive 3 & 4: Thesis Decay (v28.10 Timeframe Matching & Asset Rules)
+            is_thesis_decay = run_thesis_decay_check(pos, config, now)
             
             # ── v27.0: True Swing Time-Stop & Weekend Bypass ──
             # Fetch H1 bars elapsed since entry for the swing time-stop gate
@@ -628,7 +733,9 @@ class SentinelProfitManager:
                     trigger_desc = f"{pos_direction} vs {hmm_state}"
                 elif is_thesis_decay:
                     reason_type = "[THESIS DECAY]"
-                    trigger_desc = f"EMA(P)={ema_p:.4f} < Threshold={dynamic_threshold:.4f}"
+                    decay_rules = get_decay_rules(symbol, config)
+                    decay_threshold = decay_rules.get("decay_threshold", 0.45)
+                    trigger_desc = f"EMA(P)={ema_p:.4f} < Threshold={decay_threshold:.4f} | TF={entry_tf}"
                 elif is_theta_decay:
                     reason_type = "[TIME STOP / THETA DECAY]"
                     trigger_desc = f"Held {elapsed_seconds/3600:.1f}h | PnL={pos.profit:.2f}"

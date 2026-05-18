@@ -79,6 +79,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [KRONOS_BRIDGE] %(me
                     handlers=[logging.StreamHandler(_UTF8_STREAM)])
 
 def calc_time_stamps(x_timestamp):
+    if not pd.api.types.is_datetime64_any_dtype(x_timestamp):
+        try:
+            x_timestamp = pd.to_datetime(x_timestamp, unit='s')
+        except Exception:
+            x_timestamp = pd.to_datetime(x_timestamp)
     time_df = pd.DataFrame()
     time_df['minute'] = x_timestamp.dt.minute
     time_df['hour'] = x_timestamp.dt.hour
@@ -317,14 +322,18 @@ class KronosBridge:
             if vol_pct == 0.0 and current_vol > 0:
                 vol_pct = 0.21 
 
-            # Retrieve existing XGBoost probability to preserve consensus pipeline
+            # Retrieve existing XGBoost probability, but update with dynamic prediction if available
             existing_xgb = 0.50
             try:
-                lib = self.store[CACHE_LIB]
-                if f"{symbol}_kronos" in lib.list_symbols():
-                    k_item = lib.read(f"{symbol}_kronos")
-                    existing_xgb = k_item.data.iloc[-1].get('xgboost_prob', 0.50)
-            except: pass
+                from sentinel_slow_loop import get_xgb_prediction
+                existing_xgb = get_xgb_prediction(ohlcv_df)
+            except Exception as e:
+                try:
+                    lib = self.store[CACHE_LIB]
+                    if f"{symbol}_kronos" in lib.list_symbols():
+                        k_item = lib.read(f"{symbol}_kronos")
+                        existing_xgb = k_item.data.iloc[-1].get('xgboost_prob', 0.50)
+                except: pass
 
             print(f"[SLOW LOOP RAW] {symbol} | Kronos: {kronos_raw:.4f} | Mu: {mu:.6f} | Sig: {signal:.2f} | ATR: {base_atr:.5f} | Vol%: {vol_pct:.2f}")
             
