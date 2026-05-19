@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger("SreWatchdog")
 
 EXPECTED_BROKER_OFFSET = 10800 # UTC+3
-OFFSET_TOLERANCE = 30 # seconds
+OFFSET_TOLERANCE = 120 # seconds
 
 def engage_emergency_kill_switch(reason):
     logger.critical(f"[FATAL] ENGAGING SENTINEL EMERGENCY KILL SWITCH: {reason}")

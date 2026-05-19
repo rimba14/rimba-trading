@@ -20,7 +20,7 @@ import concurrent.futures
 import itertools
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from collections import defaultdict
 
 import numpy as np
@@ -629,35 +629,32 @@ def push_to_orchestrator(payload: Dict[str, Any]):
             json.dump(payload, fh, indent=2)
 
 # -- Main Oracle Update --------------------------------------------------------
-def update_slow_oracles(symbol: str, force_refresh: bool = False):
-    """Full cognition pipeline for one symbol."""
-    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
+def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -> Optional[dict]:
+    global _MODEL_DRIFT_HALT, _OFFICIAL_REGIME, _HMM_HISTORY, _LAST_UPDATE
     if _MODEL_DRIFT_HALT:
         logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
-        return
+        return None
 
     data_quality_flag = "PRISTINE"
     is_this_symbol_starved = False
 
     now = time.time()
     if now - _LAST_UPDATE.get(symbol, 0) < ORACLE_COOLDOWN:
-        return
+        return None
     _LAST_UPDATE[symbol] = now
 
     # -- Macro Halt & Black Swan Override (v19.5) ----------------------------
-    # v27.0: Initialize m_state with defaults to prevent UnboundLocalError
     m_state = {"global_macro_sentiment": 0.0, "black_swan_risk": 0.0, "asset_specific_catalysts": {}}
     
     if HALT_PATH.exists():
         logging.critical("[MACRO_HALT] Global suspension active. Sleeping 60 s.")
         time.sleep(60)
-        return
+        return None
 
     try:
         macro_path = PROJECT_ROOT / "data" / "macro_state.json"
         if macro_path.exists():
             with open(macro_path, "r") as f:
-                # v20.4: Strict localized instantiation via copy.deepcopy()
                 m_state = copy.deepcopy(json.load(f))
                 if m_state.get("black_swan_risk", 0.0) > 0.85:
                     logging.critical(f"[BLACK_SWAN_OVERRIDE] Risk={m_state['black_swan_risk']:.2f} > 0.85. Forcing Conviction to 0.0 and LIQUIDATING ALL.")
@@ -668,7 +665,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                         "reasoning": "BLACK SWAN SUPREME OVERRIDE",
                         "timestamp": int(time.time())
                     })
-                    return
+                    return None
     except Exception as e:
         logging.warning(f"[MACRO_STATE] Failed to check black swan risk: {e}")
 
@@ -679,9 +676,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
     df_m15 = df_ta = df_ml = None
     latest_swing = None # v27.0: Store swing alpha features for Heuristic Override
+    df_h1 = df_h4 = swing_alpha = None
     try:
         logging.info(f"[{symbol}] Updating high-resolution oracles (v21.0)...")
-        # v27.0 Swing Paradigm: H1/H4 Multi-Timeframe Ingestion (Primary Data Source)
         mt5.symbol_select(symbol, True)
         try:
             from feature_engineering import ingest_mtf_ohlcv, compute_swing_alpha
@@ -704,13 +701,15 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 logging.warning(f"[{symbol}] H1 ingestion insufficient ({len(df_h1) if df_h1 is not None else 0} bars). Proceeding with tick fallback.")
         except Exception as _h1_err:
             logging.warning(f"[{symbol}] v27.0 Swing Alpha failed: {_h1_err}. Proceeding with tick fallback.")
+        
         # 1. Force a single tick request to wake up the broker's data stream
         mt5.symbol_info_tick(symbol)
-        # Shift from M15 to Tick Ingestion (N=2000) with async pre-fetch retry loop
+        
+        # Directive 1: Increase lookback by 100 (from 2000 to 2100)
         df_m15 = None
         max_retries = 5
         for attempt in range(max_retries):
-            df_m15 = sigproc.get_tick_dataframe(symbol, 2000)
+            df_m15 = sigproc.get_tick_dataframe(symbol, 2100)
             if df_m15 is not None and len(df_m15) >= 512:
                 break
             time.sleep(1.0)
@@ -734,11 +733,11 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 _INDEX_STARVATION_DETECTED = True
 
             try:
-                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 750)
+                # Directive 1: Increase lookback by 100 (from 750 to 850)
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 850)
                 if rates is not None and len(rates) >= 512:
                     df_m15 = pd.DataFrame(rates)
                     df_m15['time'] = pd.to_datetime(df_m15['time'], unit='s')
-                    # Align column names to tick-dataframe schema
                     df_m15.rename(columns={'tick_volume': 'tick_volume'}, inplace=True)
                     if 'real_volume' not in df_m15.columns:
                         df_m15['real_volume'] = df_m15.get('tick_volume', 0)
@@ -750,10 +749,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 else:
                     err = mt5.last_error()
                     logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback also insufficient. MT5 Error: {err}. Skipping.")
-                    return
+                    return None
             except Exception as _fe:
                 logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback exception: {_fe}. Skipping.")
-                return
+                return None
 
         df_ta = df_m15.copy()
         c = df_ta["close"]
@@ -795,15 +794,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             logging.warning(f"[{symbol}] DEGRADED_DATA_VETO: Z-score clipping on {clipped_features_count} (>3) features.")
         logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied. Clipped features: {clipped_features_count}")
 
-        # ── v22.4: Institutional Feature Engineering (Data Warm-Up) ────────
-        # Append frac_diff_price (López de Prado), FFT spectral amplitudes,
-        # and Cross-Sectional Rank to the ML feature vector.
-        # CRITICAL: We pass the FULL df_ml (2000+ ticks) to provide the 50-bar
-        # historical buffer that rolling windows need to produce valid floats.
         vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
         current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
         
-        # Calculate Volatility Regime Score (VRS) earlier for Volatility-Adjusted Epistemic Gates (VAG) & Jitter Injector
+        # Calculate VRS
         try:
             rvol = float(latest_swing.get("rvol", 1.0)) if (latest_swing is not None) else 1.0
             if np.isnan(rvol) or np.isinf(rvol):
@@ -836,38 +830,45 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 cs_rank=current_rank,
                 vrs=vrs
             )
-            nan_count = df_ml.isna().sum().sum()
+            
+            # Directive 1: Slice off the first 100 historical rows to discard mathematical tail
+            if df_ml is not None and len(df_ml) > 100:
+                df_ml = df_ml.iloc[100:].copy()
+                try:
+                    df_ml.fillna(method='bfill', inplace=True)
+                except Exception:
+                    df_ml.bfill(inplace=True)
+
+            nan_count = df_ml.isna().sum().sum() if df_ml is not None else 0
             logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
             if nan_count > 0:
                 logging.warning(f"[{symbol}] WARNING: NaNs detected in features:\n{df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
         except Exception as e:
             logging.error(f"[{symbol}] FEATURE_ENGINEERING_CRITICAL_FAILURE (Non-Fatal for Swing): {e}")
             if latest_swing is None:
-                return # Still fatal if no swing features either
+                return None
 
         if df_ml is not None:
             df_ml = df_ml.dropna()
             if len(df_ml) < 512 and latest_swing is None:
                 logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars and no swing fallback. Skipping.")
-                return
+                return None
 
-        # ── v22.4: Data Warm-Up Validation ──────────────────────────────────
-        # Verify the FINAL ROW has valid (non-NaN) Alpha Factory features.
-        # If rolling windows produced NaNs, we MUST halt — never default to 0.0.
+        # Verify the FINAL ROW has valid (non-NaN) features
         if df_ml is not None:
             _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
             _final_row = df_ml.iloc[-1]
             _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
             if _nan_features and latest_swing is None:
                 logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
-                return
+                return None
         elif latest_swing is None:
             logging.critical(f"[FATAL] {symbol}: No ML data and no Swing fallback. Halting.")
-            return
+            return None
 
         raw_hmm_state, hmm_prob, label_probs = hmm.get_current_state(df_m15["close"].values)
         
-        # Directive 1: Regime Hysteresis (Debouncing)
+        # Regime Hysteresis (Debouncing)
         if symbol not in _OFFICIAL_REGIME:
             _OFFICIAL_REGIME[symbol] = raw_hmm_state
             
@@ -880,7 +881,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             
         hmm_state = _OFFICIAL_REGIME[symbol]
         
-        # v27.0: Use H1-based ATR for all regime/scaling decisions
         atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
         logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f}) | ATR(H1)={atr:.5f}")
 
@@ -891,9 +891,50 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "timestamp": utils.get_utc_epoch(),
         }]))
 
+        return {
+            "df_ml": df_ml,
+            "df_ta": df_ta,
+            "df_m15": df_m15,
+            "df_h1": df_h1,
+            "df_h4": df_h4,
+            "swing_alpha": swing_alpha,
+            "latest_swing": latest_swing,
+            "vrs": vrs,
+            "hmm_state": hmm_state,
+            "hmm_prob": hmm_prob,
+            "label_probs": label_probs,
+            "data_quality_flag": data_quality_flag,
+            "is_this_symbol_starved": is_this_symbol_starved,
+            "atr": atr,
+            "m_state": m_state
+        }
+    except Exception as e:
+        logging.error(f"[{symbol}] Feature extraction failed: {e}\n{traceback.format_exc()}")
+        return None
+
+def run_inference_for_symbol(symbol: str, prep_data: dict):
+    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
+    global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED, _VRP_SPREAD
+    
+    df_ml = prep_data["df_ml"]
+    df_ta = prep_data["df_ta"]
+    df_m15 = prep_data["df_m15"]
+    df_h1 = prep_data["df_h1"]
+    df_h4 = prep_data["df_h4"]
+    swing_alpha = prep_data["swing_alpha"]
+    latest_swing = prep_data["latest_swing"]
+    vrs = prep_data["vrs"]
+    hmm_state = prep_data["hmm_state"]
+    hmm_prob = prep_data["hmm_prob"]
+    label_probs = prep_data["label_probs"]
+    data_quality_flag = prep_data["data_quality_flag"]
+    is_this_symbol_starved = prep_data["is_this_symbol_starved"]
+    atr = prep_data["atr"]
+    m_state = prep_data["m_state"]
+
+    try:
         # ── Level 34 SRE: Heuristic Override & ML Bypass ──────────────────
         try:
-            # 2. Resurrect XGBoost (Directive 1)
             kronos_bridge.update_cognition_cache(symbol, df_ml)
             k_item = _arctic_read(f"{symbol}_kronos")
             if k_item is not None:
@@ -905,7 +946,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             x_prob = get_xgb_prediction(df_ml)
             ddqn_p = 0.500 # Default
 
-            # v27.0 Consensus Purity Protocol
             scores_raw = {
                 "kronos": k_prob,
                 "xgb": x_prob,
@@ -925,17 +965,15 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             active_scores = q_result.filtered_scores
             
             # Directive 2: The Overconfidence Tripwire (v28.25 Calibration)
-            # Intercept raw predictions from active agents; quarantine if softmax saturated (>0.95 or <0.05)
             for agent_name, agent_prob in list(active_scores.items()):
                 if agent_prob > 0.95 or agent_prob < 0.05:
                     logging.warning(f"[{symbol}] [SOFTMAX_SATURATION_DETECTED] Agent '{agent_name}' outputted extreme/saturated confidence ({agent_prob:.4f}). Discarding from current cycle.")
                     del active_scores[agent_name]
             
-            # v27.0 Weight Allocation
-            # Base Weights: Kronos=0.4, XGB=0.3, DDQN=0.3
+            # Weight Allocation
             base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
             
-            # Re-normalize weights for active agents
+            # Re-normalize weights
             total_active_weight = sum(base_weights[name] for name in active_scores)
             if total_active_weight > 0:
                 p_blend = sum(
@@ -945,7 +983,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             else:
                 p_blend = 0.500
                 
-            # Directive 1: Dynamic Divergence Gating
             vals = [float(v) for v in active_scores.values() if not np.isnan(v)]
             model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
 
@@ -973,32 +1010,33 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 rsi = latest_swing.get('rsi', 50)
                 entropy = latest_swing.get('entropy', 0.5)
                 
-                # Heuristic Protocol logic
                 if rsi < 35 and entropy > 0.85:
-                    p_blend = 0.85 # Mean Rev Long
+                    p_blend = 0.85
                 elif rsi > 65 and entropy > 0.85:
-                    p_blend = 0.15 # Mean Rev Short
+                    p_blend = 0.15
                 elif latest_swing.get('trend_continuation_signal', 0) > 0:
-                    # Price vs EMA 20 for direction
                     p_blend = 0.90 if df_m15['close'].iloc[-1] > latest_swing.get('ema_20', 0) else 0.10
                 elif latest_swing.get('catalyst_momentum_signal', 0) > 0:
                     p_blend = 0.80 if latest_swing.get('gap_pct', 0) > 0 else 0.20
                 else:
-                    p_blend = 0.50 # Neutral
+                    p_blend = 0.50
             else:
                 p_blend = 0.50
                 
             logging.warning(f"[{symbol}] HEURISTIC_OVERRIDE ACTIVE: P_blend={p_blend:.2f} (Reason: {e})")
 
         if _OBSERVER:
+            timesfm_item = _arctic_read(f"{symbol}_timesfm")
+            p10_val = float(timesfm_item.data.iloc[-1].get("p10", 0.0)) if timesfm_item is not None else 0.0
+            p90_val = float(timesfm_item.data.iloc[-1].get("p90", 0.0)) if timesfm_item is not None else 0.0
             s_t_data = {
                 "kronos_p": k_prob,
                 "xgb_p": x_prob,
                 "ddqn_p": ddqn_p,
                 "hmm_state": hmm_state,
                 "atr": atr,
-                "timesfm_p10": float(k_item.data.iloc[-1].get("p10", 0.0)),
-                "timesfm_p90": float(k_item.data.iloc[-1].get("p90", 0.0))
+                "timesfm_p10": p10_val,
+                "timesfm_p90": p90_val
             }
             _OBSERVER.observe(pd.DataFrame([s_t_data]))
 
@@ -1017,7 +1055,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 if "FAILURE" in reasoning or "POST_MORTEM" in reasoning:
                     is_graveyard = True; break
 
-        # 6. Meta-Conviction (v19.5: Z-Score Noise Injection)
         try:
             k_hist_item = _arctic_read(f"{symbol}_kronos")
             if k_hist_item is not None:
@@ -1029,12 +1066,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             else:
                 z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
                 z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
-        except Exception as e:
+        except Exception:
             z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
             z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
 
-        # v22.4: Extract Alpha Factory features from the FINAL ROW only.
-        # The upstream warm-up validation guarantees these are valid floats.
         _final = df_ml.iloc[-1]
         local_meta_features = copy.deepcopy({
             "hmm_state": hmm_state,
@@ -1044,7 +1079,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
-            # v22.5: Alpha Factory + Microstructure Triad features
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
             "fft_amp_1": float(_final.get("fft_amp_1", 0.0)),
             "fft_amp_2": float(_final.get("fft_amp_2", 0.0)),
@@ -1055,20 +1089,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
         })
         
-        # v22.4: Final NaN sweep — if ANY numeric feature is NaN, halt.
         _nan_vals = {k: v for k, v in local_meta_features.items() if isinstance(v, float) and (np.isnan(v) or np.isinf(v))}
         if _nan_vals:
             logging.critical(f"[FATAL] {symbol}: NaN/Inf detected in meta-features: {list(_nan_vals.keys())}. Halting inference.")
             return
         
-        # Directive 4: FFT Coherence Lock (v20.4)
-        # ── Directive 1: Reconnect MixTS Probabilistic Blending (v22.6) ─────
-        # Evaluate both models concurrently (No binary hard gates)
-        
-        # Strategy A: Trend-Following (Math Meta-Model / MoE)
         p_trend = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
         
-        # Strategy B: Mean-Reversion (RSI + BB + FFT Coherence)
         rsi = df_ta["W_rsi"].iloc[-1]
         bbpos = df_ta["B_bbpos"].iloc[-1]
         prices = df_m15['close'].values
@@ -1078,19 +1105,15 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         if fft_amplitude > 1.5:
             p_range = calculate_mean_reversion_score(rsi, bbpos)
         else:
-            p_range = 0.50 # Neutralize if coherence is low
+            p_range = 0.50
             
-        # Blending Weights via HMM Posterior Probabilities
-        # HMM State 0=BULL, 1=BEAR, 2=RANGE
         w_trend = label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0)
         w_range = label_probs.get("RANGE", 0.0)
         
-        # Normalize weights to sum to 1.0
         total_w = w_trend + w_range + 1e-9
         w_trend /= total_w
         w_range /= total_w
         
-        # Standardize HMM state to selector logic
         hmm_selector_state = "TREND" if hmm_state in ("BULL", "BEAR", "TREND") else "RANGE"
         
         if hmm_selector_state == "TREND":
@@ -1100,7 +1123,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             signal = run_meridian_strategy(symbol, local_meta_features, p_range)
             meta_p = p_range
             
-            # Directive 1: VRP Spread conviction multiplier
             if _VRP_SPREAD > 5.0 and hmm_state == "RANGE":
                 deviation = meta_p - 0.5
                 meta_p = np.clip(0.5 + deviation * 1.15, 0.0, 1.0)
@@ -1112,14 +1134,9 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
             meta_p = p_trend
         
-        # VRS calculation moved up for early VAG jitter injection
-
-        # Dynamic Epistemic Gate Blending
-        # Trend Gate (Default) vs Range Gate (0.75 override, lowered to EPISTEMIC_GATE for boot/shocks)
         range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
         
-        # Rule 3.1: Minimum Conviction Gate (Directive Omega)
         high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
         is_degraded = (data_quality_flag != "PRISTINE") or _TICK_STARVATION_DETECTED or is_this_symbol_starved
         if is_degraded:
@@ -1130,13 +1147,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             min_p_gate = 0.68
         base_gate = max(current_gate, min_p_gate)
         
-        # Implement Volatility-Adjusted Epistemic Gates (VAG)
-        # Dynamic Volatility Gate formula: gate = base_gate * (1 - (0.5 * (1 - VRS)))
         dynamic_gate = base_gate * (1.0 - (0.5 * (1.0 - vrs)))
         dynamic_gate = max(dynamic_gate, 0.65)
         current_gate = dynamic_gate
         
-        # Directive 2: Regime-Awareness Patch - 5% Conviction Drift
         regime_prob = label_probs.get(hmm_state, 0.0)
         if regime_prob < 0.55:
             current_gate = max(current_gate - 0.05, 0.60)
@@ -1146,8 +1160,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
 
-        # ── Directive 2: P-Score Telemetry & Drift Detection ─────────────────
-        if float(meta_p) != 0.50:  # Ignore forced SRE safety overrides
+        if float(meta_p) != 0.50:
             _P_SCORE_HISTORY.append(float(meta_p))
             if len(_P_SCORE_HISTORY) > 100:
                 _P_SCORE_HISTORY.pop(0)
@@ -1155,8 +1168,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         with _CYCLE_LOCK:
             _CYCLE_P_SCORES[symbol] = float(meta_p)
 
-
-        # Log P-score to structured history ledger file for telemetry diagnosis
         p_history_path = Path(PROJECT_ROOT) / "data" / "p_score_history.jsonl"
         p_history_path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -1171,7 +1182,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         except Exception as _pe:
             logging.error(f"[TELEMETRY_WRITE_ERROR] Failed to write P-score telemetry: {_pe}")
 
-        # The Collapse Veto: check rolling standard deviation of last 100 raw P-scores
         if len(_P_SCORE_HISTORY) == 100:
             p_std = float(np.std(_P_SCORE_HISTORY))
             if p_std < 0.02:
@@ -1181,14 +1191,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                         f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). "
                         f"Initiating Automated Drift Reset ({_DRIFT_RECOVERY_ATTEMPTS}/3)..."
                     )
-                    # Clear conviction buffer
                     _P_SCORE_HISTORY.clear()
-                    
-                    # Force re-normalization of ArcticDB cache and models
                     try:
                         _ARCTIC.delete_library("oracle_cache")
                         oracle_lib = _ARCTIC.create_library("oracle_cache")
-                        
                         _load_meta_model_with_failsafe()
                         logging.info("[DRIFT RECOVERY] Cache purged and models rebooted.")
                     except Exception as e:
@@ -1213,21 +1219,14 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             "is_graveyard": is_graveyard,
         }]))
 
-        # Directive 1: Absolute Conviction Gate (v24.3 Level 23 SRE)
-        # norm_p must reflect BOTH BUY (P > 0.5) and SELL (P < 0.5) conviction.
-        # A bearish P=0.15 is abs(0.15-0.5)+0.5 = 0.85 absolute conviction.
         norm_p = abs(meta_p - 0.5) + 0.5
         
-        # v23.12 Directive: Sealed Hysteresis Dead-Zone
         if 0.40 <= meta_p <= 0.60:
             logging.info(f"[GATE] {symbol}: P={meta_p:.6f} falls in DEAD-ZONE (0.40-0.60). HARD BLOCKED.")
-            # Skip the signal dispatch block
         elif norm_p >= current_gate and primary_dir != 0:
             signal_dir = "BUY" if meta_p > 0.5 else "SELL"
             
             # --- DIRECTIVE OMEGA PRE-ENTRY VETOES ---
-            
-            # 1. Zero-Sizing Pre-Screen Check (Rule 1.2)
             acc_info = mt5.account_info()
             sym_info = mt5.symbol_info(symbol)
             if acc_info and sym_info:
@@ -1238,7 +1237,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                     logging.warning(f"[{symbol}] AFFORDABILITY_VETO: Affordable lot size {affordable_lot:.4f} < broker min {sym_info.volume_min}. Skipping signal.")
                     return
             
-            # 2. Weak Model Floor Check (Rule 3.2)
             k_score = active_scores.get('kronos', 0.5)
             x_score = active_scores.get('xgb', 0.5)
             predicted_dir = "BUY" if meta_p > 0.5 else "SELL"
@@ -1248,13 +1246,10 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
                 return
             
-            # 3. Regime Minimum Check (Rule 3.3) with Regime-Awareness Patch
             regime_prob = label_probs.get(hmm_state, 0.0)
             if regime_prob < 0.55:
-                # Uncertain HMM: bypass hard HMM regime vetoes and default to P_blend conviction
                 logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
             else:
-                # v28.28: Legacy REGIME_MINIMUM_VETO (< 0.60 check) is deprecated. MixTS handles uncertainty.
                 is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
                 if not is_mixts_valid and regime_prob < 0.60:
                     logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {hmm_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
@@ -1263,14 +1258,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                     logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {hmm_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
                     return
             
-            # 4. Pristine Data Check (Rule 2.1)
             entropy_val = 0.0
-            if 'df_ml' in locals() and df_ml is not None:
+            if df_ml is not None:
                 try:
                     entropy_val = float(df_ml.iloc[-1].get("order_flow_entropy", 0.0))
                 except:
                     pass
-            if 'latest_swing' in locals() and latest_swing is not None:
+            if latest_swing is not None:
                 try:
                     entropy_val = max(entropy_val, float(latest_swing.get('entropy', 0.0)))
                 except:
@@ -1283,7 +1277,6 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag}. Blocking signal.")
                 return
             
-            # 5. Index Starvation Check (Layer 6)
             _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
             if symbol.upper() in _INDICES and _INDEX_STARVATION_DETECTED:
                 logging.warning(f"[{symbol}] [HARD_VETO] [INDEX_STARVATION_VETO] An index has tick starvation in this cycle. Blocking all index entries.")
@@ -1314,14 +1307,12 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
         else:
             logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} < dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). Suppressed.")
-
-        timesfm_bridge.update_risk_cache(symbol, df_ml)
+ 
+        timesfm_bridge.update_risk_cache(symbol, df_m15)
 
     except Exception as e:
         error_msg = traceback.format_exc()
         logging.error(f"[{symbol}] Oracle update error:\n{error_msg}")
-        
-        # Directive 2: SRE Diagnostic Ticket Dispatch (v21.2)
         if isinstance(e, (NameError, ImportError, AttributeError)):
             diag_path = Path(PROJECT_ROOT) / "pending_diagnostics"
             diag_path.mkdir(parents=True, exist_ok=True)
@@ -1336,12 +1327,15 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                     "halt_required": True
                 }, f, indent=4)
             logging.critical(f"[SRE_HALT] FATAL ERROR DETECTED. Ticket dispatched: {diag_file.name}")
-    finally:
-        df_m15 = df_ta = df_ml = None
+
+def update_slow_oracles(symbol: str, force_refresh: bool = False):
+    prep = fetch_and_calculate_raw_features(symbol, force_refresh)
+    if prep is not None:
+        run_inference_for_symbol(symbol, prep)
 
 async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
-    """Runs update_slow_oracles concurrently using Micro-Batching."""
     global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED, _VRP_SPREAD
+    global _GLOBAL_CS_RANKS
     
     # Directive 1: Calculate VRP Macro Filter
     try:
@@ -1368,16 +1362,69 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
     loop = asyncio.get_event_loop()
     max_workers = 5 
     
-    # Directive 3: Pre-Scan the entire watchlist before processing batches
+    # Pre-Scan the entire watchlist before processing batches
     _pre_scan_watchlist(watchlist)
     
+    # Stage 1: Fetch historical data & Calculate raw features (Parallel, asset-by-asset)
+    logging.info(f"[ALPHA_FACTORY] Stage 1: Fetching data and calculating raw features...")
+    prep_results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+        tasks = [loop.run_in_executor(ex, fetch_and_calculate_raw_features, s, force_refresh) for s in watchlist]
+        results = await asyncio.gather(*tasks)
+        for s, res in zip(watchlist, results):
+            if res is not None:
+                prep_results[s] = res
+
+    # Stage 2: Combine all assets into a single unified 2D DataFrame matrix at time t, and run CS_Rank
+    logging.info(f"[ALPHA_FACTORY] Stage 2: Performing CS_Rank Matrix Freeze across {len(prep_results)} active assets...")
+    feature_rows = {}
+    for s, res in prep_results.items():
+        df_ml = res["df_ml"]
+        if df_ml is not None and len(df_ml) > 0:
+            numeric_row = df_ml.select_dtypes(include=[np.number]).iloc[-1]
+            feature_rows[s] = numeric_row
+
+    if feature_rows:
+        df_matrix = pd.DataFrame.from_dict(feature_rows, orient='index')
+        df_ranked = df_matrix.rank(pct=True)
+        
+        # Inject ranked features back into the last row of df_ml
+        for s, res in prep_results.items():
+            df_ml = res["df_ml"]
+            if df_ml is not None and len(df_ml) > 0:
+                last_idx = df_ml.index[-1]
+                for col in df_ranked.columns:
+                    if col in df_ml.columns:
+                        df_ml.loc[last_idx, col] = float(df_ranked.loc[s, col])
+
+        # Recalculate momentum-based cs_ranks for meta-features
+        momentums = {}
+        for s, res in prep_results.items():
+            df_m15 = res["df_m15"]
+            if df_m15 is not None and len(df_m15) > 1:
+                close_now = df_m15["close"].iloc[-1]
+                close_prev = df_m15["close"].iloc[0]
+                momentums[s] = (close_now - close_prev) / (close_prev + 1e-9)
+            else:
+                momentums[s] = 0.0
+        
+        if momentums:
+            symbols_list = list(momentums.keys())
+            values_list = list(momentums.values())
+            ranks_list = pd.Series(values_list).rank(pct=True).values
+            for sym, rk in zip(symbols_list, ranks_list):
+                _GLOBAL_CS_RANKS[sym] = float(rk)
+
+    # Stage 3: Pass perfectly standardized features into micro-batch inference loops
+    logging.info(f"[ALPHA_FACTORY] Stage 3: Executing Micro-Batch Inference loops...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
         batch_idx = 1
         for batch in chunked(watchlist, 10):
             logging.info(f"[MICRO-BATCH] Processing batch {batch_idx} ({len(batch)} assets)...")
-            tasks = [loop.run_in_executor(ex, update_slow_oracles, s, force_refresh) for s in batch]
+            active_batch = [s for s in batch if s in prep_results]
+            tasks = [loop.run_in_executor(ex, run_inference_for_symbol, s, prep_results[s]) for s in active_batch]
             await asyncio.gather(*tasks)
-            gc.collect() # Aggressive GC (Phase 1)
+            gc.collect()
             if len(batch) == 10:
                 await asyncio.sleep(0.5)
             batch_idx += 1
@@ -1429,8 +1476,6 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
                 push_to_orchestrator(sig)
             except Exception as e:
                 logging.error(f"[SIGNAL_DISPATCH_ERR] Failed to dispatch signal for {sig['symbol']}: {e}")
-
-
 def execute_historical_backfill(watchlist: list):
     logging.info(f"[SRE] Cache-based backfill verification ({len(watchlist)} assets)...")
     pass

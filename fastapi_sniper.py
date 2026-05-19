@@ -1261,6 +1261,55 @@ def verify_execution_signature(ticket: int):
     else:
         logger.warning(f"[POST-EXEC AUDIT] No matching deal found for ticket #{ticket} to audit signature.")
 
+def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
+    timesfm_valid = False
+    p10 = None
+    p90 = None
+    try:
+        from arcticdb import Arctic
+        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+        if store.has_library("oracle_cache"):
+            lib = store["oracle_cache"]
+            key = f"{symbol}_timesfm"
+            if lib.has_symbol(key):
+                item = lib.read(key)
+                if item is not None and not item.data.empty:
+                    data = item.data.iloc[-1]
+                    p10_val = float(data["p10"])
+                    p90_val = float(data["p90"])
+                    timestamp_val = float(data["timestamp"])
+                    
+                    # Stale Check: older than 4 hours (14400 seconds)
+                    from datetime import datetime, timezone
+                    import time
+                    current_time = datetime.now(timezone.utc).timestamp()
+                    age = current_time - timestamp_val
+                    if age <= 14400:
+                        # Boundary Breach Check
+                        if direction == "BUY" and entry_price >= p10_val:
+                            timesfm_valid = True
+                            p10 = p10_val
+                            p90 = p90_val
+                        elif direction == "SELL" and entry_price <= p90_val:
+                            timesfm_valid = True
+                            p10 = p10_val
+                            p90 = p90_val
+                        else:
+                            logger.warning(f"[{symbol}] TimesFM Boundary Breach Check FAILED: entry_price={entry_price:.5f}, p10={p10_val:.5f}, p90={p90_val:.5f}")
+                    else:
+                        logger.warning(f"[{symbol}] TimesFM Cache Stale: age={age:.1f}s > 14400s")
+    except Exception as e:
+        logger.warning(f"[{symbol}] Failed to retrieve/validate TimesFM boundaries: {e}")
+
+    if timesfm_valid:
+        dist = (entry_price - p10) if direction == "BUY" else (p90 - entry_price)
+        logger.info(f"[{symbol}] TimesFM SL active: distance={dist:.5f}")
+        return dist, True
+    else:
+        dist = 3.0 * current_atr
+        logger.warning(f"[{symbol}] Coherence Protection Engaged: Fallback ATR SL active: distance={dist:.5f}")
+        return dist, False
+
 def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
     if alpha_features is None:
         alpha_features = {'P': conviction, 'vpin': vpin}
@@ -1312,12 +1361,15 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
         current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
-        distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
-        calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
+        
+        # Directive 3: TimesFM Coherence Protection
+        tfm_dist, tfm_valid = get_timesfm_sl_distance(symbol, direction, price, current_atr)
+        calculated_sl_dist = tfm_dist
+        
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
         final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | FractalDist={distance_to_fractal_sl:.5f} | FinalSL={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | TimesFM_Valid={tfm_valid} | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
@@ -1423,9 +1475,9 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                                 grid_expansion_scalar = 1.0 + 0.25 * (current_position_size ** 1.2)
                                 tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
 
-                                # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
-                                distance_to_fractal_sl = calculate_fractal_swing(pos.symbol, direction, lookback=20)
-                                sl_dist = max(3.0 * true_atr, distance_to_fractal_sl) * grid_expansion_scalar
+                                # Directive 3: TimesFM Coherence Protection
+                                tfm_dist, tfm_valid = get_timesfm_sl_distance(pos.symbol, direction, pos.price_open, true_atr)
+                                sl_dist = tfm_dist * grid_expansion_scalar
                                 # Secure TP Calculation
                                 try:
                                     p_val = float(alpha_features.get('P', conviction))
@@ -1608,9 +1660,9 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                     grid_expansion_scalar = 1.0 + 0.25 * (current_position_size ** 1.2)
                     tp_skew_scalar = max(0.40, 1.0 - 0.10 * current_position_size)
 
-                    # Directive 2: Apply the True ATR to the CADES Math with Grid Expansion
-                    distance_to_fractal_sl = calculate_fractal_swing(pos.symbol, direction, lookback=20)
-                    sl_dist = max(3.0 * true_atr, distance_to_fractal_sl) * grid_expansion_scalar
+                    # Directive 3: TimesFM Coherence Protection
+                    tfm_dist, tfm_valid = get_timesfm_sl_distance(pos.symbol, direction, pos.price_open, true_atr)
+                    sl_dist = tfm_dist * grid_expansion_scalar
                     # Secure TP Calculation
                     try:
                         p_val = float(alpha_features.get('P', conviction))
