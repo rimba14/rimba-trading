@@ -93,7 +93,20 @@ def compute_cross_sectional_ranks(metrics: dict) -> dict:
     ranks = pd.Series(values).rank(pct=True).values
     return dict(zip(symbols, ranks))
 
-def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.45, fft_top_k=3, cs_rank=0.5):
+def gaussian_jitter_injector(df, vrs=1.0):
+    """
+    Directive 1: Jitter Injector.
+    If VRS < 0.8 (Crushed Volatility), multiply the feature input by (1 + np.random.normal(0, 0.001)).
+    """
+    if vrs < 0.8:
+        # Multiply only numerical columns
+        num_cols = df.select_dtypes(include=[np.number]).columns
+        if len(num_cols) > 0:
+            noise = 1.0 + np.random.normal(0, 0.001, size=(len(df), len(num_cols)))
+            df[num_cols] *= noise
+    return df
+
+def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.45, fft_top_k=3, cs_rank=0.5, vrs=1.0):
     """
     v23.3 Bridge: Wraps generate_features to return the original DF with new features appended.
     """
@@ -127,6 +140,9 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     neg_p = (returns < 0).rolling(window=20, min_periods=1).mean() + 1e-9
     entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
     df['order_flow_entropy'] = np.clip(entropy_raw, 0.0, 1.0)
+    
+    # Inject Jitter if in Crushed Volatility regime
+    df = gaussian_jitter_injector(df, vrs)
     
     return df
 
@@ -223,8 +239,8 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     total_count = pos_count + neg_count + 1e-9
     pos_p = (pos_count / total_count).clip(1e-9, 1.0 - 1e-9)
     neg_p = (neg_count / total_count).clip(1e-9, 1.0 - 1e-9)
-    entropy = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p))
-    entropy = entropy.ffill().fillna(0.5)
+    entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p))
+    entropy = np.clip(entropy_raw.ffill().fillna(0.5), 0.0, 1.0)
     
     mean_reversion_signal = (rsi < 35) & (entropy > 0.85)
 
@@ -281,6 +297,41 @@ def compute_swing_alpha(df, df_h4=None, symbol="UNKNOWN"):
     validate_features(alpha, symbol)
 
     return alpha
+
+
+def calculate_vrp_spread() -> float:
+    """
+    Calculates the Volatility Risk Premium (VRP) Spread: VIX - (SPX_RV * 100).
+    SPX_RV is the 20-day Realized Volatility of the S&P 500 (annualized standard deviation of daily log returns).
+    Uses 252 as the annualization factor.
+    """
+    try:
+        import yfinance as yf
+        # Fetch S&P 500 (^GSPC) daily closes (need at least 21 closes for 20 log returns)
+        spx = yf.Ticker("^GSPC")
+        spx_hist = spx.history(period="2mo")
+        if len(spx_hist) < 21:
+            return 0.0
+            
+        closes = spx_hist['Close'].tail(21).values
+        log_returns = np.diff(np.log(closes))
+        spx_rv = np.std(log_returns, ddof=1) * np.sqrt(252)
+        
+        # Fetch current VIX price
+        vix = yf.Ticker("^VIX")
+        vix_hist = vix.history(period="1d")
+        if vix_hist.empty:
+            vix_val = vix.fast_info.last_price
+        else:
+            vix_val = vix_hist['Close'].iloc[-1]
+            
+        if not vix_val or np.isnan(vix_val):
+            return 0.0
+            
+        vrp_spread = float(vix_val - (spx_rv * 100.0))
+        return vrp_spread
+    except Exception:
+        return 0.0
 
 
 if __name__ == "__main__":

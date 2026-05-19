@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v22.6 - MixTS Reconnection)
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v28.30 - Ironclad CADES (Delayed Fortress Exit))
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -35,6 +35,7 @@ _LAST_CS_REFRESH = 0
 # P-Score Telemetry & Drift Detection globals
 _P_SCORE_HISTORY = []
 _MODEL_DRIFT_HALT = False
+_DRIFT_RECOVERY_ATTEMPTS = 0
 
 _CYCLE_P_SCORES = {}
 _CYCLE_PENDING_SIGNALS = []
@@ -43,6 +44,9 @@ _CYCLE_LOCK = threading.Lock()
 _LAST_CYCLE_PRICES = {}
 _LAST_CYCLE_ATRs = {}
 _IS_STARTUP_OR_SHOCK = True
+
+_VRP_SPREAD = 0.0
+CORE_MAJORS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "SP500", "US30", "NAS100"]
 
 # Directive Omega Global Trackers
 _TICK_STARVATION_DETECTED = False
@@ -115,6 +119,43 @@ def calculate_mean_reversion_score(rsi, bbpos):
         score = 0.5 + (score - 0.5) * 0.3
         
     return score
+
+
+def run_momentum_strategy(symbol, features, p_trend):
+    """
+    Standardized Momentum Strategy.
+    Direction is 'BUY' if p_trend > 0.5 else 'SELL'.
+    """
+    direction = "BUY" if p_trend > 0.5 else "SELL"
+    return {
+        "symbol": symbol,
+        "direction": direction,
+        "strategy_type": "MOMENTUM",
+        "conviction": float(p_trend),
+        "sl": 0.0,
+        "tp": 0.0,
+        "size_multiplier": 1.0,
+        "tag": "MOMENTUM_TREND"
+    }
+
+
+def run_meridian_strategy(symbol, features, p_range):
+    """
+    Standardized Meridian Mean-Reversion Strategy.
+    Direction is 'BUY' if p_range > 0.5 else 'SELL'.
+    """
+    direction = "BUY" if p_range > 0.5 else "SELL"
+    return {
+        "symbol": symbol,
+        "direction": direction,
+        "strategy_type": "MEAN_REVERSION",
+        "conviction": float(p_range),
+        "sl": 0.0,
+        "tp": 0.0,
+        "size_multiplier": 1.0,
+        "tag": "MERIDIAN_RANGE"
+    }
+
 import MetaTrader5 as mt5
 import xgboost as xgb
 import shap
@@ -590,12 +631,13 @@ def push_to_orchestrator(payload: Dict[str, Any]):
 # -- Main Oracle Update --------------------------------------------------------
 def update_slow_oracles(symbol: str, force_refresh: bool = False):
     """Full cognition pipeline for one symbol."""
-    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY
+    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
     if _MODEL_DRIFT_HALT:
         logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
         return
 
     data_quality_flag = "PRISTINE"
+    is_this_symbol_starved = False
 
     now = time.time()
     if now - _LAST_UPDATE.get(symbol, 0) < ORACLE_COOLDOWN:
@@ -677,10 +719,18 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             # Directive 2: M1 OHLCV Anti-Starvation Fallback
             logging.warning(f"[TICKER_ERROR] {symbol}: insufficient ticks after {max_retries} attempts. Attempting M1 OHLCV fallback...")
             data_quality_flag = "DEGRADED"
-            global _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED
-            _TICK_STARVATION_DETECTED = True
+            is_this_symbol_starved = True
+            
+            if symbol.upper() in CORE_MAJORS:
+                global _TICK_STARVATION_DETECTED
+                _TICK_STARVATION_DETECTED = True
+                logging.critical(f"[{symbol}] CORE MAJOR STARVATION. Triggering Global Lock.")
+            else:
+                logging.warning(f"[{symbol}] Minor asset starved. Quarantining locally.")
+                
             _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
             if symbol.upper() in _INDICES:
+                global _INDEX_STARVATION_DETECTED
                 _INDEX_STARVATION_DETECTED = True
 
             try:
@@ -753,6 +803,29 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
         current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
         
+        # Calculate Volatility Regime Score (VRS) earlier for Volatility-Adjusted Epistemic Gates (VAG) & Jitter Injector
+        try:
+            rvol = float(latest_swing.get("rvol", 1.0)) if (latest_swing is not None) else 1.0
+            if np.isnan(rvol) or np.isinf(rvol):
+                rvol = 1.0
+            if df_h1 is not None and len(df_h1) >= 20:
+                short_atr = utils.calculate_atr(df_h1.tail(5))
+                long_atr = utils.calculate_atr(df_h1.tail(20))
+                if long_atr > 0:
+                    atr_ratio = short_atr / long_atr
+                    if np.isnan(atr_ratio) or np.isinf(atr_ratio):
+                        atr_ratio = 1.0
+                    vrs = (0.5 * rvol) + (0.5 * atr_ratio)
+                else:
+                    vrs = rvol
+            else:
+                vrs = rvol
+        except Exception:
+            vrs = 1.0
+        if np.isnan(vrs) or np.isinf(vrs):
+            vrs = 1.0
+        vrs = float(np.clip(vrs, 0.1, 3.0))
+
         try:
             df_ml = feat_eng.engineer_features(
                 df_ml,
@@ -761,6 +834,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 frac_d=0.45,
                 fft_top_k=3,
                 cs_rank=current_rank,
+                vrs=vrs
             )
             nan_count = df_ml.isna().sum().sum()
             logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
@@ -850,6 +924,13 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             q_result = registry.filter_agents(scores_raw)
             active_scores = q_result.filtered_scores
             
+            # Directive 2: The Overconfidence Tripwire (v28.25 Calibration)
+            # Intercept raw predictions from active agents; quarantine if softmax saturated (>0.95 or <0.05)
+            for agent_name, agent_prob in list(active_scores.items()):
+                if agent_prob > 0.95 or agent_prob < 0.05:
+                    logging.warning(f"[{symbol}] [SOFTMAX_SATURATION_DETECTED] Agent '{agent_name}' outputted extreme/saturated confidence ({agent_prob:.4f}). Discarding from current cycle.")
+                    del active_scores[agent_name]
+            
             # v27.0 Weight Allocation
             # Base Weights: Kronos=0.4, XGB=0.3, DDQN=0.3
             base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
@@ -869,7 +950,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
 
             import alpha_combiner
-            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=_TICK_STARVATION_DETECTED)
+            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=(_TICK_STARVATION_DETECTED or is_this_symbol_starved))
             if not is_consensus:
                 logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
                 p_blend = 0.500
@@ -882,6 +963,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
             x_prob = 0.500
             ddqn_p = 0.500
             k_prob = 0.500
+            active_scores = {"kronos": k_prob, "xgb": x_prob, "ddqn": ddqn_p}
             model_divergence = 0.0
             print(f"[ML BYPASS] Shape mismatch detected. Falling back to Heuristic Swing Routing for {symbol}.")
             x_prob = 0.500
@@ -1008,9 +1090,30 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         w_trend /= total_w
         w_range /= total_w
         
-        # Final MixTS Blended Conviction (P)
-        meta_p = (w_trend * p_trend) + (w_range * p_range)
+        # Standardize HMM state to selector logic
+        hmm_selector_state = "TREND" if hmm_state in ("BULL", "BEAR", "TREND") else "RANGE"
         
+        if hmm_selector_state == "TREND":
+            signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
+            meta_p = p_trend
+        elif hmm_selector_state == "RANGE":
+            signal = run_meridian_strategy(symbol, local_meta_features, p_range)
+            meta_p = p_range
+            
+            # Directive 1: VRP Spread conviction multiplier
+            if _VRP_SPREAD > 5.0 and hmm_state == "RANGE":
+                deviation = meta_p - 0.5
+                meta_p = np.clip(0.5 + deviation * 1.15, 0.0, 1.0)
+                logging.info(
+                    f"[{symbol}] [VRP_OVERLAY] High VRP Spread ({_VRP_SPREAD:.2f} > 5.0) in RANGE state. "
+                    f"Meridian conviction scaled: {p_range:.4f} -> {meta_p:.4f} (1.15x multiplier)"
+                )
+        else:
+            signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
+            meta_p = p_trend
+        
+        # VRS calculation moved up for early VAG jitter injection
+
         # Dynamic Epistemic Gate Blending
         # Trend Gate (Default) vs Range Gate (0.75 override, lowered to EPISTEMIC_GATE for boot/shocks)
         range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
@@ -1018,18 +1121,30 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         
         # Rule 3.1: Minimum Conviction Gate (Directive Omega)
         high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
-        is_degraded = (data_quality_flag != "PRISTINE") or _TICK_STARVATION_DETECTED
+        is_degraded = (data_quality_flag != "PRISTINE") or _TICK_STARVATION_DETECTED or is_this_symbol_starved
         if is_degraded:
             min_p_gate = 0.75
         elif symbol.upper() in high_vol_assets:
             min_p_gate = 0.72
         else:
             min_p_gate = 0.68
-        current_gate = max(current_gate, min_p_gate)
+        base_gate = max(current_gate, min_p_gate)
+        
+        # Implement Volatility-Adjusted Epistemic Gates (VAG)
+        # Dynamic Volatility Gate formula: gate = base_gate * (1 - (0.5 * (1 - VRS)))
+        dynamic_gate = base_gate * (1.0 - (0.5 * (1.0 - vrs)))
+        dynamic_gate = max(dynamic_gate, 0.65)
+        current_gate = dynamic_gate
+        
+        # Directive 2: Regime-Awareness Patch - 5% Conviction Drift
+        regime_prob = label_probs.get(hmm_state, 0.0)
+        if regime_prob < 0.55:
+            current_gate = max(current_gate - 0.05, 0.60)
+            logging.info(f"[{symbol}] [CONVICTION_DRIFT_ACTIVE] HMM confidence low ({regime_prob:.3f} < 0.55). Relaxing entry gate by 5% conviction drift to {current_gate:.3f}")
         
         if is_graveyard: meta_p = 0.50
         
-        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, MinGate={min_p_gate:.2f})")
+        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
 
         # ── Directive 2: P-Score Telemetry & Drift Detection ─────────────────
         if float(meta_p) != 0.50:  # Ignore forced SRE safety overrides
@@ -1059,17 +1174,37 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         # The Collapse Veto: check rolling standard deviation of last 100 raw P-scores
         if len(_P_SCORE_HISTORY) == 100:
             p_std = float(np.std(_P_SCORE_HISTORY))
-            if p_std < 0.05:
-                _MODEL_DRIFT_HALT = True
-                logging.critical(
-                    f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
-                    f"is {p_std:.6f} < 0.05 limit. HALTING AUTONOMOUS TRADING IMMEDIATELY."
-                )
+            if p_std < 0.02:
+                if _DRIFT_RECOVERY_ATTEMPTS < 3:
+                    _DRIFT_RECOVERY_ATTEMPTS += 1
+                    logging.critical(
+                        f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). "
+                        f"Initiating Automated Drift Reset ({_DRIFT_RECOVERY_ATTEMPTS}/3)..."
+                    )
+                    # Clear conviction buffer
+                    _P_SCORE_HISTORY.clear()
+                    
+                    # Force re-normalization of ArcticDB cache and models
+                    try:
+                        _ARCTIC.delete_library("oracle_cache")
+                        oracle_lib = _ARCTIC.create_library("oracle_cache")
+                        
+                        _load_meta_model_with_failsafe()
+                        logging.info("[DRIFT RECOVERY] Cache purged and models rebooted.")
+                    except Exception as e:
+                        logging.error(f"[DRIFT RECOVERY] Reset failed: {e}")
+                else:
+                    _MODEL_DRIFT_HALT = True
+                    logging.critical(
+                        f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
+                        f"is {p_std:.6f} < 0.02 limit. Recovery attempts exhausted. HALTING AUTONOMOUS TRADING IMMEDIATELY."
+                    )
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
             "meta_conviction": float(meta_p),
             "hmm_state": hmm_state,
+            "strategy_type": signal["strategy_type"],
             "atr": float(atr),
             "entropy": float(_final.get("order_flow_entropy", 0.0)),
             "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
@@ -1113,14 +1248,20 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
                 return
             
-            # 3. Regime Minimum Check (Rule 3.3)
+            # 3. Regime Minimum Check (Rule 3.3) with Regime-Awareness Patch
             regime_prob = label_probs.get(hmm_state, 0.0)
-            if regime_prob < 0.60:
-                logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {hmm_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
-                return
-            if (predicted_dir == "BUY" and hmm_state == "BEAR") or (predicted_dir == "SELL" and hmm_state == "BULL"):
-                logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {hmm_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
-                return
+            if regime_prob < 0.55:
+                # Uncertain HMM: bypass hard HMM regime vetoes and default to P_blend conviction
+                logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
+            else:
+                # v28.28: Legacy REGIME_MINIMUM_VETO (< 0.60 check) is deprecated. MixTS handles uncertainty.
+                is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
+                if not is_mixts_valid and regime_prob < 0.60:
+                    logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {hmm_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
+                    return
+                if (predicted_dir == "BUY" and hmm_state == "BEAR") or (predicted_dir == "SELL" and hmm_state == "BULL"):
+                    logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {hmm_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
+                    return
             
             # 4. Pristine Data Check (Rule 2.1)
             entropy_val = 0.0
@@ -1148,27 +1289,31 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
                 logging.warning(f"[{symbol}] [HARD_VETO] [INDEX_STARVATION_VETO] An index has tick starvation in this cycle. Blocking all index entries.")
                 return
             
-            signal_type = "MEAN_REVERSION" if w_range > w_trend else "MOMENTUM"
             with _CYCLE_LOCK:
                 _CYCLE_PENDING_SIGNALS.append({
-                    "symbol": symbol,
+                    "symbol": signal["symbol"],
                     "direction": signal_dir,
+                    "strategy_type": signal["strategy_type"],
                     "conviction": round(float(meta_p), 6),
+                    "sl": float(signal["sl"]),
+                    "tp": float(signal["tp"]),
+                    "size_multiplier": float(signal["size_multiplier"]),
+                    "tag": signal["tag"],
                     "xgb_p": float(x_prob),
                     "ddqn_p": float(ddqn_p),
                     "hmm_state": hmm_state,
                     "atr": float(atr),
                     "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                    "version": "v28.14-IRONCLAD-CADES",
-                    "signal_type": signal_type,
-                    "model_divergence": float(model_divergence)
+                    "version": "v28.30-IRONCLAD-CADES",
+                    "signal_type": signal["strategy_type"],
+                    "model_divergence": float(model_divergence),
+                    "vrs": float(vrs),
+                    "applied_dynamic_gate": float(current_gate)
                 })
+            logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} >= dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). CLEAR.")
             logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
         else:
-            if hmm_state == "RANGE":
-                logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < 0.75 (Mean-Reversion Gate). Suppressed.")
-            else:
-                logging.info(f"[GATE] {symbol}: norm_p={norm_p:.6f} < {current_gate}. Suppressed.")
+            logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} < dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). Suppressed.")
 
         timesfm_bridge.update_risk_cache(symbol, df_ml)
 
@@ -1196,7 +1341,17 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
 
 async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
     """Runs update_slow_oracles concurrently using Micro-Batching."""
-    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED
+    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED, _VRP_SPREAD
+    
+    # Directive 1: Calculate VRP Macro Filter
+    try:
+        from feature_engineering import calculate_vrp_spread
+        _VRP_SPREAD = calculate_vrp_spread()
+        logging.info(f"[VRP_FILTER] Calculated macro VRP_Spread = {_VRP_SPREAD:.4f}")
+    except Exception as e:
+        _VRP_SPREAD = 0.0
+        logging.warning(f"[VRP_FILTER] Failed to calculate VRP spread: {e}")
+
     _TICK_STARVATION_DETECTED = False
     _INDEX_STARVATION_DETECTED = False
     with _CYCLE_LOCK:
@@ -1326,7 +1481,7 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
     return False, None
 
 def main():
-    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK
+    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK, _TICK_STARVATION_DETECTED
     print("=" * 60)
     print(f"  ACTIVE MATRIX SIZE: {len(WATCHLIST)} ASSETS")
     print("=" * 60)
@@ -1363,6 +1518,7 @@ def main():
 
     # Directive 2: Information-Driven Awakening (Short polling volume/volatility loop)
     while True:
+        _TICK_STARVATION_DETECTED = False
         try:
             time.sleep(10)
             

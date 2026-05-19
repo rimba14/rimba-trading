@@ -31,7 +31,7 @@ import gitagent_utils as utils
 # Configuration
 QUANT_PATH = r"C:\Sentinel_Project\data\kronos_quantized.pt"
 CACHE_LIB = "oracle_cache"
-TEMPERATURE = 3.0 # Stretch conviction signals
+TEMPERATURE = 2.5 # Temperature scaling constant to soften conviction
 
 _MODEL = None
 
@@ -304,8 +304,8 @@ class KronosBridge:
                     signal = price_change / (base_atr + epsilon)
                     
                     # 4. Apply Temperature-Scaled Sigmoid (Phase 2 Rule)
-                    # TEMPERATURE = 3.0 multiplier strictly on the Write-Side
-                    kronos_raw = 1 / (1 + np.exp(-signal * TEMPERATURE))
+                    # TEMPERATURE scaling constant to soften conviction (divide raw logits by T = 2.5)
+                    kronos_raw = 1 / (1 + np.exp(-signal / TEMPERATURE))
                     
                     # Clamp output to [0.01, 0.99] to maintain resolution
                     kronos_raw = np.clip(kronos_raw, 0.01, 0.99)

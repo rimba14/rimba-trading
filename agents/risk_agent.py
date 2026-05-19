@@ -343,6 +343,47 @@ def _start_mcp_server():
         logger.error(f"[RISK_AGENT_MCP] FastAPI/uvicorn not available: {e}. Running in direct-import mode only.")
 
 
+def calculate_volatility_scalar(symbol: str, current_atr: float) -> float:
+    """
+    Calculates Daniel Bloch's Target Volatility Position Sizing scalar.
+    vol_scalar = BASELINE_ATR / current_atr
+    Clamped at 1.0 to prevent scaling up risk in low-volatility environments.
+    """
+    sym = symbol.upper()
+    
+    # Define baseline ATRs per asset class
+    # Forex Majors (e.g., EURUSD, GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD)
+    if any(m in sym for m in ["EURUSD", "GBPUSD", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]):
+        baseline_atr = 0.0050
+    # JPY Forex pairs (price ~100-200)
+    elif "JPY" in sym:
+        baseline_atr = 0.5000
+    # Metals (Gold, Silver)
+    elif "XAU" in sym or "GOLD" in sym:
+        baseline_atr = 15.0
+    elif "XAG" in sym or "SILVER" in sym:
+        baseline_atr = 0.35
+    # Indices (SP500, US30, NAS100, GER40, HK50, etc.)
+    elif any(idx in sym for idx in ["US30", "GER40"]):
+        baseline_atr = 150.0
+    elif "NAS100" in sym:
+        baseline_atr = 100.0
+    elif any(idx in sym for idx in ["SP500", "SPX500"]):
+        baseline_atr = 30.0
+    # Cryptocurrencies
+    elif "BTC" in sym:
+        baseline_atr = 1200.0
+    elif "ETH" in sym:
+        baseline_atr = 80.0
+    # Default fallback
+    else:
+        baseline_atr = 0.0050
+        
+    vol_scalar = baseline_atr / (current_atr + 1e-12)
+    # Ensure we don't scale up past 1.0 (protecting max risk)
+    return min(1.0, vol_scalar)
+
+
 if __name__ == "__main__":
     import io as _io
     def _get_utf8_stream():

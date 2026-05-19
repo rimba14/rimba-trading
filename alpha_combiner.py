@@ -98,11 +98,12 @@ class AlphaCombiner:
             
         return final_scores
 
-    def check_consensus(self, scores: dict, blended_p: float) -> bool:
+    def check_consensus(self, scores: dict, blended_p: float, tighten: bool = False) -> bool:
         """
         Directive 1: Dynamic Divergence Gating.
         Base maximum divergence: 0.30.
         If blended mean probability P > 0.85 or P < 0.15, expand allowable divergence to 0.40.
+        If tighten is True (Directive Omega), hard cap maximum divergence at 0.15.
         """
         if not scores:
             return True
@@ -111,12 +112,15 @@ class AlphaCombiner:
             return True
         
         model_divergence = max(vals) - min(vals)
-        threshold = 0.30
-        if blended_p > 0.85 or blended_p < 0.15:
-            threshold = 0.40
+        if tighten:
+            threshold = 0.15
+        else:
+            threshold = 0.30
+            if blended_p > 0.85 or blended_p < 0.15:
+                threshold = 0.40
             
         is_consensus = model_divergence <= threshold
-        logger.info(f"[CONSENSUS_GATE] Divergence={model_divergence:.4f} (Threshold={threshold}) | Blended P={blended_p:.4f} | Pass={is_consensus}")
+        logger.info(f"[CONSENSUS_GATE] Divergence={model_divergence:.4f} (Threshold={threshold}, Tightened={tighten}) | Blended P={blended_p:.4f} | Pass={is_consensus}")
         return is_consensus
 
 

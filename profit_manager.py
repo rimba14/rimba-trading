@@ -115,6 +115,56 @@ def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, 
     normalized_price = round(target_price / tick_size) * tick_size
     return round(normalized_price, info.digits)
 
+def clamp_to_broker_stops(symbol, current_price, target_sl, order_type):
+    """
+    Level 94 SRE: Prevents MT5 10016 (Invalid Stops) during Fortress Mode trailing.
+    Ensures target stop loss does not fall within the broker's freeze/stop zone.
+    """
+    sym_info = mt5.symbol_info(symbol)
+    if not sym_info:
+        return target_sl
+        
+    point = sym_info.point
+    min_dist = sym_info.trade_stops_level * point
+    
+    # Query live tick for highest accuracy ask/bid
+    tick = mt5.symbol_info_tick(symbol)
+    if tick:
+        ask = tick.ask
+        bid = tick.bid
+    else:
+        ask = sym_info.ask
+        bid = sym_info.bid
+        
+    spread = (ask - bid) if (ask and bid and ask > bid) else (sym_info.spread * point)
+    if spread <= 0:
+        spread = 2 * point
+        
+    safe_padding = min_dist + spread + (2 * point)
+    
+    is_buy = (order_type == 0 or order_type == mt5.POSITION_TYPE_BUY or str(order_type).upper() == "BUY")
+    
+    if is_buy:
+        highest_allowable_sl = current_price - safe_padding
+        if target_sl > highest_allowable_sl:
+            clamped_sl = highest_allowable_sl
+            tick_size = sym_info.trade_tick_size
+            if tick_size > 0:
+                clamped_sl = round(clamped_sl / tick_size) * tick_size
+            clamped_sl = round(clamped_sl, sym_info.digits)
+            return clamped_sl
+    else:
+        lowest_allowable_sl = current_price + safe_padding
+        if target_sl < lowest_allowable_sl:
+            clamped_sl = lowest_allowable_sl
+            tick_size = sym_info.trade_tick_size
+            if tick_size > 0:
+                clamped_sl = round(clamped_sl / tick_size) * tick_size
+            clamped_sl = round(clamped_sl, sym_info.digits)
+            return clamped_sl
+            
+    return target_sl
+
 def _get_live_oracle_meta(symbol: str) -> dict | None:
     """Reads the latest oracle metadata (HMM, conviction, ATR) from ArcticDB."""
     try:
@@ -282,7 +332,14 @@ def run_thesis_decay_check(pos, config: dict, now: float) -> bool:
     pos_direction = "BUY" if pos.type == 0 else "SELL"
     
     # CONDITION 1: hold_secs >= min_hold_secs
-    elapsed_seconds = now - pos.time
+    tick_info = mt5.symbol_info_tick(pos.symbol)
+    current_broker_time = tick_info.time if tick_info else None
+    if not current_broker_time:
+        sym_info = mt5.symbol_info(pos.symbol)
+        current_broker_time = sym_info.time if sym_info else None
+    if not current_broker_time:
+        current_broker_time = int(time.time())
+    elapsed_seconds = current_broker_time - pos.time
     decay_rules = get_decay_rules(symbol, config)
     min_hold_hours = decay_rules.get("min_hold_hours", 4)
     min_hold_secs = min_hold_hours * 3600
@@ -445,6 +502,13 @@ class SentinelProfitManager:
 
         for pos in positions:
             symbol = pos.symbol
+            tick_info = mt5.symbol_info_tick(symbol)
+            broker_now = tick_info.time if tick_info else None
+            if not broker_now:
+                sym_info = mt5.symbol_info(symbol)
+                broker_now = sym_info.time if sym_info else None
+            if not broker_now:
+                broker_now = int(time.time())
 
             # Rate-limit: only poll ArcticDB every REGIME_POLL_INTERVAL seconds per symbol
             last_check = self._last_regime_check.get(symbol, 0.0)
@@ -543,6 +607,13 @@ class SentinelProfitManager:
                     logger.warning(f"[{symbol}] FORTRESS_MODE active (drawdown {drawdown:.1%} >= 3.0%). Tightening SL to 0.5x ATR.")
                     tight_sl = price_open - (0.5 * macro_atr) if pos.type == 0 else price_open + (0.5 * macro_atr)
                     tight_sl = round(tight_sl, digits)
+                    
+                    # Wrap in clamp_to_broker_stops to prevent 10016 errors
+                    clamped_tight_sl = clamp_to_broker_stops(symbol, current_price, tight_sl, pos.type)
+                    if abs(clamped_tight_sl - tight_sl) > 1e-9:
+                        logger.warning(f"[FORTRESS_CLAMP] Target SL violated freeze zone. Clamped to broker minimum: {tight_sl} -> {clamped_tight_sl}")
+                        tight_sl = clamped_tight_sl
+                        
                     if pos.type == 0 and (target_sl == 0.0 or target_sl < tight_sl):
                         target_sl = tight_sl
                         modify_needed = True
@@ -690,7 +761,7 @@ class SentinelProfitManager:
                 logger.warning(f"[{symbol}] Alternative Data [MACRO SHOCK] kill switch triggered: Sentiment={live_sentiment:.2f} > +0.60 for Short position.")
             
             # Fetch ticks transacted since entry for Data Density logic
-            rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, int(pos.time), int(now) + 60)
+            rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, int(pos.time), int(broker_now) + 60)
             trade_ticks = int(np.sum(rates_since['tick_volume'])) if rates_since is not None else 101
 
             # Directive 3: Divergence Scale-Out
@@ -740,16 +811,16 @@ class SentinelProfitManager:
                 self._regime_persistence_counter[pos.ticket] = 0
 
             # Directive 3 & 4: Thesis Decay (v28.10 Timeframe Matching & Asset Rules)
-            is_thesis_decay = run_thesis_decay_check(pos, config, now)
+            is_thesis_decay = run_thesis_decay_check(pos, config, broker_now)
             
             # ── v27.0: True Swing Time-Stop & Weekend Bypass ──
             # Fetch H1 bars elapsed since entry for the swing time-stop gate
-            h1_rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_H1, int(pos.time), int(now) + 3600)
+            h1_rates_since = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_H1, int(pos.time), int(broker_now) + 3600)
             h1_candles_elapsed = len(h1_rates_since) if h1_rates_since is not None else 0
             
             crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX"]
             is_crypto = any(k in symbol.upper() for k in crypto_keywords)
-            dt_now = datetime.fromtimestamp(now, tz=timezone.utc)
+            dt_now = datetime.fromtimestamp(broker_now, tz=timezone.utc)
             
             is_weekend_pause = False
             if not is_crypto:
@@ -762,11 +833,11 @@ class SentinelProfitManager:
             
             # Directive 1: Time Stop (Theta Decay) - v27.0: Extended to 10 days for swing holds
             MAX_HOLDING_SECONDS = 10 * 24 * 3600  # 10 days
-            elapsed_seconds = now - pos.time
+            elapsed_seconds = broker_now - pos.time
             is_theta_decay = (elapsed_seconds > MAX_HOLDING_SECONDS) and (pos.profit <= 0)
             
             # Directive 3: Data Density Grace Period Blindfold logic
-            if trade_ticks < 100 and (now - pos.time < 600):
+            if trade_ticks < 100 and (broker_now - pos.time < 600):
                 if is_regime_conflict or is_thesis_decay or is_dead_money:
                     logger.info(f"[DATA_DENSITY_GRACE] {symbol} #{pos.ticket} data density low ({trade_ticks} < 100 ticks). Suppressing cognitive exits.")
                     is_regime_conflict = False

@@ -126,7 +126,7 @@ def run_recovery():
         print("Diagnostic queue cleared.")
 
         # 5. Restart Services
-        print("Restarting Services: profit_manager.py, chat_gemma.py")
+        print("Restarting Services: profit_manager_v25.py, chat_gemma.py")
         import subprocess
         # Kill existing
         subprocess.run(["taskkill", "/f", "/im", "python.exe", "/fi", "WINDOWTITLE eq *profit_manager*"], capture_output=True)
@@ -136,7 +136,7 @@ def run_recovery():
         env = os.environ.copy()
         env["PYTHONPATH"] = r"C:\Sentinel_Project"
         
-        subprocess.Popen([sys.executable, r"C:\Sentinel_Project\profit_manager.py"], env=env)
+        subprocess.Popen([sys.executable, r"C:\Sentinel_Project\profit_manager_v25.py"], env=env)
         subprocess.Popen([sys.executable, r"C:\Sentinel_Project\chat_gemma.py"], env=env)
         
         print("\n" + "="*40)

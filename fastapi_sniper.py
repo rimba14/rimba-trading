@@ -1,6 +1,6 @@
 """
 fastapi_sniper.py - Adaptive Sentinel Direct HTTP Execution Bridge (Machine B)
-Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v24.2 Ironclad CADES)
+Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v28.30 - Ironclad CADES (Delayed Fortress Exit))
 Concurrency: Idempotent Execution & Mutex Locking Active.
 v24.2: Upgraded baseline to Volume-Weighted Micro-Price & Regime-Aware Squashing.
 """
@@ -11,6 +11,14 @@ import math
 import time
 import logging
 import sys
+import io
+
+# Force UTF-8 armor on standard outputs to absolutely prevent charmap encoding errors
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
@@ -206,7 +214,15 @@ class TradeSignal(BaseModel):
     vpin: float = 0.0
     signal_type: str = "UNKNOWN"
     rsi: Optional[float] = None
+    data_quality_flag: str = "PRISTINE"
     alpha_features: Optional[dict] = None
+    vrs: Optional[float] = 1.0
+    applied_dynamic_gate: Optional[float] = None
+    strategy_type: Optional[str] = "MOMENTUM"
+    sl: Optional[float] = 0.0
+    tp: Optional[float] = 0.0
+    size_multiplier: Optional[float] = 1.0
+    tag: Optional[str] = ""
 
 @app.on_event("startup")
 def startup_event():
@@ -291,8 +307,9 @@ def status():
     }
 
 @app.post("/execute_trade")
-async def execute_trade_endpoint(signal: TradeSignal):
+async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     """Securely accepts and executes trade signals from the Oracle Brain."""
+    is_fuzzing = request.headers.get("IS_FUZZING") == "True"
     logger.info(f"Received Signal: {signal.symbol} {signal.direction} (P={signal.conviction})")
     
     # --- LEVEL 64 SRE: DRY-FIRE SIMULATION GATES ---
@@ -300,6 +317,15 @@ async def execute_trade_endpoint(signal: TradeSignal):
     if signal.hmm_state == "RANGE" and (signal.rsi is not None and signal.rsi > 50.0):
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state.")
         return {"status": "rejected", "reason": "Pattern 1: Regime Misalignment"}
+        
+    # Wall 9 Veto: Strategy-Regime Congruence
+    hmm_regime = "TREND" if signal.hmm_state in ("BULL", "BEAR", "TREND") else "RANGE"
+    if signal.strategy_type == "MOMENTUM" and hmm_regime == "RANGE":
+        logger.warning(f"[{signal.symbol}] [WALL 9 VETO] Strategy-Regime Congruence: Cannot deploy MOMENTUM strategy in RANGE regime.")
+        return {"status": "rejected", "reason": "Wall 9 Veto: Momentum in RANGE regime"}
+    elif signal.strategy_type == "MEAN_REVERSION" and hmm_regime == "TREND":
+        logger.warning(f"[{signal.symbol}] [WALL 9 VETO] Strategy-Regime Congruence: Cannot deploy MEAN_REVERSION strategy in TREND regime.")
+        return {"status": "rejected", "reason": "Wall 9 Veto: Mean-Reversion in TREND regime"}
         
     # Wall 2 Veto: Sealed Hysteresis / Phantom Conviction Block (Pattern 2)
     if signal.conviction is not None and 0.40 <= signal.conviction <= 0.60:
@@ -323,11 +349,31 @@ async def execute_trade_endpoint(signal: TradeSignal):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: STALE ({staleness:.1f}s old)")
         raise HTTPException(status_code=400, detail="Signal stale")
 
-    # 2. Epistemic Gate
+    # 2. Epistemic Gate (Volatility-Adjusted VAG Gate)
     norm_p = abs(signal.conviction - 0.5) + 0.5
-    if norm_p < EPISTEMIC_GATE:
-        logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < {EPISTEMIC_GATE}")
-        raise HTTPException(status_code=400, detail="Epistemic gate block")
+    high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER"}
+    base_gate = 0.72 if signal.symbol.upper() in high_vol_assets else 0.68
+    
+    # Query active VRS
+    vrs = signal.vrs if signal.vrs is not None else 1.0
+    
+    # Calculate Volatility-Adjusted Gate
+    if vrs < 0.8:
+        dynamic_gate = base_gate - 0.015
+    elif vrs > 1.2:
+        dynamic_gate = base_gate + 0.020
+    else:
+        dynamic_gate = base_gate
+        
+    dynamic_gate = max(dynamic_gate, 0.65)
+    
+    target_gate = signal.applied_dynamic_gate if (hasattr(signal, "applied_dynamic_gate") and signal.applied_dynamic_gate is not None) else dynamic_gate
+    
+    if norm_p < target_gate:
+        logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < dynamic gate {target_gate:.3f} (Base={base_gate:.2f}, VRS={vrs:.2f})")
+        raise HTTPException(status_code=400, detail=f"Epistemic gate block (VAG: {target_gate:.3f})")
+        
+    logger.info(f"[{signal.symbol}] Signal VALID: NormP {norm_p} >= SlowLoop Gate {target_gate}")
 
     # 2b. Native MT5 Ledger Amnesia Lock Check (v27.0: 24-hour Embargo)
     if is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
@@ -417,7 +463,11 @@ async def execute_trade_endpoint(signal: TradeSignal):
         "vpin": vpin_val,
         "regime": signal.hmm_state,
         "xgb_p": signal.xgb_p,
-        "ddqn_p": signal.ddqn_p
+        "ddqn_p": signal.ddqn_p,
+        "data_quality_flag": signal.data_quality_flag,
+        "vrs": signal.vrs if signal.vrs is not None else 1.0,
+        "is_fuzzing": is_fuzzing,
+        "strategy_type": signal.strategy_type
     }
     success = perform_mt5_trade(
         signal.symbol,
@@ -769,74 +819,112 @@ def run_composite_preflight_checklist(
     hmm_state: str,
     xgb_p: float,
     ddqn_p: float,
+    payload: dict = None,
 ) -> Tuple[bool, str]:
     """
     Directive Omega: Layer 5 - Composite Pre-Flight Checklist.
-    Verifies 12 critical protections before dispatching order.
+    Verifies 20 critical protections before dispatching order.
     """
-    logger.info(f"[{symbol}] Running 12-point Composite Pre-Flight Checklist...")
+    logger.info(f"[{symbol}] Running 20-point Composite Pre-Flight Checklist...")
 
     # Point 1: Sizing > 0
-    if lot <= 0.0:
+    if float(lot) <= 0.0:
         return False, "Point 1 Fail: Sizing <= 0 (Zero-Sizing Veto)"
 
     # Point 2: Affordability Check
     acc = mt5.account_info()
     info = mt5.symbol_info(symbol)
-    if not acc or not info:
+    if acc is None or info is None:
         return False, "Point 2 Fail: Failed to fetch account/symbol info"
 
     current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
     risk_budget = acc.balance * 0.02
     affordable_lot = risk_budget / (current_atr * point_val * 3.0 + 1e-12)
-    if affordable_lot < info.volume_min:
+    if float(affordable_lot) < float(info.volume_min):
         return False, f"Point 2 Fail: Affordability pre-screen check failed ({affordable_lot:.4f} < broker min {info.volume_min})"
 
-    # Point 3: Pristine Data
-    if current_atr <= 0:
-        return False, "Point 3 Fail: Ingestion data degraded (ATR <= 0)"
+    # Point 3: Data Quality Flag Assertion (Strict String Match)
+    data_quality_flag = "PRISTINE"
+    vrs = 1.0
+    if payload is not None and isinstance(payload, dict):
+        data_quality_flag = payload.get("data_quality_flag", "UNKNOWN")
+        vrs = payload.get("vrs", 1.0)
+    
+    if data_quality_flag != "PRISTINE":
+        if data_quality_flag == "DEGRADED":
+            norm_p = abs(conviction - 0.5) + 0.5
+            is_stable_vrs = (vrs <= 1.2)
+            if norm_p >= 0.85 and is_stable_vrs:
+                logger.info(f"[{symbol}] [DATA_QUALITY_BYPASS] Allowing DEGRADED data for high conviction signal (NormP={norm_p:.3f} >= 0.85, VRS={vrs:.2f} stable)")
+            else:
+                return False, f"Point 3 Fail: [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag} (expected PRISTINE, or NormP >= 0.85 with stable VRS)"
+        else:
+            return False, f"Point 3 Fail: [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag} (expected PRISTINE)"
 
-    # Point 4: P_blend Threshold
+    # Point 4: Ingestion Data Degraded (ATR Check)
+    if float(current_atr) <= 0.0:
+        return False, "Point 4 Fail: Ingestion data degraded (ATR <= 0)"
+
+    # Point 5: P_blend Threshold (Volatility-Adjusted VAG Gate)
     norm_p = abs(conviction - 0.5) + 0.5
     high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER"}
     
     # Retrieve tick starvation flag from slow loop module if active
-    try:
-        import sentinel_slow_loop
-        is_starved = getattr(sentinel_slow_loop, "_TICK_STARVATION_DETECTED", False)
-    except Exception:
-        is_starved = False
+    is_starved = False
+    if "sentinel_slow_loop" in sys.modules:
+        try:
+            is_starved = (getattr(sys.modules["sentinel_slow_loop"], "_TICK_STARVATION_DETECTED", False) == True)
+        except Exception:
+            pass
         
-    if is_starved:
+    if is_starved == True:
         min_p = 0.75
     elif symbol.upper() in high_vol_assets:
         min_p = 0.72
     else:
         min_p = 0.68
         
-    if norm_p < min_p:
-        return False, f"Point 4 Fail: Blended conviction {norm_p:.3f} < threshold {min_p:.3f}"
+    # Query Volatility Regime Score (VRS) from payload
+    vrs = 1.0
+    if payload is not None and isinstance(payload, dict):
+        vrs = payload.get("vrs", payload.get("alpha_features", {}).get("vrs", 1.0))
+        
+    # Calculate Volatility-Adjusted Gate
+    if vrs < 0.8:
+        dynamic_gate = min_p - 0.015
+    elif vrs > 1.2:
+        dynamic_gate = min_p + 0.020
+    else:
+        dynamic_gate = min_p
+        
+    dynamic_gate = max(dynamic_gate, 0.65)
+        
+    if float(norm_p) < float(dynamic_gate):
+        return False, f"Point 5 Fail: Blended conviction {norm_p:.3f} < dynamic gate {dynamic_gate:.3f} (Base={min_p:.3f}, VRS={vrs:.2f})"
 
-    # Point 5: Model Floors
+    # Point 6: Kronos Model Floor
     predicted_dir = direction
     kronos_conf = conviction if predicted_dir == "BUY" else (1.0 - conviction)
+    if float(kronos_conf) < 0.70:
+        return False, f"Point 6 Fail: Kronos conviction {kronos_conf:.3f} < 0.70 floor"
+
+    # Point 7: XGBoost Model Floor
     xgb_conf = xgb_p if predicted_dir == "BUY" else (1.0 - xgb_p)
-    if kronos_conf < 0.70:
-        return False, f"Point 5 Fail: Kronos conviction {kronos_conf:.3f} < 0.70 floor"
-    if xgb_conf < 0.65:
-        return False, f"Point 5 Fail: XGB conviction {xgb_conf:.3f} < 0.65 floor"
+    if float(xgb_conf) < 0.65:
+        return False, f"Point 7 Fail: XGB conviction {xgb_conf:.3f} < 0.65 floor"
 
-    # Point 6: Divergence Gate
+    # Point 8: Divergence Gate
     model_divergence = abs(kronos_conf - xgb_conf)
-    div_limit = 0.15 if is_starved else 0.30
-    if model_divergence > div_limit:
-        return False, f"Point 6 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
+    div_limit = 0.15 if is_starved == True else 0.30
+    if float(model_divergence) > float(div_limit):
+        return False, f"Point 8 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
 
-    # Point 7: Regime Probability Minimum (Rule 3.3)
+    # Point 9: Regime State Validity
     if hmm_state not in ["BULL", "BEAR", "RANGE"]:
-        return False, f"Point 7 Fail: Invalid HMM state {hmm_state}"
-    
+        return False, f"Point 9 Fail: Invalid HMM state {hmm_state}"
+
+    # Point 10: Regime Probability Minimum (Rule 3.3)
     hmm_prob = 1.0
     try:
         from arcticdb import Arctic
@@ -846,17 +934,17 @@ def run_composite_preflight_checklist(
     except:
         pass
     sym_upper = symbol.upper()
-    is_index = any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"])
-    min_regime_prob = 0.65 if is_index else 0.60
-    if hmm_prob < min_regime_prob:
-        return False, f"Point 7 Fail: [HARD_VETO] [REGIME_MINIMUM_VETO] HMM regime probability {hmm_prob:.3f} < required {min_regime_prob:.3f}"
+    is_index = (any(idx in sym_upper for idx in ["NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"]) == True)
+    min_regime_prob = 0.65 if is_index == True else 0.60
+    if float(hmm_prob) < float(min_regime_prob):
+        return False, f"Point 10 Fail: [HARD_VETO] [REGIME_MINIMUM_VETO] HMM regime probability {hmm_prob:.3f} < required {min_regime_prob:.3f}"
 
-    # Point 8: Zero-MFE Prevention (Rule 4.1)
+    # Point 11: Zero-MFE Prevention (Rule 4.1)
     retries = 5
     momentum_confirmed = False
     tick = mt5.symbol_info_tick(symbol)
-    ticks_count = 8 if is_index else 5
-    if tick:
+    ticks_count = 8 if is_index == True else 5
+    if tick is not None:
         for attempt in range(retries):
             ticks = mt5.copy_ticks_from(symbol, datetime.now(), ticks_count, mt5.COPY_TICKS_ALL)
             if ticks is not None and len(ticks) >= ticks_count:
@@ -866,14 +954,14 @@ def run_composite_preflight_checklist(
                 if (direction == "BUY" and diff > 0) or (direction == "SELL" and diff < 0):
                     momentum_confirmed = True
                     break
-            logger.info(f"[{symbol}] Point 8 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
+            logger.info(f"[{symbol}] Point 11 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
             time.sleep(0.1)
             
-        if not momentum_confirmed:
-            return False, f"Point 8 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
+        if momentum_confirmed == False:
+            return False, f"Point 11 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
 
-    # Point 9: Spread-to-ATR Ratio (Rule 4.2)
-    if tick:
+    # Point 12: Spread-to-ATR Ratio (Rule 4.2)
+    if tick is not None:
         current_spread = tick.ask - tick.bid
         if "GER40" in sym_upper or "HK50" in sym_upper:
             spread_atr_limit = 0.025
@@ -885,10 +973,10 @@ def run_composite_preflight_checklist(
             spread_atr_limit = 0.030
             
         spread_atr_ratio = current_spread / (current_atr + 1e-12)
-        if spread_atr_ratio > spread_atr_limit:
-            return False, f"Point 9 Fail: Spread-to-ATR ratio {spread_atr_ratio:.4f} > limit {spread_atr_limit:.4f}"
+        if float(spread_atr_ratio) > float(spread_atr_limit):
+            return False, f"Point 12 Fail: Spread-to-ATR ratio {spread_atr_ratio:.4f} > limit {spread_atr_limit:.4f}"
 
-    # Point 10: Minimum R:R Gate (Rule 4.3)
+    # Point 13: Minimum R:R Gate (Rule 4.3)
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
     broker_minimum_sl = info.trade_stops_level * info.point
@@ -902,43 +990,53 @@ def run_composite_preflight_checklist(
     tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
     tp_dist = current_atr * tp_multiplier
     
-    min_rr = 2.2 if is_index else 1.8
+    min_rr = 2.2 if is_index == True else 1.8
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
-    if prospective_rr < min_rr:
-        return False, f"Point 10 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f}"
+    if float(prospective_rr) < float(min_rr):
+        return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f}"
 
-    # Point 11: Macro & DNA Blackout (Rule 6.2 & 6.3)
+    # Point 14: JPY pair session open blackout (Rule 6.2)
     jpy_pairs = {"USDJPY", "GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CHFJPY", "CADJPY"}
     if sym_upper in jpy_pairs:
-        if is_in_jpy_blackout():
-            return False, "Point 11 Fail: JPY pair session open blackout"
-        
-        # dP/dt velocity check
+        if is_in_jpy_blackout() == True:
+            return False, "Point 14 Fail: JPY pair session open blackout"
+
+    # Point 15: JPY pair dP/dt velocity kill switch (Rule 6.2)
+    if sym_upper in jpy_pairs:
         rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 2)
         if rates is not None and len(rates) >= 2:
             dp_dt = (rates[-1]['close'] - rates[-2]['close']) / (rates[-2]['close'] + 1e-9) * 100.0
-            if dp_dt <= -0.20:
-                return False, f"Point 11 Fail: JPY pair dP/dt velocity kill switch active ({dp_dt:.3f}% <= -0.20%)"
-        
-    if is_in_metals_macro_blackout(symbol):
-        return False, "Point 11 Fail: Metals major USD release blackout"
+            if float(dp_dt) <= -0.20:
+                return False, f"Point 15 Fail: JPY pair dP/dt velocity kill switch active ({dp_dt:.3f}% <= -0.20%)"
 
+    # Point 16: Metals major USD release blackout (Rule 6.3)
+    if is_in_metals_macro_blackout(symbol) == True:
+        return False, "Point 16 Fail: Metals major USD release blackout"
+
+    # Point 17: Wall 5 Dynamic Tier Blackout
     is_blackout, veto_reason = is_wall5_macro_blackout(symbol)
-    if is_blackout:
-        return False, f"Point 11 Fail: {veto_reason}"
+    if is_blackout == True:
+        return False, f"Point 17 Fail: {veto_reason}"
 
-    # Point 12: Account Equity & Circuit Breakers (Rule 7.1, 7.2, 7.3)
-    if get_daily_drawdown() >= 0.03:
-        return False, "Point 12 Fail: Daily drawdown >= 3.0% (FORTRESS_MODE active)"
-        
+    # Point 18: Account Daily Drawdown (Rule 7.1)
+    if float(get_daily_drawdown()) >= 0.03:
+        return False, "Point 18 Fail: Daily drawdown >= 3.0% (FORTRESS_MODE active)"
+
+    # Point 19: Consecutive Losses SRE Hard Pause (Rule 7.2)
     is_paused, time_left = is_consec_losses_paused()
-    if is_paused:
-        return False, f"Point 12 Fail: SRE Hard Pause active due to consecutive losses ({time_left:.1f}s remaining)"
-        
-    if is_index and acc.equity < 2000.0:
-        return False, f"Point 12 Fail: Equity ${acc.equity:.2f} < $2000 floor for indices"
+    if is_paused == True:
+        return False, f"Point 19 Fail: SRE Hard Pause active due to consecutive losses ({time_left:.1f}s remaining)"
 
-    logger.info(f"[{symbol}] Composite Pre-Flight Checklist PASSED successfully!")
+    # Point 20: Index Minimum Equity Floor (Rule 7.3)
+    if is_index == True and float(acc.equity) < 2000.0:
+        return False, f"Point 20 Fail: Equity ${acc.equity:.2f} < $2000 floor for indices"
+
+    # Sandbox Fuzzing Block: Safely reject fuzzer signals to prevent real execution
+    is_fuzzing = payload.get("is_fuzzing", False) if payload else False
+    if is_fuzzing:
+        return False, "Fuzzing signal sandbox block"
+
+    logger.info(f"[{symbol}] 20-point Composite Pre-Flight Checklist PASSED successfully!")
     return True, "Passed"
 
 def is_weekend_blackout(symbol):
@@ -1012,6 +1110,21 @@ def calculate_kelly_lot(symbol, conviction):
     
     lot = min(kelly_lot, atr_adjusted_lot)
     
+    # Directive 2: Target Volatility position sizing scaling
+    try:
+        from agents.risk_agent import calculate_volatility_scalar
+        vol_scalar = calculate_volatility_scalar(symbol, current_atr)
+        scaled_lot = lot * vol_scalar
+        # Align with volume_step
+        scaled_lot = math.floor(scaled_lot / info.volume_step) * info.volume_step
+        logger.info(
+            f"[{symbol}] [TARGET_VOL_SCALING] vol_scalar={vol_scalar:.4f} (current_ATR={current_atr:.5f}) | "
+            f"Lot scaled: {lot:.2f} -> {scaled_lot:.2f}"
+        )
+        lot = scaled_lot
+    except Exception as e:
+        logger.warning(f"[{symbol}] Target Volatility scaling failed: {e}")
+        
     logger.info(f"[{symbol}] DEBUG LOT: Balance={acc.balance:.2f} | MaxRisk=${max_dollar_risk:.2f} | KellyLot={kelly_lot} | AtrLot={atr_adjusted_lot} | FinalLot={lot}")
 
     # Directive Omega: Rule 1.1 - Small Account Floor Sizing Veto
@@ -1158,7 +1271,11 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
     if alpha_features and isinstance(alpha_features, dict):
         entry_tf = alpha_features.get("timeframe", alpha_features.get("tf", "H4"))
     
-    deal_comment = f"{AGENT_SIGNATURE}_TF{entry_tf}_P{conviction:.2f}"[:29]
+    strategy_type = alpha_features.get("strategy_type", "MOMENTUM") if alpha_features else "MOMENTUM"
+    strategy_code = "MR" if strategy_type == "MEAN_REVERSION" else "MO"
+    from sentinel.version_manifest import SENTINEL_VERSION
+    prefix = f"SENTINEL_{SENTINEL_VERSION}_{strategy_code}"
+    deal_comment = f"{prefix}_TF{entry_tf}_P{conviction:.2f}"[:31]
     
     try:
         # Extract model scores from alpha_features for the checklist
@@ -1167,11 +1284,15 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
         passed, reason = run_composite_preflight_checklist(
-            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p
+            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
         )
         if not passed:
-            logger.warning(f"[{symbol}] COMPOSITE_PREFLIGHT_VETO: Trade rejected. Reason: {reason}")
-            return False
+            is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
+            if is_fuzzing:
+                logger.info(f"[{symbol}] [SRE_FUZZ_TEST_PASSED] Fuzzing signal rejected as expected. Reason: {reason}")
+            else:
+                logger.warning(f"[{symbol}] COMPOSITE_PREFLIGHT_VETO: Trade rejected. Reason: {reason}")
+            raise HTTPException(status_code=403, detail=f"COMPOSITE_PREFLIGHT_VETO: {reason}")
 
         tick = mt5.symbol_info_tick(symbol)
         if not tick: 
@@ -1427,7 +1548,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
             request["price"] = price
             request["type_time"] = mt5.ORDER_TIME_GTC
             request["expiration"] = 0
-            request["comment"] = f"SENTINEL_{SENTINEL_VERSION}_TF{entry_tf}_P{conviction:.2f}"[:29]
+            request["comment"] = f"{prefix}_TF{entry_tf}_P{conviction:.2f}"[:31]
             
             res = mt5.order_send(request)
 
@@ -1546,6 +1667,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
             logger.critical(f"[FAIL] [BROKER_REJECTION] {symbol} {direction} | Retcode: {res.retcode} | Comment: {res.comment}")
             return False
             
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         logger.critical(f"[FATAL_EXECUTION_CRASH] {symbol} {direction} | Error: {e}\n{traceback.format_exc()}")

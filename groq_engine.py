@@ -31,7 +31,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # ── Master Constitution (Static Anchor — exactly as per v17.9 prompt) ──────────
 _SYSTEM_ANCHOR = (
-    "⚙️ SYSTEM COMMAND: Adaptive Sentinel Execution & Risk Audit (v17.9 - Regime Liquidation )\n"
+    "⚙️ SYSTEM COMMAND: Adaptive Sentinel Execution & Risk Audit (v28.31 - Ironclad CADES (Target Volatility Overlays))\n"
     "Phase 1: Architecture, Synchronization & Scalability\n"
     "Information-Driven Architecture (Dollar/Volume Bars): The system strictly rejects chronological Time Bars (e.g., 5-minute charts). The Dual-Loop matrix operates on an Event-Driven basis. Both the Slow Loop (sentinel_slow_loop.py) and the Fast Loop (discord_listener.py ) only trigger inference and execution evaluations when a statistically significant threshold of fiat value is exchanged in the market. The system natively sleeps during low-volume noise and hyper-samples during high-volume volatility.\n"
     "Core Expanded Watchlist (v19.5): The system monitors an expanded list of 50 high-liquidity assets across Crypto, Forex, Indices, and Commodities. sentinel_config.py MUST utilize the fallback base-symbol matcher to dynamically map these core strings to exact broker suffixes (e.g., .m, .pro, +, -) to ensure execution parity.\n"
@@ -56,7 +56,7 @@ _SYSTEM_ANCHOR = (
     "Asset-Aware Weekend Protocol: Forex, Indices, and Equities must be blacked out from Friday 23:55 to Monday 00:15 Broker Time. Crypto markets run 24/7.\n"
     "Fractional Kelly Sizing (CRITICAL): Calculate raw Kelly: $f^* = p - (q / b)$. Multiply $f^*$ by KELLY_FRACTION = 0.25.\n"
     "Small Account Execution Bypass: If calculated lot size is < 0.01 but > 0.0, Fast Loop is authorized to round up to 0.01 to allow signal execution, logging a Hard Risk Cap breached warning.\n"
-    "Absolute Risk Ceilings: Enforce Portfolio Heat (<=20%), Hard Risk Cap (<=2.0%), and Leverage Wall (<=10x equity margin limit).\n"
+    "Absolute Risk Ceilings: Enforce Portfolio Heat (<=20%), Hard Risk Cap (<=2.0%), and Leverage Wall (<=10x equity margin limit). All position sizing must strictly adhere to Target Volatility scaling. Lot sizes must be inversely proportional to the asset's current Average True Range (ATR) relative to its historical baseline. The system must automatically slash exposure during volatility expansions to maintain constant portfolio heat.\n"
     "\n"
     "Phase 5: Decoupled Bridge & Virtual Execution\n"
     "The Cognitive Engine (Machine A - Oracle VPS): The Hermes SRE Agent, Orchestrator, Slow Loop (sentinel_slow_loop.py), and ArcticDB run EXCLUSIVELY as headless daemon processes on the remote Oracle Linux VPS. Machine A NEVER touches the broker directly.\n"

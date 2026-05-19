@@ -38,6 +38,7 @@ import git_arctic
 import gitagent_utils as utils
 CACHE_LIB = "oracle_cache"
 MODEL_PATH = "google/timesfm-2.5-200m-pytorch"
+TEMPERATURE = 2.5 # Calibrated temperature constant
 
 import gc
 if torch:
@@ -62,6 +63,18 @@ def init_model():
 
         print(f"[TIMESFM] Loading Pre-Quantized Model from {QUANT_PATH}...")
         _MODEL = torch.load(QUANT_PATH, weights_only=False)
+        
+        # Directive 1: Oracle Dependency Compile (v28.21 SRE)
+        # Dynamically compile the model to reconstruct compiled_decode in memory post-load
+        if hasattr(_MODEL, 'compile') and ForecastConfig is not None:
+            config = ForecastConfig(
+                max_context=1024,
+                max_horizon=48,
+                normalize_inputs=True,
+                use_continuous_quantile_head=True
+            )
+            _MODEL.compile(config)
+            print("[TIMESFM] Model compiled successfully post-load.")
         
         # Directive 3: TurboQuant (v23.3 Omni-Compression)
         # Enable 4-bit KV cache quantization and subquadratic attention strategy
@@ -133,7 +146,8 @@ def update_risk_cache(symbol: str, ohlcv_df: pd.DataFrame):
         print(f"[TIMESFM] ArcticDB cache updated for {symbol}: P10={p10:.5f}, P90={p90:.5f}")
         
     except Exception as e:
-        print(f"[TIMESFM] Oracle Error for {symbol}: {e}")
+        # Directive 2: Graceful Degradation (v28.21 SRE)
+        print(f"[ORACLE_DEGRADED] TimesFM failed for {symbol}: {e}")
 
 def get_cached_boundaries(symbol: str) -> Tuple[float, float]:
     """

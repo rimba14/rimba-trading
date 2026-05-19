@@ -7,7 +7,7 @@ import MetaTrader5 as mt5
 
 def main():
     print("="*60)
-    print("      [BOOT] SENTINEL v28.9 MASTER ORCHESTRATOR COLD-BOOT")
+    print("      [BOOT] SENTINEL v28.27 MASTER ORCHESTRATOR COLD-BOOT")
     print("="*60)
 
     # -------------------------------------------------------------
@@ -87,8 +87,8 @@ def main():
     risk_proc = subprocess.Popen([sys.executable, "agents/risk_agent.py"])
     
     # 2. profit_manager.py (The Naked Kill Switch)
-    print("[IGNITION] Starting profit_manager.py (Naked Kill Switch)...")
-    profit_proc = subprocess.Popen([sys.executable, "profit_manager.py"])
+    print("[IGNITION] Starting profit_manager_v25.py (Naked Kill Switch)...")
+    profit_proc = subprocess.Popen([sys.executable, "profit_manager_v25.py"])
     
     print("[IGNITION] Waiting 5 seconds for execution bridges and shields to stabilize...")
     time.sleep(5)

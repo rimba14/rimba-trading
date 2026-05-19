@@ -2,10 +2,17 @@
 param([switch]$DryRun = $false, [switch]$PaperMode = $false)
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONUTF8 = '1'
 
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host '  SENTINEL LAUNCHER — CANONICAL EDITION' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
+
+# STEP 0: Ruthless Process Purge
+Write-Host '[PURGE] Purging all active python processes to prevent zombies...' -ForegroundColor Yellow
+taskkill /F /T /IM python.exe 2>$null
+Get-Process | Where-Object {$_.Name -eq "python"} | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
 
 # STEP 0A: Identity Breach Check
 $breachFlag = 'C:\Sentinel_Project\IDENTITY_BREACH.flag'
@@ -33,19 +40,27 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # STEP 3: Launch services in correct sequence
-Write-Host '[LAUNCH] Starting Machine A (Profit Manager)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager.py' -PassThru
+Write-Host '[LAUNCH] Starting Machine C (Macro Calendar Sync)...' -ForegroundColor Yellow
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'macro_calendar_sync.py' -PassThru
+Start-Sleep -Seconds 3
+
+Write-Host '[LAUNCH] Starting Machine D (Risk Agent)...' -ForegroundColor Yellow
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'agents\risk_agent.py' -PassThru
+Start-Sleep -Seconds 3
+
+Write-Host '[LAUNCH] Starting Machine E (SRE Watchdog Daemon)...' -ForegroundColor Yellow
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'sre_watchdog.py' -PassThru
+Start-Sleep -Seconds 3
+
+Write-Host '[LAUNCH] Starting Machine A (Profit Manager v25.0)...' -ForegroundColor Yellow
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v25.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine B (FastAPI Sniper)...' -ForegroundColor Yellow
 Start-Process .\venv\Scripts\python.exe -ArgumentList '-m uvicorn fastapi_sniper:app --host 0.0.0.0 --port 8000' -PassThru
-Start-Sleep -Seconds 3
-
-Write-Host '[LAUNCH] Starting Machine C (Risk Agent)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'agents\risk_agent.py' -PassThru
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5
 
 Write-Host '[LAUNCH] Starting Slow Loop...' -ForegroundColor Yellow
 Start-Process .\venv\Scripts\python.exe -ArgumentList 'sentinel_slow_loop.py' -PassThru
 
-Write-Host '[OK] All services launched successfully under v28.12!' -ForegroundColor Green
+Write-Host '[OK] All services launched successfully under v28.31 (Target Volatility Overlays)!' -ForegroundColor Green
