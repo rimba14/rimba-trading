@@ -1470,9 +1470,14 @@ class SessionDB:
                 list(session_ids),
             )
 
-            for sid in session_ids:
-                conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
-                conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
+            conn.execute(
+                f"DELETE FROM messages WHERE session_id IN ({placeholders})",
+                list(session_ids),
+            )
+            conn.execute(
+                f"DELETE FROM sessions WHERE id IN ({placeholders})",
+                list(session_ids),
+            )
             return len(session_ids)
 
         return self._execute_write(_do)
