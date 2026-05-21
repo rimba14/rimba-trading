@@ -37,7 +37,7 @@ class Config:
         self.test_time_range = ["2024-04-01", "2025-06-05"]
         self.backtest_time_range = ["2024-07-01", "2025-06-05"]
 
-        # TODO: Directory to save the processed, pickled datasets.
+        # Directory to save the processed, pickled datasets.
         self.dataset_path = "./data/processed_datasets"
 
         # =================================================================
