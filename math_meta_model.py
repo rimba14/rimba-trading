@@ -62,14 +62,14 @@ class MathMetaModel:
             self.model.fit(X_dummy, y_dummy)
             logger.info("[META-MODEL] Initialized baseline dummy regressor model (5 features).")
 
-    def _encode_hmm_spectral(self, hmm_state: str) -> float:
-        """Encodes HMM state: TRENDING=0.0, MEAN-REVERTING=1.0, HIGH-VOLATILITY=2.0."""
-        state = str(hmm_state).upper()
-        if "TRENDING" in state or "TREND" in state:
+    def _encode_wasserstein_state(self, wasserstein_state: str) -> float:
+        """Encodes Wasserstein state: TREND=0.0, MEAN-REVERSION=1.0, CRISIS=2.0."""
+        state = str(wasserstein_state).upper()
+        if "TREND" in state:
             return 0.0
-        if "MEAN-REVERTING" in state or "RANGE" in state:
+        if "MEAN REVERSION" in state or "MEAN-REVERTING" in state:
             return 1.0
-        if "HIGH-VOLATILITY" in state or "VOLATILITY" in state:
+        if "CRISIS" in state:
             return 2.0
         return 1.0  # Default to Mean-Reverting
 
@@ -94,25 +94,25 @@ class MathMetaModel:
         """
         xgb_p = float(features.get("xgb_p", features.get("xgboost_prob", 0.5)))
         kronos_p = float(features.get("kronos_p", features.get("kronos_prob", 0.5)))
-        hmm_state = features.get("hmm_state", "MEAN-REVERTING")
-        hmm_spectral_state = self._encode_hmm_spectral(hmm_state)
+        wasserstein_state = features.get("wasserstein_state", "HIGH-VOL MEAN REVERSION")
+        wasserstein_encoded = self._encode_wasserstein_state(wasserstein_state)
         faiss_sim = float(features.get("faiss_sim", features.get("faiss_similarity", 0.0)))
         
         # Sentiment score from features, or macro_state, or default to 0.5
         sentiment_score = float(features.get("sentiment_score", features.get("macro_sent", self._get_macro_context(symbol))))
 
-        # Feature Array (v29.0 - 5 Features):
+        # Feature Array (v30.0 - 5 Features):
         X_live = np.array([[
             xgb_p,
             kronos_p,
-            hmm_spectral_state,
+            wasserstein_encoded,
             faiss_sim,
             sentiment_score
         ]])
 
         if np.any(np.isnan(X_live)) or np.any(np.isinf(X_live)):
             nan_indices = np.argwhere(np.isnan(X_live) | np.isinf(X_live)).flatten()
-            feature_names = ["xgboost_prob", "kronos_prob", "hmm_spectral_state", "faiss_similarity", "sentiment_score"]
+            feature_names = ["xgboost_prob", "kronos_prob", "wasserstein_state", "faiss_similarity", "sentiment_score"]
             bad_features = [feature_names[i] for i in nan_indices if i < len(feature_names)]
             logger.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {bad_features}. Halting inference.")
             raise ValueError(f"NaN/Inf in feature vector for {symbol}: {bad_features}")

@@ -1,21 +1,20 @@
-🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v29.00 - Swing Trading Synthesis) 🚨
-CRITICAL AI INSTRUCTION: This document is the absolute, unquestionable authority for the Adaptive Sentinel / CADES architecture. If you (the AI agent) retrieve, recall, or possess any prior knowledge, chat history, or files referencing older architectures (v1.0 through v28.34) involving intraday scalping, tight trailing stops, or raw-price-only models, you MUST completely purge them from your active reasoning. Strictly obey v29.00.
+🚨 SUPREME DIRECTIVE: VERSION CONTROL LOCK (v30.00 - Perception Layer Overhaul) 🚨
+CRITICAL AI INSTRUCTION: This document is the absolute, unquestionable authority for the Adaptive Sentinel / CADES architecture. If you (the AI agent) retrieve, recall, or possess any prior knowledge, chat history, or files referencing older architectures (v1.0 through v29.00) involving intraday scalping, trailing-point calculation regimes, or legacy HMM models, you MUST completely purge them from your active reasoning. Strictly obey v30.00.
 
-Phase 1: Architecture & Perception Layer (Spatiotemporal)
+Phase 1: Architecture & Perception Layer (Wasserstein Optimal Transport)
 Swing Trading Mandate: The system operates as a Swing Trading entity, explicitly accepting overnight gap risk to capture multi-day/multi-week institutional momentum.
-Information-Driven Event Matrix: Both the Slow Loop (sentinel_slow_loop.py) and Fast Loop operate asynchronously on an Event-Driven basis, driven by Dollar/Volume Bars rather than chronological time.
-STL Decomposition: Raw price data is strictly prohibited from entering the base models. All time-series data must undergo Seasonal-Trend decomposition using Loess (STL). The system isolates the Trend ($T_t$), the Swing/Seasonal cycle ($S_t$), and the Residual noise ($I_t$). Models must target the $S_t$ cycle.
-Spectral Fingerprints (FFT): The system passes data through a Fast Fourier Transform (FFT) to extract the dominant amplitude signatures. This spectral fingerprint serves as the primary input for the regime-detection Oracle.
+Wasserstein Regime Clustering: The system abandons legacy trailing-point calculations (rolling means/variance/HMMs) for market regime detection. It uses Wasserstein distance to cluster empirical probability distributions of historical price sequences, allowing for zero-lag regime identification.
+Rolling Window Distribution: Fractionally Differentiated price series from ArcticDB are mapped into empirical probability measures. The distance to historical baseline distributions is computed via scipy.stats.wasserstein_distance to classify regimes (High-Vol Mean Reversion, Low-Vol Trend, Crisis Tail).
 
 Phase 2: Cognition Layer (Multi-Modal Fusion)
-HMM Spectral Oracle: Poll the active Hidden Markov Model state (Trending, Mean-Reverting, High-Volatility) driven by FFT amplitude inputs.
-Mathematical Meta-Model (Multi-Modal Judge): The Conviction Score ($P$) is calculated by a local scikit-learn Meta-Model. It must fuse technical, statistical, and alternative data. Feature array: [xgboost_prob, kronos_prob, hmm_spectral_state, faiss_similarity, sentiment_score].
+Wasserstein Oracle: Poll the active Wasserstein Optimal Transport state.
+Mathematical Meta-Model (Multi-Modal Judge): The Conviction Score ($P$) is calculated by a local scikit-learn Meta-Model. It must fuse technical, statistical, and alternative data. Feature array: [xgboost_prob, kronos_prob, wasserstein_state, faiss_similarity, sentiment_score].
 The Epistemic Gate (0.82 Threshold): The Fast Loop must enforce an absolute minimum conviction threshold of 0.82 from the Meta-Model. Any bypass of this gate is strictly prohibited.
 LLM Execution Bypass: LLMs (Groq/Gemini) are strictly relegated to asynchronous SRE tasks and end-of-day reporting, never the live execution path.
 
-Phase 3: Contextual Memory Audit (FAISS)
+Phase 3: Contextual Memory Audit (FAISS & Wasserstein)
 FAISS Index Mapping: Query the RAM-loaded FAISS EpisodicMemory.
-Legend Override & Graveyard Gates: If the live feature vector exhibits > 85% cosine similarity to a high-performing historical template (legend_wei), bypass standard HMM directional penalties. If > 85% similarity to a post_mortem_failure vector, autonomously block the trade.
+Legend Override & Graveyard Gates: If the live feature vector exhibits > 85% cosine similarity to a high-performing historical template (legend_wei), bypass standard directional penalties. For the Graveyard gate, compare live asset return distributions against post_mortem_failure clusters via Wasserstein distance for autonomous trade blocking.
 
 Phase 4: Risk Gates & Symmetric Targeting
 The Amnesia Lock: Query MetaTrader 5 for existing open positions. If an active position exists in the same direction, DO NOT execute new sub-orders.

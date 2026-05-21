@@ -208,7 +208,7 @@ class TradeSignal(BaseModel):
     conviction: Optional[float] = 0.80
     xgb_p: float = 0.5
     ddqn_p: float = 0.5
-    hmm_state: str = "RANGE"
+    wasserstein_state: str = "HIGH-VOL MEAN REVERSION"
     timestamp: Optional[int] = None
     reasoning: str = ""
     vpin: float = 0.0
@@ -312,7 +312,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     is_fuzzing = request.headers.get("IS_FUZZING") == "True"
     logger.info(f"Received Signal: {signal.symbol} {signal.direction} (P={signal.conviction})")
     
-    mapped_regime = "TREND" if signal.hmm_state in ("BULL", "BEAR", "TREND", "TRENDING", "HIGH-VOLATILITY") else "RANGE"
+    mapped_regime = "TREND" if "TREND" in signal.wasserstein_state else "RANGE"
     
     # --- LEVEL 64 SRE: DRY-FIRE SIMULATION GATES ---
     # Wall 3 Veto: RANGE Regime Momentum Block (Pattern 1)
@@ -394,7 +394,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. (RANGE vs {signal.signal_type})")
         raise HTTPException(status_code=403, detail="Regime Misalignment (RANGE vs Momentum)")
     if mapped_regime == "TREND" and "MEAN_REVERSION" in sig_type_upper:
-        logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. ({signal.hmm_state} vs {signal.signal_type})")
+        logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. ({signal.wasserstein_state} vs {signal.signal_type})")
         raise HTTPException(status_code=403, detail="Regime Misalignment (TREND vs Mean-Reversion)")
 
     # 2c. Pre-Trade Toxicity Gating (VPIN)
@@ -432,7 +432,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         raise HTTPException(status_code=403, detail=str(e))
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
-    if not check_risk_gates(signal.symbol, signal.direction, signal.hmm_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
+    if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
         return {"status": "rejected", "detail": "Risk gate block"}
 
     # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
@@ -464,7 +464,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     alpha_features = {
         "P": signal.conviction,
         "vpin": vpin_val,
-        "regime": signal.hmm_state,
+        "regime": signal.wasserstein_state,
         "xgb_p": signal.xgb_p,
         "ddqn_p": signal.ddqn_p,
         "data_quality_flag": signal.data_quality_flag,
@@ -539,17 +539,17 @@ def extract_conviction_from_comment(comment: str) -> float:
         pass
     return 0.5
 
-def check_risk_gates(symbol, direction, hmm_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5):
+def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5):
     # A. Weekend Blackout
     if is_weekend_blackout(symbol):
         logger.warning(f"[{symbol}] Signal REJECTED: Weekend Blackout")
         return False
 
     # B. HMM Regime Alignment
-    if hmm_state == "BEAR" and direction == "BUY":
+    if "MEAN" in wasserstein_state and direction == "BUY":
         logger.warning(f"[{symbol}] Signal REJECTED: Regime/Direction Mismatch (BEAR/BUY)")
         return False
-    if hmm_state == "BULL" and direction == "SELL":
+    if "MEAN" in wasserstein_state and direction == "SELL":
         logger.warning(f"[{symbol}] Signal REJECTED: Regime/Direction Mismatch (BULL/SELL)")
         return False
 
@@ -819,7 +819,7 @@ def run_composite_preflight_checklist(
     lot: float,
     conviction: float,
     vpin: float,
-    hmm_state: str,
+    wasserstein_state: str,
     xgb_p: float,
     ddqn_p: float,
     payload: dict = None,
@@ -925,7 +925,7 @@ def run_composite_preflight_checklist(
 
     # Point 9: Regime State Validity
     if hmm_state not in ["BULL", "BEAR", "RANGE", "TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY"]:
-        return False, f"Point 9 Fail: Invalid HMM state {hmm_state}"
+        return False, f"Point 9 Fail: Invalid Wasserstein state {hmm_state}"
 
     # Point 10: Regime Probability Minimum (Rule 3.3)
     hmm_prob = 1.0
@@ -1353,7 +1353,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
         passed, reason = run_composite_preflight_checklist(
-            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
+            symbol, direction, lot, conviction, vpin, wasserstein_state, xgb_p, ddqn_p, alpha_features
         )
         if not passed:
             is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
@@ -1516,7 +1516,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                                         from arcticdb import Arctic
                                         store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
                                         row = store["oracle_cache"].read(f"{pos.symbol}_meta").data.iloc[-1]
-                                        active_regime = str(row["hmm_state"]).upper()
+                                        active_regime = str(row["wasserstein_state"]).upper()
                                     except Exception:
                                         active_regime = "TRENDING"
                                 else:
@@ -1701,7 +1701,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                             from arcticdb import Arctic
                             store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
                             row = store["oracle_cache"].read(f"{pos.symbol}_meta").data.iloc[-1]
-                            active_regime = str(row["hmm_state"]).upper()
+                            active_regime = str(row["wasserstein_state"]).upper()
                         except Exception:
                             active_regime = "TRENDING"
                     else:

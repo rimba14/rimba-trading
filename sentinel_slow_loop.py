@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 # Global dicts for Regime Hysteresis (v20.4)
-_HMM_HISTORY = defaultdict(list)
+_WASSERSTEIN_HISTORY = defaultdict(list)
 _OFFICIAL_REGIME = {}
 _GLOBAL_CS_RANKS = {}
 _LAST_CS_REFRESH = 0
@@ -178,7 +178,8 @@ if os.name == 'nt':
 sys.path.append(r"C:\Sentinel_Project")
 
 import git_arctic
-import gitagent_hmm as hmm
+from wasserstein_regime_cluster import WassersteinRegimeCluster
+_wasserstein_clusterer = WassersteinRegimeCluster(window_size=50, n_clusters=3)
 import gitagent_sigproc as sigproc
 import kronos_bridge
 import rl_agents.oxford_ddqn as ddqn_bridge
@@ -456,7 +457,7 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
     
     if _MATH_META_MODEL is not None:
         faiss_sim = features.get("faiss_sim", 0.0)
-        hmm_state = features.get("hmm_state", "RANGE")
+        wasserstein_state = features.get("wasserstein_state", "HIGH-VOL MEAN REVERSION")
         try:
             logging.info(f"[ROUTER] {symbol} -> Math Meta-Model (Zero-Latency)")
             p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
@@ -547,23 +548,23 @@ def _run_shap(symbol: str, x_vec: list, f_keys: list, direction: int, p_final: f
 def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: float) -> float:
     """
     v29.0: Multi-Modal 5-feature Alpha Factory vector.
-    [xgb_p, kronos_p, hmm_state, faiss_sim, sentiment_score]
+    [xgb_p, kronos_p, wasserstein_state, faiss_sim, sentiment_score]
     """
     f_keys = [
-        "xgb_p", "kronos_p", "hmm_state", "faiss_sim", "sentiment_score"
+        "xgb_p", "kronos_p", "wasserstein_state", "faiss_sim", "sentiment_score"
     ]
-    hmm_state_str = str(features.get("hmm_state", "MEAN-REVERTING")).upper()
-    if "TRENDING" in hmm_state_str or "TREND" in hmm_state_str:
-        hmm_val = 0.0
-    elif "HIGH-VOLATILITY" in hmm_state_str or "VOLATILITY" in hmm_state_str:
-        hmm_val = 2.0
+    wasserstein_state_str = str(features.get("wasserstein_state", "HIGH-VOL MEAN REVERSION")).upper()
+    if "TREND" in wasserstein_state_str:
+        wasserstein_val = 0.0
+    elif "CRISIS" in wasserstein_state_str:
+        wasserstein_val = 2.0
     else:
-        hmm_val = 1.0
+        wasserstein_val = 1.0
 
     x_vec = [
         float(features.get("xgb_p", 0.5)),
         float(features.get("kronos_p", 0.5)),
-        float(hmm_val),
+        float(wasserstein_val),
         float(features.get("faiss_sim", 0.0)),
         float(features.get("sentiment_score", features.get("macro_sent", 0.5)))
     ]
@@ -626,7 +627,7 @@ def push_to_orchestrator(payload: Dict[str, Any]):
 
 # -- Main Oracle Update --------------------------------------------------------
 def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -> Optional[dict]:
-    global _MODEL_DRIFT_HALT, _OFFICIAL_REGIME, _HMM_HISTORY, _LAST_UPDATE
+    global _MODEL_DRIFT_HALT, _OFFICIAL_REGIME, _WASSERSTEIN_HISTORY, _LAST_UPDATE
     if _MODEL_DRIFT_HALT:
         logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
         return None
@@ -900,27 +901,30 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             logging.critical(f"[FATAL] {symbol}: No ML data and no Swing fallback. Halting.")
             return None
 
-        raw_hmm_state, hmm_prob, label_probs = hmm.get_current_state(df_m15["close"].values)
+        if df_ml is not None and "frac_diff_price" in df_ml.columns:
+            raw_wasser_state, wasser_prob, label_probs = _wasserstein_clusterer.get_current_state(df_ml["frac_diff_price"].dropna().values)
+        else:
+            raw_wasser_state, wasser_prob, label_probs = "LOW-VOL TREND", 1.0, {"LOW-VOL TREND": 1.0}
         
         # Regime Hysteresis (Debouncing)
         if symbol not in _OFFICIAL_REGIME:
-            _OFFICIAL_REGIME[symbol] = raw_hmm_state
+            _OFFICIAL_REGIME[symbol] = raw_wasser_state
             
-        _HMM_HISTORY[symbol].append(raw_hmm_state)
-        if len(_HMM_HISTORY[symbol]) > 3:
-            _HMM_HISTORY[symbol].pop(0)
+        _WASSERSTEIN_HISTORY[symbol].append(raw_wasser_state)
+        if len(_WASSERSTEIN_HISTORY[symbol]) > 3:
+            _WASSERSTEIN_HISTORY[symbol].pop(0)
             
-        if len(_HMM_HISTORY[symbol]) == 3 and all(s == raw_hmm_state for s in _HMM_HISTORY[symbol]):
-            _OFFICIAL_REGIME[symbol] = raw_hmm_state
+        if len(_WASSERSTEIN_HISTORY[symbol]) == 3 and all(s == raw_wasser_state for s in _WASSERSTEIN_HISTORY[symbol]):
+            _OFFICIAL_REGIME[symbol] = raw_wasser_state
             
-        hmm_state = _OFFICIAL_REGIME[symbol]
+        wasserstein_state = _OFFICIAL_REGIME[symbol]
         
         atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
-        logging.info(f"[HMM] {symbol}: Raw={raw_hmm_state} -> Official={hmm_state} (p={hmm_prob:.3f}) | ATR(H1)={atr:.5f}")
+        logging.info(f"[HMM] {symbol}: Raw={raw_wasser_state} -> Official={wasserstein_state} (p={wasser_prob:.3f}) | ATR(H1)={atr:.5f}")
 
-        _arctic_write(f"{symbol}_hmm", pd.DataFrame([{
-            "state": hmm_state,
-            "prob": float(hmm_prob),
+        _arctic_write(f"{symbol}_wasserstein", pd.DataFrame([{
+            "state": wasserstein_state,
+            "prob": float(wasser_prob),
             "atr": float(atr),
             "timestamp": utils.get_utc_epoch(),
         }]))
@@ -934,8 +938,8 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             "swing_alpha": swing_alpha,
             "latest_swing": latest_swing,
             "vrs": vrs,
-            "hmm_state": hmm_state,
-            "hmm_prob": hmm_prob,
+            "wasserstein_state": wasserstein_state,
+            "wasser_prob": wasser_prob,
             "label_probs": label_probs,
             "data_quality_flag": data_quality_flag,
             "is_this_symbol_starved": is_this_symbol_starved,
@@ -958,8 +962,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
     swing_alpha = prep_data["swing_alpha"]
     latest_swing = prep_data["latest_swing"]
     vrs = prep_data["vrs"]
-    hmm_state = prep_data["hmm_state"]
-    hmm_prob = prep_data["hmm_prob"]
+    wasserstein_state = prep_data["wasserstein_state"]
+    wasser_prob = prep_data["wasser_prob"]
     label_probs = prep_data["label_probs"]
     data_quality_flag = prep_data["data_quality_flag"]
     is_this_symbol_starved = prep_data["is_this_symbol_starved"]
@@ -1077,7 +1081,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 "kronos_p": k_prob,
                 "xgb_p": x_prob,
                 "ddqn_p": ddqn_p,
-                "hmm_state": hmm_state,
+                "wasserstein_state": wasserstein_state,
                 "atr": atr,
                 "timesfm_p10": p10_val,
                 "timesfm_p90": p90_val
@@ -1116,7 +1120,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
 
         _final = df_ml.iloc[-1]
         local_meta_features = copy.deepcopy({
-            "hmm_state": hmm_state,
+            "wasserstein_state": wasserstein_state,
             "xgb_p": z_xgb,
             "kronos_p": z_kronos,
             "faiss_sim": float(max_sim),
@@ -1160,16 +1164,16 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         w_trend /= total_w
         w_range /= total_w
         
-        hmm_selector_state = "TREND" if hmm_state in ("BULL", "BEAR", "TREND", "TRENDING") else "RANGE"
+        wasserstein_selector_state = "TREND" if "TREND" in wasserstein_state else "RANGE"
         
-        if hmm_selector_state == "TREND":
+        if wasserstein_selector_state == "TREND":
             signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
             meta_p = p_trend
-        elif hmm_selector_state == "RANGE":
+        elif wasserstein_selector_state == "RANGE":
             signal = run_meridian_strategy(symbol, local_meta_features, p_range)
             meta_p = p_range
             
-            if _VRP_SPREAD > 5.0 and hmm_state == "RANGE":
+            if _VRP_SPREAD > 5.0 and wasserstein_state == "RANGE":
                 deviation = meta_p - 0.5
                 meta_p = np.clip(0.5 + deviation * 1.15, 0.0, 1.0)
                 logging.info(
@@ -1197,7 +1201,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         dynamic_gate = max(dynamic_gate, 0.65)
         current_gate = dynamic_gate
         
-        regime_prob = label_probs.get(hmm_state, 0.0)
+        regime_prob = label_probs.get(wasserstein_state, 0.0)
         if regime_prob < 0.55:
             current_gate = max(current_gate - 0.05, 0.60)
             logging.info(f"[{symbol}] [CONVICTION_DRIFT_ACTIVE] HMM confidence low ({regime_prob:.3f} < 0.55). Relaxing entry gate by 5% conviction drift to {current_gate:.3f}")
@@ -1246,7 +1250,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     "timestamp": int(time.time()),
                     "symbol": symbol,
                     "p_score": float(meta_p),
-                    "hmm_state": hmm_state,
+                    "wasserstein_state": wasserstein_state,
                     "primary_dir": int(primary_dir)
                 }) + "\n")
         except Exception as _pe:
@@ -1279,7 +1283,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
             "meta_conviction": float(meta_p),
-            "hmm_state": hmm_state,
+            "wasserstein_state": wasserstein_state,
             "strategy_type": signal["strategy_type"],
             "atr": float(atr),
             "entropy": float(_final.get("order_flow_entropy", 0.0)),
@@ -1319,7 +1323,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
                 return
             
-            regime_prob = label_probs.get(hmm_state, 0.0)
+            regime_prob = label_probs.get(wasserstein_state, 0.0)
             if regime_prob < 0.55:
                 logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
             elif is_legend:
@@ -1327,10 +1331,10 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             else:
                 is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
                 if not is_mixts_valid and regime_prob < 0.60:
-                    logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {hmm_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
+                    logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {wasserstein_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
                     return
-                if (predicted_dir == "BUY" and hmm_state == "BEAR") or (predicted_dir == "SELL" and hmm_state == "BULL"):
-                    logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {hmm_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
+                if (predicted_dir == "BUY" and wasserstein_state == "BEAR") or (predicted_dir == "SELL" and wasserstein_state == "BULL"):
+                    logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {wasserstein_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
                     return
             
             entropy_val = 0.0
@@ -1369,7 +1373,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     "tag": signal["tag"],
                     "xgb_p": float(x_prob),
                     "ddqn_p": float(ddqn_p),
-                    "hmm_state": hmm_state,
+                    "wasserstein_state": wasserstein_state,
                     "atr": float(atr),
                     "timestamp": int(datetime.now(timezone.utc).timestamp()),
                     "version": "v29.0-IRONCLAD-CADES",
@@ -1379,7 +1383,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     "applied_dynamic_gate": float(current_gate)
                 })
             logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} >= dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). CLEAR.")
-            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={hmm_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
+            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={wasserstein_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
         else:
             logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} < dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). Suppressed.")
  
