@@ -19,7 +19,7 @@ def kill_legacy_daemons():
     log.info("[PHASE 0] Starting Environment Exorcism...")
     try:
         # Using tasklist and filtering for python.exe
-        output = subprocess.check_output("tasklist /v /fo csv /fi \"imagename eq python.exe\"", shell=True).decode('utf-8', errors='ignore')
+        output = subprocess.check_output(["tasklist", "/v", "/fo", "csv", "/fi", "imagename eq python.exe"]).decode('utf-8', errors='ignore')
         lines = output.split('\n')
         for line in lines:
             for daemon in DAEMONS:
@@ -29,7 +29,7 @@ def kill_legacy_daemons():
                     if len(parts) > 1:
                         pid = parts[1].replace('"', '')
                         log.warning(f"[RULE 2] Forcefully terminating legacy daemon: {daemon} (PID: {pid})")
-                        subprocess.run(f"taskkill /F /PID {pid}", shell=True)
+                        subprocess.run(["taskkill", "/F", "/PID", pid])
     except Exception as e:
         log.error(f"[FAIL] Rule 2 execution error: {e}")
 
@@ -42,12 +42,12 @@ def verify_ports():
                 log.error(f"[RULE 3] Port {port} is ALREADY BOUND. Liberation required.")
                 # Attempt to find PID using port and kill it
                 try:
-                    netstat = subprocess.check_output(f"netstat -ano | findstr :{port}", shell=True).decode('utf-8')
+                    netstat = subprocess.check_output(["netstat", "-ano"]).decode('utf-8')
                     for ns_line in netstat.strip().split('\n'):
-                        if "LISTENING" in ns_line:
+                        if f":{port}" in ns_line and "LISTENING" in ns_line:
                             pid = ns_line.strip().split()[-1]
                             log.warning(f"[RULE 3] Killing process {pid} binding port {port}")
-                            subprocess.run(f"taskkill /F /PID {pid}", shell=True)
+                            subprocess.run(["taskkill", "/F", "/PID", pid])
                 except:
                     pass
             else:
