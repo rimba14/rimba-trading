@@ -864,23 +864,6 @@ class SentinelProfitManager:
         target_sl = pos.sl
         modify_sl = False
 
-        # Always recompute TP dynamically — never stale
-        new_tp = (entry + tp_mult * macro_atr) if is_buy else (entry - tp_mult * macro_atr)
-        target_tp  = normalize_stop(pos.symbol, curr, new_tp, is_sl=False, is_buy=is_buy)
-        target_tp  = round(target_tp, digits)
-        modify_tp  = True  # Always update TP to keep it dynamic [FIX]
-
-        def advance_sl(candidate: float) -> bool:
-            """Move SL only in the direction that protects the trade (never worsen)."""
-            nonlocal target_sl, modify_sl
-            candidate = normalize_stop(pos.symbol, curr, candidate, is_sl=True, is_buy=is_buy)
-            candidate = round(candidate, digits)
-            if is_buy and candidate > target_sl:
-                target_sl = candidate;  modify_sl = True;  return True
-            if not is_buy and (target_sl == 0.0 or candidate < target_sl):
-                target_sl = candidate;  modify_sl = True;  return True
-            return False
-
         # ── Trailing Stop Milestone & Activation Gate (v28.33 Constitution) ──
         initial_sl = getattr(ps, "initial_sl", 0.0)
         if initial_sl == 0.0:
@@ -888,97 +871,58 @@ class SentinelProfitManager:
                 ps.initial_sl = pos.sl
                 initial_sl = pos.sl
             else:
-                initial_sl = ps.entry_price - (sl_mult * macro_atr) if is_buy else ps.entry_price + (sl_mult * macro_atr)
+                raw_initial = ps.entry_price - (sl_mult * macro_atr) if is_buy else ps.entry_price + (sl_mult * macro_atr)
+                initial_sl = normalize_stop(pos.symbol, curr, raw_initial, is_sl=True, is_buy=is_buy)
+                initial_sl = round(initial_sl, digits)
                 ps.initial_sl = initial_sl
 
-        r_distance = abs(pos.price_open - initial_sl)
-        if r_distance <= 0.0:
-            r_distance = sl_mult * macro_atr if (sl_mult * macro_atr) > 0 else 1.0
+        # Calculate SL Distance
+        sl_dist = abs(entry - initial_sl)
+        if sl_dist <= 0.0:
+            sl_dist = sl_mult * macro_atr
+        if sl_dist <= 0.0:
+            sl_dist = 1.0
 
-        profit_distance = abs(curr - pos.price_open)
-        current_r = profit_distance / r_distance if r_distance > 0 else 0.0
-        current_r_multiple = current_r
+        # Mandate Symmetric Take Profits: structurally lock TP distance to min 1.5x SL distance
+        min_tp_dist = 1.5 * sl_dist
+        tp_dist = max(tp_mult * macro_atr, min_tp_dist)
 
-        tp_ref = pos.tp if pos.tp > 0.0 else target_tp
-        tp_distance = abs(tp_ref - pos.price_open)
-        target_pct = profit_distance / tp_distance if tp_distance > 0.0 else 0.0
-        current_tp_ratio = target_pct
+        # Always recompute TP dynamically
+        new_tp = (entry + tp_dist) if is_buy else (entry - tp_dist)
+        target_tp  = normalize_stop(pos.symbol, curr, new_tp, is_sl=False, is_buy=is_buy)
+        target_tp  = round(target_tp, digits)
+        modify_tp  = (pos.tp == 0.0 or abs(pos.tp - target_tp) > 1e-5)
 
-        # 80% Absolute Lock: engage trailing stop only if >= 80% to TP (0.80)
-        trail_allowed = (target_pct >= 0.80)
+        # Calculate Target Path
+        d_target = abs(target_tp - entry)
+        d_guard = 0.80 * d_target
+        d_current = abs(curr - entry)
 
-        # ── 85% TP "Killshot" Trigger (Directive 2) ──────────────────────────
-        killshot_engaged = False
-        if trail_allowed and target_pct >= 0.85:
-            killshot_sl = (curr - 0.5 * macro_atr) if is_buy else (curr + 0.5 * macro_atr)
-            if advance_sl(killshot_sl):
-                killshot_engaged = True
-                logger.warning(
-                    f"[KILLSHOT_TRAIL] {pos.symbol} #{pos.ticket}: "
-                    f"Price reached {target_pct:.1%} of TP. Aggressive SL trail engaged at {target_sl:.5f}."
-                )
+        trail_allowed = (d_current >= d_guard)
 
-        # ── v25.0 Fortress Mode: trail toward current price ──────────────────
-        if drawdown >= 0.03:
-            if trail_allowed:
-                fortress_sl = (curr - 1.5 * macro_atr) if is_buy else (curr + 1.5 * macro_atr)
-                if advance_sl(fortress_sl):
-                    logger.warning(
-                        f"[FORTRESS_TRAIL] {pos.symbol} #{pos.ticket}: "
-                        f"drawdown={drawdown:.1%} — SL trailed to {target_sl:.5f}"
-                    )
-            else:
-                logger.info(
-                    f"[FORTRESS_TRAIL_SUPPRESSED] {pos.symbol} #{pos.ticket}: "
-                    f"drawdown={drawdown:.1%} but suppressed for 80% trail lock (TP={target_pct:.1%}/80%)"
-                )
-
-        # ── Breakeven Lock at +0.5 ATR ───────────────────────────────────────
-        if delta >= 0.5 * macro_atr:
-            if trail_allowed:
-                advance_sl(entry)
-            else:
-                logger.info(
-                    f"[BREAKEVEN_SUPPRESSED] {pos.symbol} #{pos.ticket}: "
-                    f"Breakeven trail suppressed for 80% trail lock (TP={target_pct:.1%}/80%)"
-                )
-
-        # ── Zone 1: Scale-out 35% at +1.5 ATR ───────────────────────────────
-        if delta >= 1.5 * macro_atr and not ps.zone1_done and tick and info:
-            if safe_scale_out(pos, ps, 0.35, "ZONE1_SCALE_35PCT", info, tick):
-                ps.zone1_done = True
-
-        # ── Zone 2: Scale-out 35% at +2.5 ATR + parabolic trail ─────────────
-        if delta >= 2.5 * macro_atr:
-            if not ps.zone2_done and tick and info:
-                if safe_scale_out(pos, ps, 0.35, "ZONE2_SCALE_35PCT", info, tick):
-                    ps.zone2_done = True
-            if not killshot_engaged:
-                if trail_allowed:
-                    trail_2 = (curr - 1.5 * macro_atr) if is_buy else (curr + 1.5 * macro_atr)
-                    advance_sl(trail_2)
-                else:
-                    logger.info(
-                        f"[TRAIL_2_SUPPRESSED] {pos.symbol} #{pos.ticket}: "
-                        f"Zone 2 trail suppressed for 80% trail lock (TP={target_pct:.1%}/80%)"
-                    )
-
-        # ── Zone 3: Tight trail at +4.0 ATR ─────────────────────────────────
-        if delta >= 4.0 * macro_atr:
-            if not killshot_engaged:
-                if trail_allowed:
-                    trail_3 = (curr - 1.0 * macro_atr) if is_buy else (curr + 1.0 * macro_atr)
-                    advance_sl(trail_3)
-                else:
-                    logger.info(
-                        f"[TRAIL_3_SUPPRESSED] {pos.symbol} #{pos.ticket}: "
-                        f"Zone 3 trail suppressed for 80% trail lock (TP={target_pct:.1%}/80%)"
-                    )
-
-        # Enforce 80% Trail Lock: if trail is not allowed, suppress all modifications
+        # Unconditional Stop Freeze
         if not trail_allowed:
-            modify_sl = False
-            modify_tp = False
+            # Stop loss must remain frozen at initial_sl
+            target_sl = initial_sl
+            modify_sl = (pos.sl == 0.0 or abs(pos.sl - initial_sl) > 1e-5)
+        else:
+            # Trailing is allowed after 80% target is reached
+            # Let's trail SL at 1.5 * macro_atr behind current price to protect profits
+            trail_sl = (curr - 1.5 * macro_atr) if is_buy else (curr + 1.5 * macro_atr)
+            
+            # Tighter trail at 85% TP Killshot (0.5 * macro_atr behind current price)
+            if d_current >= 0.85 * d_target:
+                trail_sl = (curr - 0.5 * macro_atr) if is_buy else (curr + 0.5 * macro_atr)
+                
+            # Move only in the direction that protects the trade (advance_sl logic)
+            candidate = normalize_stop(pos.symbol, curr, trail_sl, is_sl=True, is_buy=is_buy)
+            candidate = round(candidate, digits)
+            if is_buy and (target_sl == 0.0 or candidate > target_sl):
+                target_sl = candidate
+                modify_sl = True
+            elif not is_buy and (target_sl == 0.0 or candidate < target_sl):
+                target_sl = candidate
+                modify_sl = True
 
         # ── Dispatch modification ────────────────────────────────────────────
         if modify_sl or modify_tp:
@@ -1062,8 +1006,17 @@ class SentinelProfitManager:
         is_buy    = (pos.type == mt5.ORDER_TYPE_BUY)
         curr      = tick.bid if is_buy else tick.ask
 
-        raw_tp = (pos.price_open + 3.0 * macro_atr) if is_buy else (pos.price_open - 3.0 * macro_atr)
-        raw_sl = (pos.price_open - 1.2 * macro_atr) if is_buy else (pos.price_open + 1.2 * macro_atr)
+        # Fetch HMM state and multipliers
+        oracle = self._oracle.get(pos.symbol)
+        hmm_state = oracle.get("hmm_state", "NEUTRAL") if oracle else "NEUTRAL"
+        sl_mult, tp_mult = get_atr_multipliers(pos.symbol, hmm_state)
+
+        sl_dist = sl_mult * macro_atr
+        min_tp_dist = 1.5 * sl_dist
+        tp_dist = max(tp_mult * macro_atr, min_tp_dist)
+
+        raw_sl = (pos.price_open - sl_dist) if is_buy else (pos.price_open + sl_dist)
+        raw_tp = (pos.price_open + tp_dist) if is_buy else (pos.price_open - tp_dist)
 
         final_sl = normalize_stop(pos.symbol, curr, pos.sl if pos.sl != 0.0 else raw_sl, is_sl=True,  is_buy=is_buy)
         final_tp = normalize_stop(pos.symbol, curr, pos.tp if pos.tp != 0.0 else raw_tp, is_sl=False, is_buy=is_buy)
@@ -1168,6 +1121,35 @@ class SentinelProfitManager:
                 pos, ps, macro_atr, sl_mult, tp_mult, current_price, drawdown
             )
 
+            # SWING TRADING NON-INTERFERENCE SHIELD
+            # Position has NOT reached the 80% profit milestone.
+            # It is CONSTITUTIONALLY FORBIDDEN from being modified by any secondary module.
+            # Skip all early exit evaluations, divergence scale-outs, and event horizon shifts.
+            initial_sl = getattr(ps, "initial_sl", 0.0)
+            if initial_sl == 0.0:
+                initial_sl = pos.price_open - (sl_mult * macro_atr) if ps.is_buy() else pos.price_open + (sl_mult * macro_atr)
+            sl_dist = abs(pos.price_open - initial_sl)
+            if sl_dist <= 0.0:
+                sl_dist = sl_mult * macro_atr
+            if sl_dist <= 0.0:
+                sl_dist = 1.0
+            min_tp_dist = 1.5 * sl_dist
+            tp_dist = max(tp_mult * macro_atr, min_tp_dist)
+            
+            d_target = tp_dist
+            d_guard = 0.80 * d_target
+            d_current = abs(current_price - pos.price_open)
+            
+            is_in_profit = (pos.type == mt5.ORDER_TYPE_BUY and current_price > pos.price_open) or \
+                           (pos.type == mt5.ORDER_TYPE_SELL and current_price < pos.price_open)
+                           
+            if not (is_in_profit and d_current >= d_guard):
+                logger.info(f"[SWING_SHIELD] {symbol} #{pos.ticket} (d_current={d_current:.5f}, d_guard={d_guard:.5f}) protected by Non-Interference Shield.")
+                continue
+
+            # ── Event Horizon Protection (shielded secondary module) ──────────
+            self._event_horizon_protection(pos, ps)
+
             # ── Divergence Scale-Out (runs outside profit lock to use live conviction) ──
             info = mt5.symbol_info(symbol)
             delta = ps.profit_delta(current_price)
@@ -1264,16 +1246,18 @@ class SentinelProfitManager:
 
                 config = load_risk_config()
 
+                active_audit_positions = []
                 for pos in all_positions:
                     ps = self._get_state(pos)
-                    # Event horizon first — may scale before anything else
-                    self._event_horizon_protection(pos, ps)
+                    
                     # Naked sweep for orphaned SL/TP
                     if pos.tp == 0.0 or pos.sl == 0.0:
                         self._naked_sweep(pos)
+                    
+                    active_audit_positions.append(pos)
 
-                if all_positions:
-                    self._audit_positions(all_positions, config)
+                if active_audit_positions:
+                    self._audit_positions(active_audit_positions, config)
 
                 time.sleep(1)
 

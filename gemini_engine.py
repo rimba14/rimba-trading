@@ -30,7 +30,7 @@ if GOOGLE_API_KEY:
 
 # ── Master Constitution (Static Anchor — uploaded to cache) ──────────────────
 MASTER_CONSTITUTION = (
-    "⚙️ SYSTEM COMMAND: Adaptive Sentinel Execution & Risk Audit (v28.31 - Ironclad CADES (Target Volatility Overlays))\n"
+    "⚙️ SYSTEM COMMAND: Adaptive Sentinel Execution & Risk Audit (v28.36 - Ironclad CADES (Adaptive Dispersion Scaling))\n"
     "Phase 1: Architecture, Synchronization & Scalability\n"
     "Information-Driven Architecture (Dollar/Volume Bars): The system strictly rejects chronological Time Bars (e.g., 5-minute charts). The Dual-Loop matrix operates on an Event-Driven basis. Both the Slow Loop (sentinel_slow_loop.py) and the Fast Loop (discord_listener.py ) only trigger inference and execution evaluations when a statistically significant threshold of fiat value is exchanged in the market. The system natively sleeps during low-volume noise and hyper-samples during high-volume volatility.\n"
     "Core Expanded Watchlist (v19.5): The system monitors an expanded list of 50 high-liquidity assets across Crypto, Forex, Indices, and Commodities. sentinel_config.py MUST utilize the fallback base-symbol matcher to dynamically map these core strings to exact broker suffixes (e.g., .m, .pro, +, -) to ensure execution parity.\n"

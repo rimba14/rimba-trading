@@ -1,6 +1,6 @@
 """
 fastapi_sniper.py - Adaptive Sentinel Direct HTTP Execution Bridge (Machine B)
-Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v28.30 - Ironclad CADES (Delayed Fortress Exit))
+Ultra-Low-Latency, WebSocket-Free MT5 Execution Node (v29.0 - Swing Trading Synthesis)
 Concurrency: Idempotent Execution & Mutex Locking Active.
 v24.2: Upgraded baseline to Volume-Weighted Micro-Price & Regime-Aware Squashing.
 """
@@ -312,14 +312,16 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     is_fuzzing = request.headers.get("IS_FUZZING") == "True"
     logger.info(f"Received Signal: {signal.symbol} {signal.direction} (P={signal.conviction})")
     
+    mapped_regime = "TREND" if signal.hmm_state in ("BULL", "BEAR", "TREND", "TRENDING", "HIGH-VOLATILITY") else "RANGE"
+    
     # --- LEVEL 64 SRE: DRY-FIRE SIMULATION GATES ---
     # Wall 3 Veto: RANGE Regime Momentum Block (Pattern 1)
-    if signal.hmm_state == "RANGE" and (signal.rsi is not None and signal.rsi > 50.0):
+    if mapped_regime == "RANGE" and (signal.rsi is not None and signal.rsi > 50.0):
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state.")
         return {"status": "rejected", "reason": "Pattern 1: Regime Misalignment"}
         
     # Wall 9 Veto: Strategy-Regime Congruence
-    hmm_regime = "TREND" if signal.hmm_state in ("BULL", "BEAR", "TREND") else "RANGE"
+    hmm_regime = mapped_regime
     if signal.strategy_type == "MOMENTUM" and hmm_regime == "RANGE":
         logger.warning(f"[{signal.symbol}] [WALL 9 VETO] Strategy-Regime Congruence: Cannot deploy MOMENTUM strategy in RANGE regime.")
         return {"status": "rejected", "reason": "Wall 9 Veto: Momentum in RANGE regime"}
@@ -368,6 +370,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     dynamic_gate = max(dynamic_gate, 0.65)
     
     target_gate = signal.applied_dynamic_gate if (hasattr(signal, "applied_dynamic_gate") and signal.applied_dynamic_gate is not None) else dynamic_gate
+    target_gate = max(target_gate, 0.82)
     
     if norm_p < target_gate:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < dynamic gate {target_gate:.3f} (Base={base_gate:.2f}, VRS={vrs:.2f})")
@@ -387,10 +390,10 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
 
     # WALL 3: Regime Alignment Veto (v28.0)
     sig_type_upper = signal.signal_type.upper()
-    if signal.hmm_state == "RANGE" and ("MOMENTUM" in sig_type_upper or "BREAKOUT" in sig_type_upper):
+    if mapped_regime == "RANGE" and ("MOMENTUM" in sig_type_upper or "BREAKOUT" in sig_type_upper):
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. (RANGE vs {signal.signal_type})")
         raise HTTPException(status_code=403, detail="Regime Misalignment (RANGE vs Momentum)")
-    if signal.hmm_state in ["BULL", "BEAR", "TREND"] and "MEAN_REVERSION" in sig_type_upper:
+    if mapped_regime == "TREND" and "MEAN_REVERSION" in sig_type_upper:
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state. ({signal.hmm_state} vs {signal.signal_type})")
         raise HTTPException(status_code=403, detail="Regime Misalignment (TREND vs Mean-Reversion)")
 
@@ -921,7 +924,7 @@ def run_composite_preflight_checklist(
         return False, f"Point 8 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
 
     # Point 9: Regime State Validity
-    if hmm_state not in ["BULL", "BEAR", "RANGE"]:
+    if hmm_state not in ["BULL", "BEAR", "RANGE", "TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY"]:
         return False, f"Point 9 Fail: Invalid HMM state {hmm_state}"
 
     # Point 10: Regime Probability Minimum (Rule 3.3)
@@ -977,23 +980,40 @@ def run_composite_preflight_checklist(
             return False, f"Point 12 Fail: Spread-to-ATR ratio {spread_atr_ratio:.4f} > limit {spread_atr_limit:.4f}"
 
     # Point 13: Minimum R:R Gate (Rule 4.3)
+    # v28.38 — Wall 8 Symmetric Swing Targeting override:
+    # When the physical SL anchors to a wide ATR multiplier (FOREX: 6×, Indices/Crypto: 4×),
+    # the conviction-scaled TP is overridden if it produces R:R < 1.0.
+    # TP_min is locked to 1.5× the SL distance, guaranteeing minimum 1:1.5 R:R on all swing entries.
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
     broker_minimum_sl = info.trade_stops_level * info.point
     final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
-    
+
     p_entry = conviction if direction == "BUY" else (1.0 - conviction)
     if p_entry < 0.5:
         p_entry = abs(conviction - 0.5) + 0.5
     p_entry = max(p_entry, 0.60)
     normalized_p = (p_entry - 0.60) / 0.40
     tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
-    tp_dist = current_atr * tp_multiplier
-    
-    min_rr = 2.2 if is_index == True else 1.8
+    conviction_tp_dist = current_atr * tp_multiplier
+
+    # ── Wall 8 v28.38: Symmetric Swing Targeting floor ───────────────────────
+    SYMMETRIC_TP_RATIO = 1.5   # TP must be at least 1.5× the SL distance
+    symmetric_tp_floor = final_sl_dist * SYMMETRIC_TP_RATIO
+    if conviction_tp_dist < final_sl_dist:   # conviction TP < SL → override
+        tp_dist = symmetric_tp_floor
+        logger.info(
+            f"[{symbol}] [WALL8_SYMMETRIC_TP] Conviction TP ({conviction_tp_dist:.5f}) "
+            f"< SL dist ({final_sl_dist:.5f}). Override engaged: TP locked to "
+            f"{SYMMETRIC_TP_RATIO}x SL = {tp_dist:.5f} (R:R={tp_dist/final_sl_dist:.2f})"
+        )
+    else:
+        tp_dist = max(conviction_tp_dist, symmetric_tp_floor)
+
+    min_rr = 2.2 if is_index == True else 1.5   # lowered from 1.8 — symmetric floor guarantees 1.5
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
     if float(prospective_rr) < float(min_rr):
-        return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f}"
+        return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f} (post-symmetric-floor)"
 
     # Point 14: JPY pair session open blackout (Rule 6.2)
     jpy_pairs = {"USDJPY", "GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CHFJPY", "CADJPY"}

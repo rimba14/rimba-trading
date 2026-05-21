@@ -1,5 +1,5 @@
 """
-sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v28.30 - Ironclad CADES (Delayed Fortress Exit))
+sentinel_slow_loop.py - ADAPTIVE SENTINEL SLOW LOOP (v29.0 - Multi-Modal Swing Trading)
 Machine A (Brain) Optimized | Windows Hybrid Support
 """
 import gc
@@ -162,6 +162,7 @@ import shap
 import requests
 import copy
 from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.seasonal import STL
 
 # Windows Hybrid Initialization (v23.6 Heartbeat)
 import mt5_bridge
@@ -459,6 +460,8 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
         try:
             logging.info(f"[ROUTER] {symbol} -> Math Meta-Model (Zero-Latency)")
             p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
+            if p_val == 0.0:
+                return {"decision": "HOLD", "confidence": 0.500, "reasoning": "Math Meta-Model Hard Rejection"}
             decision = "BUY" if direction == 1 else ("SELL" if direction == -1 else "HOLD")
             return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Bypass"}
         except ValueError as e:
@@ -543,43 +546,36 @@ def _run_shap(symbol: str, x_vec: list, f_keys: list, direction: int, p_final: f
 # -- Meta-Conviction (Phase 2 - Meta-Labeling Architecture) -------------------
 def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: float) -> float:
     """
-    v22.1: Expanded to 11-feature Alpha Factory vector.
-    [xgb_p, kronos_p, hmm_state, faiss_sim, macro_sent, macro_risk, catalyst,
-     frac_diff, fft_amp_1, fft_amp_2, fft_amp_3, cs_rank]
+    v29.0: Multi-Modal 5-feature Alpha Factory vector.
+    [xgb_p, kronos_p, hmm_state, faiss_sim, sentiment_score]
     """
     f_keys = [
-        "xgb_p", "kronos_p", "hmm_state", "faiss_sim",
-        "macro_sent", "macro_risk", "catalyst",
-        "frac_diff", "fft_amp_1", "fft_amp_2", "fft_amp_3", "cs_rank"
+        "xgb_p", "kronos_p", "hmm_state", "faiss_sim", "sentiment_score"
     ]
-    hmm_val = 1 if features.get("hmm_state") == "BULL" else (-1 if features.get("hmm_state") == "BEAR" else 0)
-
-    # v19.5: Logarithmic Dampening on Macro Features
-    def damp(x): return np.sign(x) * np.log1p(abs(float(x)))
+    hmm_state_str = str(features.get("hmm_state", "MEAN-REVERTING")).upper()
+    if "TRENDING" in hmm_state_str or "TREND" in hmm_state_str:
+        hmm_val = 0.0
+    elif "HIGH-VOLATILITY" in hmm_state_str or "VOLATILITY" in hmm_state_str:
+        hmm_val = 2.0
+    else:
+        hmm_val = 1.0
 
     x_vec = [
         float(features.get("xgb_p", 0.5)),
         float(features.get("kronos_p", 0.5)),
         float(hmm_val),
         float(features.get("faiss_sim", 0.0)),
-        damp(features.get("macro_sent", 0.0)),
-        damp(features.get("macro_risk", 0.0)),
-        damp(features.get("catalyst", 0.0)),
-        # v22.1 Alpha Factory features
-        float(features.get("frac_diff", 0.0)),
-        float(features.get("fft_amp_1", 0.0)),
-        float(features.get("fft_amp_2", 0.0)),
-        float(features.get("fft_amp_3", 0.0)),
-        float(features.get("cs_rank", 0.5)),
+        float(features.get("sentiment_score", features.get("macro_sent", 0.5)))
     ]
 
     moe = _moe_reason(symbol, features, direction)
     reasoning_conf = float(moe.get("confidence", 0.500))
     reasoning_text = moe.get("reasoning", "N/A")
+    reasoning_decision = moe.get("decision", "HOLD")
 
-    if "fail-safe" in reasoning_text.lower() or reasoning_conf == 0.500:
+    if reasoning_decision == "HOLD" or "rejection" in reasoning_text.lower() or reasoning_conf == 0.500 or reasoning_conf == 0.0:
         p_final = 0.500
-        logging.warning(f"[{symbol}] MoE Fail-Safe engaged -> Neutral 0.500")
+        logging.warning(f"[{symbol}] MoE Gate Hard Rejection engaged -> Forced Neutral 0.500")
     else:
         # v20.4: Soft Confidence Blending max(0.6, MoE)
         strength = max(0.6, reasoning_conf)
@@ -775,7 +771,16 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
         df_ml = df_ta.copy()
         clipped_features_count = 0
         for col in ["open", "high", "low", "close"]:
-            opt_d, fd = optimize_fracdiff_d(df_ta[col].values)
+            # STL price decomposition to target ML inputs at seasonality component (S_t)
+            series = df_ta[col].values
+            try:
+                res = STL(series, period=24, robust=True).fit()
+                s_t = res.seasonal
+            except Exception as stl_err:
+                logging.warning(f"STL decomposition failed for {col}: {stl_err}. Falling back to raw series.")
+                s_t = series
+
+            opt_d, fd = optimize_fracdiff_d(s_t)
             pad = len(df_ta) - len(fd)
             
             # Audit Z-score bounds clipping on final row (Rule 2.1)
@@ -831,6 +836,35 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
                 vrs=vrs
             )
             
+            if df_ml is not None:
+                # Spectral Fingerprinting: rolling FFT extraction of dominant amplitudes
+                close_prices = df_ml["close"].values
+                fft_amp_1 = np.zeros(len(df_ml))
+                fft_amp_2 = np.zeros(len(df_ml))
+                fft_amp_3 = np.zeros(len(df_ml))
+                
+                window_size = 64
+                for idx in range(len(df_ml)):
+                    if idx < window_size:
+                        win = close_prices[:idx + 1]
+                    else:
+                        win = close_prices[idx - window_size + 1: idx + 1]
+                    
+                    if len(win) > 3:
+                        fft_vals = np.fft.rfft(win)
+                        fft_amps = np.abs(fft_vals)
+                        if len(fft_amps) > 1:
+                            fft_amps[0] = 0.0 # Ignore DC component
+                        sorted_amps = np.sort(fft_amps)[::-1]
+                        fft_amp_1[idx] = sorted_amps[0] if len(sorted_amps) > 0 else 0.0
+                        fft_amp_2[idx] = sorted_amps[1] if len(sorted_amps) > 1 else 0.0
+                        fft_amp_3[idx] = sorted_amps[2] if len(sorted_amps) > 2 else 0.0
+                
+                df_ml["fft_amp_1"] = fft_amp_1
+                df_ml["fft_amp_2"] = fft_amp_2
+                df_ml["fft_amp_3"] = fft_amp_3
+                df_ml['frac_diff_price'] = df_ml['close']
+
             # Directive 1: Slice off the first 100 historical rows to discard mathematical tail
             if df_ml is not None and len(df_ml) > 100:
                 df_ml = df_ml.iloc[100:].copy()
@@ -989,8 +1023,18 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             import alpha_combiner
             is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=(_TICK_STARVATION_DETECTED or is_this_symbol_starved))
             if not is_consensus:
-                logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
-                p_blend = 0.500
+                agree_on_direction = False
+                valid_vals = [v for v in active_scores.values() if not np.isnan(v)]
+                if len(valid_vals) >= 2:
+                    all_buy = all(v > 0.50 for v in valid_vals)
+                    all_sell = all(v < 0.50 for v in valid_vals)
+                    agree_on_direction = all_buy or all_sell
+                
+                if agree_on_direction:
+                    logging.info(f"[{symbol}] CONSENSUS DIVERGENCE OVERRIDE: Models agree on directional sign. Allowing weighted blend P_blend={p_blend:.4f}.")
+                else:
+                    logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
+                    p_blend = 0.500
                 
             logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f} (Agents: {list(active_scores.keys())})")
             
@@ -1076,7 +1120,9 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "xgb_p": z_xgb,
             "kronos_p": z_kronos,
             "faiss_sim": float(max_sim),
+            "faiss_similarity": float(max_sim),
             "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
+            "sentiment_score": float(m_state.get("global_macro_sentiment", 0.5)),
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
@@ -1107,14 +1153,14 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         else:
             p_range = 0.50
             
-        w_trend = label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0)
-        w_range = label_probs.get("RANGE", 0.0)
+        w_trend = label_probs.get("TRENDING", 0.0) + label_probs.get("HIGH-VOLATILITY", 0.0) + label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0)
+        w_range = label_probs.get("MEAN-REVERTING", 0.0) + label_probs.get("RANGE", 0.0)
         
         total_w = w_trend + w_range + 1e-9
         w_trend /= total_w
         w_range /= total_w
         
-        hmm_selector_state = "TREND" if hmm_state in ("BULL", "BEAR", "TREND") else "RANGE"
+        hmm_selector_state = "TREND" if hmm_state in ("BULL", "BEAR", "TREND", "TRENDING") else "RANGE"
         
         if hmm_selector_state == "TREND":
             signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
@@ -1157,7 +1203,31 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             logging.info(f"[{symbol}] [CONVICTION_DRIFT_ACTIVE] HMM confidence low ({regime_prob:.3f} < 0.55). Relaxing entry gate by 5% conviction drift to {current_gate:.3f}")
         
         if is_graveyard: meta_p = 0.50
-        
+
+        # ── v28.35 Directive 2: NY Open Dynamic Gate Correction ─────────────────
+        # Extract volume_overdrive flag from the feature-engineered dataframe.
+        # If the Vimb z-score burst is active AND we are inside the NY Open window
+        # (UTC hours 13, 14, 15), relax the gate back to its clean structural baseline,
+        # stripping any macro-calendar Wall-5 penalty inflation by 15%.
+        try:
+            volume_overdrive = bool(df_ml.iloc[-1].get("volume_overdrive", 0)) if df_ml is not None else False
+            z_vimb_val = float(df_ml.iloc[-1].get("z_vimb", 0.0)) if df_ml is not None else 0.0
+        except Exception:
+            volume_overdrive = False
+            z_vimb_val = 0.0
+
+        current_time_utc_hour = datetime.now(timezone.utc).hour
+        if volume_overdrive and (current_time_utc_hour in [13, 14, 15]):
+            pre_overdrive_gate = current_gate
+            applied_dynamic_gate = min(base_gate, current_gate * 0.85)
+            current_gate = applied_dynamic_gate
+            logging.info(
+                f"[{symbol}] [NY_OPEN_OVERDRIVE] Z(Vimb)={z_vimb_val:.4f} >= 2.0 | UTC Hour={current_time_utc_hour} "
+                f"| Gate relaxed from {pre_overdrive_gate:.4f} -> {current_gate:.4f} "
+                f"(15% compression stripped, capped at base={base_gate:.4f})"
+            )
+        # ────────────────────────────────────────────────────────────────────────
+
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
 
         if float(meta_p) != 0.50:
@@ -1227,6 +1297,9 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             signal_dir = "BUY" if meta_p > 0.5 else "SELL"
             
             # --- DIRECTIVE OMEGA PRE-ENTRY VETOES ---
+            if is_graveyard:
+                logging.warning(f"[{symbol}] [HARD_VETO] [GRAVEYARD_VETO] Cosine similarity to post_mortem_failure vector > 85%. Blocking signal.")
+                return
             acc_info = mt5.account_info()
             sym_info = mt5.symbol_info(symbol)
             if acc_info and sym_info:
@@ -1249,6 +1322,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             regime_prob = label_probs.get(hmm_state, 0.0)
             if regime_prob < 0.55:
                 logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
+            elif is_legend:
+                logging.info(f"[{symbol}] [LEGEND_OVERRIDE] Cosine similarity to legend_wei vector > 85%. Bypassing HMM regime/directional penalties.")
             else:
                 is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
                 if not is_mixts_valid and regime_prob < 0.60:
@@ -1297,7 +1372,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     "hmm_state": hmm_state,
                     "atr": float(atr),
                     "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                    "version": "v28.30-IRONCLAD-CADES",
+                    "version": "v29.0-IRONCLAD-CADES",
                     "signal_type": signal["strategy_type"],
                     "model_divergence": float(model_divergence),
                     "vrs": float(vrs),

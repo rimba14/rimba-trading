@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import logging
 
 def calculate_microstructure_triad(data):
     # Imbalance, Spread, Volatility
@@ -86,12 +87,29 @@ def generate_features(ticks_df, other_asset_df=None):
     return compressed_vector
 
 def compute_cross_sectional_ranks(metrics: dict) -> dict:
-    """Calculates percentile ranks (0.0 to 1.0) for a dictionary of metrics."""
+    """Calculates percentile ranks (0.0 to 1.0) for a dictionary of metrics, with adaptive dispersion scaling (v28.36)."""
     if not metrics: return {}
     symbols = list(metrics.keys())
     values = list(metrics.values())
-    ranks = pd.Series(values).rank(pct=True).values
-    return dict(zip(symbols, ranks))
+    
+    s = pd.Series(values)
+    var_xs = float(s.var(ddof=0))
+    ranks = s.rank(pct=True).values
+    
+    MIN_XS_VARIANCE = 1e-4
+    
+    if var_xs < MIN_XS_VARIANCE:
+        mean_xs = s.mean()
+        std_xs = s.std(ddof=0)
+        # Calculate local standardized z-score with clipping to satisfy the Bounds Mandate
+        z_local = np.clip((s - mean_xs) / (std_xs + 1e-12), -3.0, 3.0)
+        # Hybrid adaptive vector
+        final_values = np.clip(0.70 * z_local + 0.30 * ranks, -3.0, 3.0)
+        final_values = final_values.values
+    else:
+        final_values = ranks
+        
+    return dict(zip(symbols, [float(x) for x in final_values]))
 
 def gaussian_jitter_injector(df, vrs=1.0):
     """
@@ -106,44 +124,93 @@ def gaussian_jitter_injector(df, vrs=1.0):
             df[num_cols] *= noise
     return df
 
+def compute_volume_imbalance_overdrive(df, volume_col="tick_volume", price_col="close", window=20, z_threshold=2.0):
+    """
+    v28.35 Directive 1 — Microstructural Volume Imbalance Processing.
+    Computes order-flow volume imbalance (Vimb) and its 20-period rolling z-score.
+    Returns (volume_overdrive: bool, z_vimb: float).
+
+    Vimb = (Volume_AggressiveBuys - Volume_AggressiveSells) / Volume_Total
+    Z(Vimb) = rolling z-score of Vimb over {window} periods.
+    If |Z(Vimb)| >= z_threshold: volume_overdrive = True.
+    """
+    try:
+        returns = df[price_col].pct_change().fillna(0)
+        vol = df[volume_col].fillna(0)
+
+        # Tick-rule proxy: up-tick bar = aggressive buy, down-tick bar = aggressive sell
+        agg_buys  = pd.Series(np.where(returns > 0, vol, 0), index=df.index)
+        agg_sells = pd.Series(np.where(returns < 0, vol, 0), index=df.index)
+        total_vol = pd.Series(vol.values, index=df.index)
+
+        roll_buys  = agg_buys.rolling(window=window, min_periods=1).sum()
+        roll_sells = agg_sells.rolling(window=window, min_periods=1).sum()
+        roll_total = total_vol.rolling(window=window, min_periods=1).sum()
+
+        vimb = (roll_buys - roll_sells) / (roll_total + 1e-9)  # [-1.0, +1.0]
+
+        # 20-period rolling z-score of Vimb
+        vimb_mean = vimb.rolling(window=window, min_periods=1).mean()
+        vimb_std  = vimb.rolling(window=window, min_periods=1).std().fillna(1e-9) + 1e-9
+        z_vimb_series = (vimb - vimb_mean) / vimb_std
+
+        # Take the final bar's z-score as the live signal
+        z_vimb = float(np.clip(z_vimb_series.iloc[-1], -10.0, 10.0))
+
+        volume_overdrive = abs(z_vimb) >= z_threshold
+
+        if volume_overdrive:
+            logging.info(
+                f"[MICROSTRUCTURE_BURST] Significant volume imbalance detected: Z = {z_vimb:.4f}. "
+                f"Force-releasing dynamic gate compression."
+            )
+
+        return volume_overdrive, z_vimb
+
+    except Exception as e:
+        logging.warning(f"[MICROSTRUCTURE_BURST] Vimb computation failed: {e}. Defaulting to overdrive=False.")
+        return False, 0.0
+
+
 def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.45, fft_top_k=3, cs_rank=0.5, vrs=1.0):
     """
-    v23.3 Bridge: Wraps generate_features to return the original DF with new features appended.
+    v28.35 Bridge: Wraps generate_features to return the original DF with new features appended.
+    Includes Microstructural Volume Imbalance Overdrive (Directive 1).
     """
     if df is None: return None
-    
+
     # We'll add the expected columns to the original df
     df = df.copy()
     df['frac_diff_price'] = np.random.normal(0, 1, len(df)) # Placeholder
     df['fft_amp_1'] = 1.0
     df['fft_amp_2'] = 1.0
     df['fft_amp_3'] = 1.0
-    
-    # Directive 1: High-Fidelity Triad (Hawkes, Entropy, VPIN) using real OHLCV/Volume
+
+    # Directive 1: High-Fidelity Triad using real OHLCV/Volume
     returns = df[price_col].pct_change().fillna(0)
-    
+
     # Proxy for Buy/Sell Volume based on tick rules
     buy_vol = np.where(returns > 0, df[volume_col], 0)
     sell_vol = np.where(returns < 0, df[volume_col], 0)
-    
-    # v27.0 SRE Purge: VPIN and Hawkes Intensity removed (Invalid on H1/H4 Swing)
-    # rolling_buy = pd.Series(buy_vol).rolling(window=20, min_periods=1).sum()
-    # rolling_sell = pd.Series(sell_vol).rolling(window=20, min_periods=1).sum()
-    # rolling_total = pd.Series(df[volume_col]).rolling(window=20, min_periods=1).sum()
-    # df['vpin'] = (np.abs(rolling_buy - rolling_sell) / (rolling_total + 1e-9)).fillna(0.5)
-    
-    # jumps = np.abs(returns)
-    # df['hawkes_intensity'] = jumps.ewm(span=10, min_periods=1).mean().fillna(0)
-    
+
+    # v28.35 Directive 1: Compute Vimb z-score and flag overdrive (computed pre-jitter)
+    volume_overdrive, z_vimb = compute_volume_imbalance_overdrive(
+        df, volume_col=volume_col, price_col=price_col, window=20, z_threshold=2.0
+    )
+
     # 3. Order Flow Entropy (Shannon Entropy of directional probabilities)
     pos_p = (returns > 0).rolling(window=20, min_periods=1).mean() + 1e-9
     neg_p = (returns < 0).rolling(window=20, min_periods=1).mean() + 1e-9
     entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
     df['order_flow_entropy'] = np.clip(entropy_raw, 0.0, 1.0)
-    
-    # Inject Jitter if in Crushed Volatility regime
+
+    # Inject Jitter if in Crushed Volatility regime (runs on numerical cols BEFORE pinning overdrive)
     df = gaussian_jitter_injector(df, vrs)
-    
+
+    # Re-pin overdrive columns AFTER jitter so they are never contaminated by stochastic noise
+    df['volume_overdrive'] = int(volume_overdrive)  # 0 or 1, immune to jitter
+    df['z_vimb'] = z_vimb                            # exact pre-jitter z-score
+
     return df
 
 # ============================================================

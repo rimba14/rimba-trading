@@ -159,52 +159,94 @@ def label_states(A: np.ndarray, B: np.ndarray) -> dict:
         labels[int(state_idx)] = label_names[min(rank, len(label_names)-1)]
     return labels
 
+def extract_top_3_fft_amplitudes(prices: np.ndarray) -> np.ndarray:
+    """Extracts the amplitudes of the top 3 dominant frequencies using FFT."""
+    fft_vals = np.fft.rfft(prices)
+    fft_amps = np.abs(fft_vals)
+    if len(fft_amps) > 1:
+        fft_amps[0] = 0.0 # Ignore DC component
+    sorted_amps = np.sort(fft_amps)[::-1]
+    top_3 = np.zeros(3)
+    for i in range(min(3, len(sorted_amps))):
+        top_3[i] = sorted_amps[i]
+    return top_3
+
 def get_current_state(price_series: np.ndarray, lookback: int = 200):
     """
-    Given a numpy array of daily closing prices, train an HMM and return
-    the most likely current hidden state label and probability.
-
-    Returns:
-        state_label (str): "BULL", "BEAR", or "RANGE"
-        state_prob  (float): probability of being in that state (0–1)
-        all_probs   (dict): {label: probability} for all states
+    v29.0 HMM Spectral Oracle driven by FFT amplitude inputs.
+    Detects market regime: TRENDING, MEAN-REVERTING, HIGH-VOLATILITY.
     """
-    if len(price_series) < 60:
-        return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34}
+    if len(price_series) < 80:
+        return "MEAN-REVERTING", 0.5, {"TRENDING": 0.33, "MEAN-REVERTING": 0.34, "HIGH-VOLATILITY": 0.33}
 
-    # Use last `lookback` bars
     prices = price_series[-lookback:]
-    returns = np.diff(prices) / prices[:-1] * 100  # daily % returns
+    window = 64
+    n = len(prices)
+    if n < window + 10:
+        window = 32
 
-    obs = discretise(returns)
+    metrics = []
+    for i in range(window, n + 1):
+        win = prices[i-window:i]
+        top_3 = extract_top_3_fft_amplitudes(win)
+        metrics.append(np.sum(top_3))
+
+    metrics = np.array(metrics)
+    std = np.std(metrics) if len(metrics) > 0 else 1.0
+    if std == 0: std = 1e-6
+    mean = np.mean(metrics)
+
+    obs = np.zeros(len(metrics), dtype=int)
+    for i, m in enumerate(metrics):
+        z = (m - mean) / std
+        if z < -0.8:
+            obs[i] = 1 # MEAN-REVERTING (low energy)
+        elif z > 0.8:
+            obs[i] = 2 # HIGH-VOLATILITY (high energy)
+        else:
+            obs[i] = 0 # TRENDING (medium energy)
 
     try:
-        A, B, pi = baum_welch(obs)
-        
-        # Directive 1: Transition Penalty (v23.2 Hotfix)
-        # Anchor the diagonal to make regimes "sticky" and ignore micro-volatility.
+        # Fit HMM on the spectral observations sequence
+        # N_STATES = 3, N_OBS = 3 (0: TRENDING, 1: MEAN-REVERTING, 2: HIGH-VOLATILITY)
+        A, B, pi = baum_welch(obs, n_states=3, n_obs=3)
+
+        # Transition Penalty: Anchor diagonal to make regimes sticky
         penalty_factor = 0.20
         for i in range(len(A)):
             A[i, i] += penalty_factor
-        A = A / A.sum(axis=1, keepdims=True) # Re-normalize probabilities
-        
+        A = A / A.sum(axis=1, keepdims=True)
     except Exception:
-        return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34}
+        return "MEAN-REVERTING", 0.5, {"TRENDING": 0.33, "MEAN-REVERTING": 0.34, "HIGH-VOLATILITY": 0.33}
 
     # Get current state probabilities from forward pass
     alpha = _forward(obs, A, B, pi)
     current_probs = alpha[-1]
     current_probs /= (current_probs.sum() + 1e-10)
 
-    state_labels = label_states(A, B)
+    # Unique labeling logic: map states 0, 1, 2 uniquely to regimes
+    # obs=0: TRENDING, obs=1: MEAN-REVERTING, obs=2: HIGH-VOLATILITY
+    mean_rev_scores = B[:, 1]
+    high_vol_scores = B[:, 2]
+
+    mean_rev_state = int(np.argmax(mean_rev_scores))
+    remaining_states = [s for s in range(3) if s != mean_rev_state]
+    high_vol_state = int(remaining_states[np.argmax(high_vol_scores[remaining_states])])
+    trending_state = int([s for s in range(3) if s not in (mean_rev_state, high_vol_state)][0])
+
+    state_labels = {
+        mean_rev_state: "MEAN-REVERTING",
+        high_vol_state: "HIGH-VOLATILITY",
+        trending_state: "TRENDING"
+    }
 
     # Build label -> prob mapping
     label_probs = {}
     for state_idx, label in state_labels.items():
         label_probs[label] = float(current_probs[state_idx])
 
-    # Fill missing labels with 0
-    for lbl in ["BULL", "BEAR", "RANGE"]:
+    # Fill missing labels
+    for lbl in ["TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY"]:
         if lbl not in label_probs:
             label_probs[lbl] = 0.0
 
@@ -213,6 +255,7 @@ def get_current_state(price_series: np.ndarray, lookback: int = 200):
     best_prob  = float(current_probs[best_state_idx])
 
     return best_label, best_prob, label_probs
+
 
 def hmm_regime_adjustment(state_label: str, sig: str) -> tuple:
     """

@@ -23,8 +23,8 @@ def _amnesia_lock_clear_for_all_symbols():
     return True
 
 CHECKS = [
-    ("Version string",      lambda: "v28.30" in AGENT_SIGNATURE),
-    ("No legacy ghost",     lambda: all(v not in AGENT_SIGNATURE for v in ["v28.29", "v28.28", "v28.27", "v28.13", "v28.12", "v28.11", "v28.10", "v28.9", "v27", "v26", "v25"])),
+    ("Version string",      lambda: "v28.37" in AGENT_SIGNATURE),
+    ("No legacy ghost",     lambda: all(v not in AGENT_SIGNATURE for v in ["v28.36", "v28.35", "v28.31", "v28.30", "v28.29", "v28.28", "v28.27", "v28.13", "v28.12", "v28.11", "v28.10", "v28.9", "v27", "v26", "v25"])),
     ("stdout UTF-8",        lambda: sys.stdout.encoding.lower() == "utf-8"),
     ("DDQN checkpoint",     lambda: Path(DDQN_CKPT_PATH).exists() or True), # Relaxed for testing
     ("Kronos artifact",     lambda: Path(KRONOS_ARTIFACT_PATH).exists() or True),

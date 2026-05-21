@@ -39,7 +39,7 @@ LEVERAGE_WALL      = 10.0   # 10× notional margin limit
 # SYSTEM CONSTANTS (v19.2)
 STALENESS_THRESHOLD = 900   # Hard 900 s signal staleness gate
 ARCTIC_TIMEOUT      = 0.3   # Hard 300ms latency cap for ArcticDB (v19.1)
-EPISTEMIC_GATE      = 0.6000  # v23.9: Expanded Dead Zone (0.40 - 0.60)
+EPISTEMIC_GATE      = 0.8200  # v29.0: Swing Trading Epistemic Gate (0.82 threshold)
 AC_LARGE_ORDER_THRESHOLD = 0.50 # v23.1: Minimum lot size for Almgren-Chriss slicing
 REASONING_TIMEOUT   = int(os.getenv("REASONING_TIMEOUT", 45))
 
