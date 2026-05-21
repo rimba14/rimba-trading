@@ -1,6 +1,7 @@
 import os
-os.environ['GROQ_API_KEY'] = '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'
-os.environ['GOOGLE_API_KEY'] = 'AIzaSyCc-1iZAa45TyGRqCE-BrKcizDVb3ghMTY'
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from gitagent_context_layer import UniversalContextLayer
 
