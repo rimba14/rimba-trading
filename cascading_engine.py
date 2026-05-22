@@ -18,17 +18,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
 # ── Configuration ────────────────────────────────────────────────────────────
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_MODEL = "gemini-2.0-flash"
 
 # Initialize Engines
-_groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+_groq_client = Groq(api_key=os.getenv("GROQ_API_KEY")) if os.getenv("GROQ_API_KEY") else None
+if os.getenv("GOOGLE_API_KEY"):
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 logger = logging.getLogger("CascadingEngine")
 
