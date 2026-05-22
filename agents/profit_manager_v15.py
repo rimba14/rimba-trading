@@ -63,7 +63,7 @@ def close_position(pos, reason):
 def run_profit_manager():
     """Main audit and management loop."""
     if not mt5.initialize():
-        logging.error("MT5 Init Failed in Profit Manager.")
+        logging.error('MT5 Init Failed')
         return
 
     logger = logging.getLogger("PROFIT_MANAGER")
