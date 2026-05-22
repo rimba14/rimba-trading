@@ -1279,50 +1279,73 @@ class SessionDB:
                 matches = [dict(row) for row in like_cursor.fetchall()]
 
         # Add surrounding context (1 message before + after each match).
-        # Done outside the lock so we don't hold it across N sequential queries.
+        # Done in batches so we don't hold the lock across N sequential queries
+        # and we avoid N+1 query execution.
+
+        # Initialize context for all matches
         for match in matches:
-            try:
-                with self._lock:
-                    ctx_cursor = self._conn.execute(
-                        """WITH target AS (
-                               SELECT session_id, timestamp, id
-                               FROM messages
-                               WHERE id = ?
-                           )
-                           SELECT role, content
-                           FROM (
-                               SELECT m.id, m.timestamp, m.role, m.content
-                               FROM messages m
-                               JOIN target t ON t.session_id = m.session_id
-                               WHERE (m.timestamp < t.timestamp)
-                                  OR (m.timestamp = t.timestamp AND m.id < t.id)
-                               ORDER BY m.timestamp DESC, m.id DESC
-                               LIMIT 1
-                           )
-                           UNION ALL
-                           SELECT role, content
-                           FROM messages
-                           WHERE id = ?
-                           UNION ALL
-                           SELECT role, content
-                           FROM (
-                               SELECT m.id, m.timestamp, m.role, m.content
-                               FROM messages m
-                               JOIN target t ON t.session_id = m.session_id
-                               WHERE (m.timestamp > t.timestamp)
-                                  OR (m.timestamp = t.timestamp AND m.id > t.id)
-                               ORDER BY m.timestamp ASC, m.id ASC
-                               LIMIT 1
-                           )""",
-                        (match["id"], match["id"]),
+            match["context"] = []
+
+        target_ids = [m["id"] for m in matches]
+
+        if target_ids:
+            chunk_size = 200
+            for i in range(0, len(target_ids), chunk_size):
+                chunk = target_ids[i:i + chunk_size]
+                placeholders = ",".join("?" for _ in chunk)
+
+                query = f"""
+                    WITH targets AS (
+                        SELECT session_id, timestamp, id AS target_id
+                        FROM messages
+                        WHERE id IN ({placeholders})
                     )
-                    context_msgs = [
-                        {"role": r["role"], "content": (r["content"] or "")[:200]}
-                        for r in ctx_cursor.fetchall()
-                    ]
-                match["context"] = context_msgs
-            except Exception:
-                match["context"] = []
+                    SELECT t.target_id, 1 as ord, m.role, m.content
+                    FROM targets t
+                    JOIN messages m ON m.id = (
+                        SELECT id FROM messages m2
+                        WHERE m2.session_id = t.session_id
+                          AND (m2.timestamp < t.timestamp OR (m2.timestamp = t.timestamp AND m2.id < t.target_id))
+                        ORDER BY m2.timestamp DESC, m2.id DESC
+                        LIMIT 1
+                    )
+                    UNION ALL
+                    SELECT t.target_id, 2 as ord, m.role, m.content
+                    FROM targets t
+                    JOIN messages m ON m.id = t.target_id
+                    UNION ALL
+                    SELECT t.target_id, 3 as ord, m.role, m.content
+                    FROM targets t
+                    JOIN messages m ON m.id = (
+                        SELECT id FROM messages m2
+                        WHERE m2.session_id = t.session_id
+                          AND (m2.timestamp > t.timestamp OR (m2.timestamp = t.timestamp AND m2.id > t.target_id))
+                        ORDER BY m2.timestamp ASC, m2.id ASC
+                        LIMIT 1
+                    )
+                    ORDER BY target_id, ord
+                """
+
+                try:
+                    with self._lock:
+                        ctx_cursor = self._conn.execute(query, chunk)
+                        rows = ctx_cursor.fetchall()
+
+                    context_by_id = {}
+                    for r in rows:
+                        tid = r["target_id"]
+                        if tid not in context_by_id:
+                            context_by_id[tid] = []
+                        context_by_id[tid].append({
+                            "role": r["role"],
+                            "content": (r["content"] or "")[:200]
+                        })
+
+                    for match in matches:
+                        if match["id"] in context_by_id:
+                            match["context"] = context_by_id[match["id"]]
+                except Exception:
+                    pass
 
         # Remove full content from result (snippet is enough, saves tokens)
         for match in matches:
