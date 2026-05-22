@@ -1,9 +1,10 @@
 import requests
 import datetime
 import json
+import os
 
-OBSIDIAN_API_KEY = "cf0b91fc67fc911e9173f1a976b65db49b33a0e6c46d5ba639c9e26c2931f09d"
-BASE_URL = "http://127.0.0.1:27123"
+OBSIDIAN_API_KEY = os.environ.get("OBSIDIAN_API_KEY", "")
+BASE_URL = os.environ.get("OBSIDIAN_BASE_URL", "http://127.0.0.1:27123")
 
 def log_event(path, content, mode="append"):
     """
