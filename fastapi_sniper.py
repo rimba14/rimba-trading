@@ -74,6 +74,14 @@ if not logger.handlers:
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
 
+def load_risk_config() -> dict:
+    try:
+        with open("dynamic_risk_params.json", "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as e:
+        logger.warning(f"[CONFIG_ERR] {e}")
+        return {}
+
 # Directive 1 & 2: Level 14 SRE Refactoring - Native MT5 Ledger Amnesia Lock
 from datetime import timedelta
 
@@ -318,26 +326,26 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     # Wall 3 Veto: RANGE Regime Momentum Block (Pattern 1)
     if mapped_regime == "RANGE" and (signal.rsi is not None and signal.rsi > 50.0):
         logger.warning(f"[{signal.symbol}] [WALL 3 VETO] Pattern 1: Regime Misalignment. Strategy inherently opposed to HMM state.")
-        return {"status": "rejected", "reason": "Pattern 1: Regime Misalignment"}
+        raise HTTPException(status_code=406, detail="Pattern 1: Regime Misalignment")
         
     # Wall 9 Veto: Strategy-Regime Congruence
     hmm_regime = mapped_regime
     if signal.strategy_type == "MOMENTUM" and hmm_regime == "RANGE":
         logger.warning(f"[{signal.symbol}] [WALL 9 VETO] Strategy-Regime Congruence: Cannot deploy MOMENTUM strategy in RANGE regime.")
-        return {"status": "rejected", "reason": "Wall 9 Veto: Momentum in RANGE regime"}
+        raise HTTPException(status_code=406, detail="Wall 9 Veto: Momentum in RANGE regime")
     elif signal.strategy_type == "MEAN_REVERSION" and hmm_regime == "TREND":
         logger.warning(f"[{signal.symbol}] [WALL 9 VETO] Strategy-Regime Congruence: Cannot deploy MEAN_REVERSION strategy in TREND regime.")
-        return {"status": "rejected", "reason": "Wall 9 Veto: Mean-Reversion in TREND regime"}
+        raise HTTPException(status_code=406, detail="Wall 9 Veto: Mean-Reversion in TREND regime")
         
     # Wall 2 Veto: Sealed Hysteresis / Phantom Conviction Block (Pattern 2)
     if signal.conviction is not None and 0.40 <= signal.conviction <= 0.60:
         logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 2: Sealed Hysteresis (Phantom Conviction)")
-        return {"status": "rejected", "reason": "Pattern 2: Sealed Hysteresis Blocked"}
+        raise HTTPException(status_code=406, detail="Pattern 2: Sealed Hysteresis Blocked")
         
     # Wall 2 Veto: Empty Alpha Features Warning (Pattern 4)
     if signal.alpha_features is not None and len(signal.alpha_features) == 0:
         logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 4: Empty Alpha Features.")
-        return {"status": "rejected", "reason": "Pattern 4: Empty Alpha Features Warning"}
+        raise HTTPException(status_code=406, detail="Pattern 4: Empty Alpha Features Warning")
         
     # Phase 5 Dry-Fire simulation bypass
     if os.environ.get("SENTINEL_DRY_FIRE") == "1":
@@ -371,6 +379,18 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     
     target_gate = signal.applied_dynamic_gate if (hasattr(signal, "applied_dynamic_gate") and signal.applied_dynamic_gate is not None) else dynamic_gate
     target_gate = max(target_gate, 0.82)
+    
+    # v30.20-CCM Epistemic Gating Verification Matrix Circuit Breaker
+    try:
+        from monitor_sentinel import verify_regime_matrix_integrity, ArcticDBClientWrapper
+        from arcticdb import Arctic
+        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+        db_client = ArcticDBClientWrapper(store)
+        if not verify_regime_matrix_integrity(db_client, signal.symbol):
+            logger.warning(f"[{signal.symbol}] Regime transition matrix condition number > 15.0. Clamping Epistemic Entry Gate to risk-off (0.95).")
+            target_gate = max(target_gate, 0.95)
+    except Exception as gate_err:
+        logger.error(f"[{signal.symbol}] Failed checking regime matrix integrity: {gate_err}")
     
     if norm_p < target_gate:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: NormP {norm_p:.3f} < dynamic gate {target_gate:.3f} (Base={base_gate:.2f}, VRS={vrs:.2f})")
@@ -411,6 +431,18 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     if vpin_val > 0.750:
         logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 6: Toxicity Blindness. Adversarial order flow detected. (VPIN={vpin_val:.3f})")
         raise HTTPException(status_code=429, detail="Order-flow toxicity threshold breached (VPIN > 0.750)")
+
+    # v30.50-CADES Health Size Multiplier Check
+    try:
+        config = load_risk_config()
+        health_mult = config.get("health_size_multiplier", 1.0)
+        if health_mult <= 0.0:
+            logger.critical(f"[{signal.symbol}] execute_trade_endpoint BLOCKED: health_size_multiplier is {health_mult} (SRE EXEC FREEZE)")
+            raise HTTPException(status_code=403, detail="SRE trading freeze active")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[{signal.symbol}] Failed checking health_size_multiplier in endpoint: {e}")
 
     # 3. Sizing (Calculate before Risk Gates for accurate validation)
     lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
@@ -1144,6 +1176,24 @@ def calculate_kelly_lot(symbol, conviction):
         lot = scaled_lot
     except Exception as e:
         logger.warning(f"[{symbol}] Target Volatility scaling failed: {e}")
+        
+    # Scale lot by health_size_multiplier from dynamic_risk_params.json
+    try:
+        config = load_risk_config()
+        health_mult = config.get("health_size_multiplier", 1.0)
+        if health_mult <= 0.0:
+            logger.critical(f"[{symbol}] HEALTH_FREEZE: health_size_multiplier is {health_mult}. Freezing execution.")
+            return 0.0
+        
+        scaled_by_health = lot * health_mult
+        scaled_by_health = math.floor(scaled_by_health / info.volume_step) * info.volume_step
+        logger.info(
+            f"[{symbol}] [HEALTH_SCALING] health_size_multiplier={health_mult} | "
+            f"Lot scaled: {lot:.4f} -> {scaled_by_health:.4f}"
+        )
+        lot = scaled_by_health
+    except Exception as e:
+        logger.warning(f"[{symbol}] Failed applying health_size_multiplier: {e}")
         
     logger.info(f"[{symbol}] DEBUG LOT: Balance={acc.balance:.2f} | MaxRisk=${max_dollar_risk:.2f} | KellyLot={kelly_lot} | AtrLot={atr_adjusted_lot} | FinalLot={lot}")
 
