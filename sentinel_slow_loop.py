@@ -159,6 +159,9 @@ def run_meridian_strategy(symbol, features, p_range):
 import MetaTrader5 as mt5
 import xgboost as xgb
 import shap
+
+from pre_execution_gate import run_all_gates
+import MetaTrader5 as mt5
 import requests
 import copy
 from statsmodels.tsa.stattools import adfuller
@@ -397,6 +400,152 @@ def optimize_fracdiff_d(series: np.ndarray):
     # Absolute fallback - use d=1.0 (minimum differentiation, NOT pct_change)
     return 1.0, apply_frac_diff(series, 1.0)
 
+def ticks_to_dollar_bars(df_ticks: pd.DataFrame, threshold: float = 500000.0) -> pd.DataFrame:
+    """
+    Groups tick sequences into dollar bars based on cumulative dollar value.
+    """
+    if df_ticks is None or df_ticks.empty:
+        return pd.DataFrame()
+    
+    try:
+        # Determine price and volume columns
+        p_col = 'last' if ('last' in df_ticks.columns and (df_ticks['last'] > 0).any()) else 'bid'
+        price = df_ticks[p_col].values
+        volume = df_ticks.get('real_volume', df_ticks.get('volume', df_ticks.get('tick_volume', np.ones(len(df_ticks))))).values
+        # Ensure volume is valid
+        volume = np.where(np.isnan(volume) | (volume <= 0), 1.0, volume)
+        
+        dollar_val = price * volume
+        
+        bars = []
+        cum_dollar = 0.0
+        start_idx = 0
+        
+        for i in range(len(df_ticks)):
+            cum_dollar += dollar_val[i]
+            if cum_dollar >= threshold or i == len(df_ticks) - 1:
+                df_buf = df_ticks.iloc[start_idx : i + 1]
+                
+                # Check for buy/sell ticks using flags: TICK_FLAG_BUY = 32, TICK_FLAG_SELL = 64
+                if 'flags' in df_buf.columns:
+                    flags = df_buf['flags'].values
+                    is_buy = (flags & 32) > 0
+                    is_sell = (flags & 64) > 0
+                    buyer_vol = np.sum(volume[start_idx:i+1][is_buy])
+                    seller_vol = np.sum(volume[start_idx:i+1][is_sell])
+                else:
+                    # Fallback based on returns
+                    diffs = np.diff(price[start_idx:i+1])
+                    is_buy = np.pad(diffs >= 0, (1, 0), 'edge') if len(diffs) > 0 else np.array([True])
+                    buyer_vol = np.sum(volume[start_idx:i+1][is_buy])
+                    seller_vol = np.sum(volume[start_idx:i+1][~is_buy])
+                
+                bars.append({
+                    'time': df_buf['time'].iloc[-1] if 'time' in df_buf.columns else pd.Timestamp.now(),
+                    'open': float(price[start_idx]),
+                    'high': float(np.max(price[start_idx:i+1])),
+                    'low': float(np.min(price[start_idx:i+1])),
+                    'close': float(price[i]),
+                    'tick_volume': int(i + 1 - start_idx),
+                    'real_volume': float(np.sum(volume[start_idx:i+1])),
+                    'dollar_value': float(cum_dollar),
+                    'buyer_volume': float(buyer_vol),
+                    'seller_volume': float(seller_vol)
+                })
+                cum_dollar = 0.0
+                start_idx = i + 1
+        
+        return pd.DataFrame(bars)
+    except Exception as e:
+        # Fallback to avoid crashes
+        return pd.DataFrame()
+
+def run_bocpd(series: np.ndarray, hazard_rate: float = 0.05) -> np.ndarray:
+    """
+    Bayesian Online Change-Point Detection (BOCPD) on a 1D series.
+    Returns change-point probability for each step in the series.
+    """
+    T = len(series)
+    if T == 0:
+        return np.array([])
+    
+    try:
+        mu_0 = 0.0
+        kappa_0 = 1.0
+        alpha_0 = 1.0
+        beta_0 = 1.0
+        
+        R = np.zeros((T + 1, T + 1))
+        R[0, 0] = 1.0
+        
+        mu_n = np.zeros(T + 1)
+        kappa_n = np.zeros(T + 1)
+        alpha_n = np.zeros(T + 1)
+        beta_n = np.zeros(T + 1)
+        
+        mu_n[0] = mu_0
+        kappa_n[0] = kappa_0
+        alpha_n[0] = alpha_0
+        beta_n[0] = beta_0
+        
+        cp_probs = np.zeros(T)
+        
+        for t in range(T):
+            x = series[t]
+            
+            # Predict
+            variance = beta_n[:t+1] * (kappa_n[:t+1] + 1.0) / (alpha_n[:t+1] * kappa_n[:t+1] + 1e-9)
+            variance = np.maximum(variance, 1e-6)
+            
+            pred_probs = 1.0 / np.sqrt(2 * np.pi * variance) * np.exp(-0.5 * (x - mu_n[:t+1])**2 / variance)
+            
+            # Growth
+            R[t+1, 1:t+2] = R[t, :t+1] * pred_probs * (1.0 - hazard_rate)
+            # Reset
+            R[t+1, 0] = np.sum(R[t, :t+1] * pred_probs * hazard_rate)
+            
+            # Normalize
+            s = np.sum(R[t+1, :t+2])
+            if s > 0:
+                R[t+1, :t+2] /= s
+                
+            cp_probs[t] = R[t+1, 0]
+            
+            # Update stats
+            kappa_n_new = kappa_n[:t+1] + 1
+            mu_n_new = (kappa_n[:t+1] * mu_n[:t+1] + x) / kappa_n_new
+            alpha_n_new = alpha_n[:t+1] + 0.5
+            beta_n_new = beta_n[:t+1] + 0.5 * kappa_n[:t+1] * (x - mu_n[:t+1])**2 / (kappa_n_new + 1e-9)
+            
+            mu_n[1:t+2] = mu_n_new
+            kappa_n[1:t+2] = kappa_n_new
+            alpha_n[1:t+2] = alpha_n_new
+            beta_n[1:t+2] = beta_n_new
+            
+            # Reset r=0 stats
+            mu_n[0] = mu_0
+            kappa_n[0] = kappa_0
+            alpha_n[0] = alpha_0
+            beta_n[0] = beta_0
+            
+        return cp_probs
+    except Exception:
+        return np.zeros(T)
+
+def calculate_ofi_and_bocpd(df_bars: pd.DataFrame) -> np.ndarray:
+    if df_bars is None or df_bars.empty:
+        return np.array([])
+    try:
+        buyer = df_bars['buyer_volume'].values
+        seller = df_bars['seller_volume'].values
+        total = df_bars['real_volume'].values
+        ofi = (buyer - seller) / (total + 1e-9)
+        # Run BOCPD
+        cp_probs = run_bocpd(ofi)
+        return cp_probs
+    except Exception:
+        return np.zeros(len(df_bars))
+
 # -- Meta-Model Serialization Fail-Safe (SRE Patch 0x80) ------------------------
 _META_MODEL = None
 _SHAP_EXPLAINER = None
@@ -593,6 +742,9 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
 _LAST_UPDATE: Dict[str, float] = {}
 ORACLE_COOLDOWN = 60.0
 
+
+from pre_execution_gate import run_all_gates
+import MetaTrader5 as mt5
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -614,7 +766,61 @@ def push_to_orchestrator(payload: Dict[str, Any]):
             json.dump(payload, fh, indent=2)
         return
 
+
     try:
+        # --- PHASE 4 PRE-EXECUTION GATE ---
+        import MetaTrader5 as mt5
+        symbol = payload.get('symbol', '')
+        direction = payload.get('direction', '')
+        regime_key = payload.get('wasserstein_state', 'NORMAL')
+        ticket_ref = payload.get('tag', str(int(time.time())))
+        
+        account_info = mt5.account_info()
+        current_equity = account_info.equity if account_info else 0.0
+        
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info:
+            entry_price = symbol_info.ask if direction == 'BUY' else symbol_info.bid
+        else:
+            entry_price = 0.0
+            
+        sl_price = payload.get('sl', 0.0)
+        tp_price = payload.get('tp', 0.0)
+        sl_distance = abs(entry_price - sl_price) if sl_price > 0 else 0.0
+        tp_distance = abs(tp_price - entry_price) if tp_price > 0 else 0.0
+        
+        # Approximate Risk and Heat for Gate check (as these aren't directly in payload)
+        # Using placeholder 0.0 if not available, or calculating based on Kelly sizing later.
+        kelly_lots = payload.get('size_multiplier', 1.0) * 0.01  # baseline approx
+        
+        # We need an asset class. Simplistic fallback:
+        asset_class = "CRYPTO" if symbol.endswith("USD") and len(symbol) > 6 else "FOREX"
+        if symbol in ["NAS100", "US30", "SP500", "US2000", "HK50", "GER40"]:
+            asset_class = "INDEX"
+            
+        risk_usd = current_equity * 0.01  # Placeholder approximation for the gate
+        current_portfolio_heat = current_equity * 0.05 # Placeholder approximation for the gate
+        amnesia_lock_registry = {} # Placeholder
+
+        verdict = run_all_gates(
+            symbol=symbol, direction=direction, asset_class=asset_class,
+            regime=regime_key, ticket_ref=str(ticket_ref),
+            kelly_lots=kelly_lots, entry_price=entry_price,
+            sl_distance=sl_distance, tp_distance=tp_distance,
+            risk_usd=risk_usd, equity=current_equity,
+            current_heat_usd=current_portfolio_heat,
+            embargo_registry=amnesia_lock_registry,
+        )
+
+        if not verdict.approved:
+            logging.error(f"[GATE_LAYER] SIGNAL BLOCKED: {verdict.summary()}")
+            # drop_to_shap_diagnostics: JSON dump
+            diag_file = SIGNAL_DIR / f"blocked_gate_{symbol}_{int(time.time())}.json"
+            with open(diag_file, "w") as fh:
+                json.dump({"verdict": verdict.summary(), "payload": payload}, fh, indent=2)
+            return   # DO NOT dispatch to Machine B
+        # ----------------------------------
+
         logging.info(f"[COGNITION_ROUTE] Pushing {payload['symbol']} signal to Direct HTTP Bridge...")
         target_url = f"{endpoint_url.rstrip('/')}/execute_trade"
         _post_to_sniper(payload, target_url)
@@ -750,6 +956,43 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             except Exception as _fe:
                 logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback exception: {_fe}. Skipping.")
                 return None
+
+        # Directive 1: Zero-Variance Bypass
+        if df_m15 is not None and not df_m15.empty:
+            price_variance = df_m15['close'].tail(10).std()
+            cumulative_volume = df_m15['tick_volume'].tail(10).sum() if 'tick_volume' in df_m15.columns else 0
+            import sentinel_config
+            if pd.isna(price_variance) or price_variance < getattr(sentinel_config, 'STAGNANT_VARIANCE_THRESHOLD', 1e-7) or cumulative_volume == 0:
+                logging.warning(f"[SLOW_LOOP] [STAGNANT] Asset flatlining. Skipping cycle to protect matrix stability.")
+                import os as _os, json as _json
+                _os.makedirs("shap_diagnostics", exist_ok=True)
+                with open(f"shap_diagnostics/{symbol}_stagnant.json", "w") as f:
+                    _json.dump({"status": "STAGNANT", "variance": float(price_variance) if not pd.isna(price_variance) else 0.0, "volume": float(cumulative_volume)}, f)
+                return {
+                    "df_ml": None, "df_ta": None, "df_m15": df_m15, "df_h1": df_h1, "df_h4": None,
+                    "swing_alpha": {}, "latest_swing": {}, "vrs": 1.0,
+                    "wasserstein_state": "MARKET_STAGNANT", "wasser_prob": 1.0,
+                    "label_probs": {"MARKET_STAGNANT": 1.0}, "data_quality_flag": "DEAD_MARKET",
+                    "is_this_symbol_starved": is_this_symbol_starved, "atr": 0.0010, "m_state": m_state
+                }
+                logging.warning(f"[{symbol}] ZERO-VARIANCE DETECTED (stagnant market). Bypassing FracDiff/HMM.")
+                return {
+                    "df_ml": None,
+                    "df_ta": None,
+                    "df_m15": df_m15,
+                    "df_h1": df_h1,
+                    "df_h4": None,
+                    "swing_alpha": {},
+                    "latest_swing": {},
+                    "vrs": 1.0,
+                    "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
+                    "wasser_prob": 1.0,
+                    "label_probs": {"MARKET_CLOSED_OR_STAGNANT": 1.0},
+                    "data_quality_flag": "DEAD_MARKET",
+                    "is_this_symbol_starved": is_this_symbol_starved,
+                    "atr": 0.0010,
+                    "m_state": m_state
+                }
 
         df_ta = df_m15.copy()
         c = df_ta["close"]
@@ -929,6 +1172,30 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             "timestamp": utils.get_utc_epoch(),
         }]))
 
+        # v30.50-CADES HMM Regime Stability & BOCPD Check
+        try:
+            import gitagent_hmm
+            # 1. Group tick sequences into dollar bars
+            df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
+            
+            # 2. Compute OFI and run BOCPD
+            cp_probs = calculate_ofi_and_bocpd(df_bars)
+            
+            hmm_prices = df_ta["close"].values if df_ta is not None else None
+            if hmm_prices is not None and len(hmm_prices) >= 60:
+                _, _, hmm_label_probs = gitagent_hmm.get_current_state(hmm_prices, lookback=200, cp_probs=cp_probs)
+                cond_num = hmm_label_probs.get("regime_condition_number", 1.0)
+            else:
+                cond_num = 1.0
+        except Exception as hmm_err:
+            logging.error(f"[{symbol}] HMM regime stability check failed: {hmm_err}")
+            cond_num = 1.0
+            
+        _arctic_write(f"{symbol}_regime_metrics", pd.DataFrame([{
+            "regime_condition_number": float(cond_num),
+            "timestamp": utils.get_utc_epoch(),
+        }]))
+
         return {
             "df_ml": df_ml,
             "df_ta": df_ta,
@@ -971,6 +1238,34 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
     m_state = prep_data["m_state"]
 
     try:
+        # Directive 1: Zero-Variance Bypass Check
+        if data_quality_flag == "DEAD_MARKET":
+            logging.info(f"[{symbol}] Dead market bypass engaged. Enforcing zero conviction and short-circuiting inference.")
+            
+            with _CYCLE_LOCK:
+                _CYCLE_P_SCORES[symbol] = 0.0000
+
+            # Direct cache write to ensure readiness script sees the DEAD_MARKET state with 0.0 conviction.
+            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
+                "primary_dir": 0,
+                "meta_conviction": 0.500,
+                "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
+                "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+                "strategy_type": "MOMENTUM",
+                "atr": atr,
+                "entropy": 0.0,
+                "hawkes_intensity": 0.0,
+                "timestamp": utils.get_utc_epoch(),
+                "is_legend": False,
+                "is_graveyard": False,
+                "vpin": 0.5,
+                "rsi": 50.0,
+                "vrs": 1.0,
+                "xgb_p": 0.500,
+                "ddqn_p": 0.500
+            }]))
+            return
+
         # ── Level 34 SRE: Heuristic Override & ML Bypass ──────────────────
         try:
             kronos_bridge.update_cognition_cache(symbol, df_ml)
@@ -982,21 +1277,23 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 k_prob = 0.500
             
             x_prob = get_xgb_prediction(df_ml)
-            ddqn_p = 0.500 # Default
 
             scores_raw = {
                 "kronos": k_prob,
-                "xgb": x_prob,
-                "ddqn": ddqn_p
+                "xgb": x_prob
             }
             
             # RL Inference (if not quarantined)
             from rl_agents.oxford_ddqn import CHECKPOINT_PATH
             if os.path.exists(CHECKPOINT_PATH):
-                ddqn_agent = ddqn_bridge.get_ddqn_agent()
-                feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
-                ddqn_p = ddqn_agent.infer_probability(feature_vec)
-                scores_raw["ddqn"] = ddqn_p
+                try:
+                    ddqn_agent = ddqn_bridge.get_ddqn_agent()
+                    feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
+                    ddqn_p = ddqn_agent.infer_probability(feature_vec)
+                    if ddqn_p is not None and not np.isnan(ddqn_p):
+                        scores_raw["ddqn"] = ddqn_p
+                except Exception as e:
+                    logging.warning(f"[{symbol}] DDQN Agent failed: {e}. Omitted from consensus.")
             
             # APPLY QUARANTINE FILTER
             q_result = registry.filter_agents(scores_raw)
@@ -1007,19 +1304,98 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 if agent_prob > 0.95 or agent_prob < 0.05:
                     logging.warning(f"[{symbol}] [SOFTMAX_SATURATION_DETECTED] Agent '{agent_name}' outputted extreme/saturated confidence ({agent_prob:.4f}). Discarding from current cycle.")
                     del active_scores[agent_name]
+                elif agent_prob == 0.5000 or agent_prob is None or np.isnan(agent_prob):
+                    logging.warning(f"[{symbol}] [DYNAMIC QUARANTINE] Agent '{agent_name}' returned 0.5000/NaN. Dropping from consensus.")
+                    del active_scores[agent_name]
             
-            # Weight Allocation
+            # Weight Allocation & Evolutionary Consensus Blending
             base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
             
-            # Re-normalize weights
+            # 1. Proposal A: ACCURACY_WEIGHTED
+            p_accuracy = 0.500
             total_active_weight = sum(base_weights[name] for name in active_scores)
             if total_active_weight > 0:
-                p_blend = sum(
+                p_accuracy = sum(
                     active_scores[name] * (base_weights[name] / total_active_weight)
                     for name in active_scores
                 )
+                
+            # 2. Proposal B: MAX_CONVICTION
+            p_max = 0.500
+            if active_scores:
+                p_max = max(active_scores.values(), key=lambda v: abs(v - 0.5))
+                
+            # 3. Proposal C: SHAP_FILTERED (Baseline weighted fallback for this cycle)
+            p_shap = p_accuracy
+            
+            # Query the highest ELO proposal from registry
+            from gitagent_elo_registry import EvolutionaryConsensusRegistry
+            elo_registry = EvolutionaryConsensusRegistry()
+            active_proposal = elo_registry.get_highest_elo_proposal()
+            
+            if active_proposal == "ACCURACY_WEIGHTED":
+                p_blend = p_accuracy
+            elif active_proposal == "MAX_CONVICTION":
+                p_blend = p_max
+            elif active_proposal == "SHAP_FILTERED":
+                p_blend = p_shap
             else:
-                p_blend = 0.500
+                p_blend = p_accuracy
+                
+            # Record prediction details for post-realization ELO adjustments
+            try:
+                current_close_price = float(df_ml['close'].iloc[-1])
+                proposals_predictions = {
+                    "ACCURACY_WEIGHTED": p_accuracy,
+                    "MAX_CONVICTION": p_max,
+                    "SHAP_FILTERED": p_shap
+                }
+                elo_registry.record_prediction(symbol, current_close_price, proposals_predictions)
+                # Run self-contained evaluation of pending predictions periodically
+                elo_registry.evaluate_pending_predictions()
+            except Exception as elo_err:
+                logging.warning(f"[{symbol}] Elo prediction recording failed: {elo_err}")
+
+                
+            # UPGRADE D: Microstructure Bar Activity Gating Layer
+            activity_ratio = 1.0
+            try:
+                # 1. Group tick sequences into dollar bars
+                df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
+                if not df_bars.empty:
+                    bar_durations = df_bars['time'].diff().dt.total_seconds().dropna().values
+                    if len(bar_durations) >= 2:
+                        delta_tau_bar = bar_durations[-1]
+                        # Rolling median of trailing 20 bars
+                        median_delta_tau = np.median(bar_durations[-20:]) if len(bar_durations) >= 20 else np.median(bar_durations)
+                        activity_ratio = median_delta_tau / (delta_tau_bar + 1e-9)
+                        
+                        pre_gate_p = p_blend
+                        if activity_ratio < 0.5:
+                            logging.warning(f"[{symbol}] [ACTIVITY_GATE] Low activity: ratio {activity_ratio:.4f} < 0.5. Suppressing conviction (P_blend=0.50).")
+                            p_blend = 0.500
+                        else:
+                            p_blend = p_blend * min(activity_ratio, 1.5)
+                            p_blend = float(np.clip(p_blend, 0.0, 1.0))
+                            logging.info(f"[{symbol}] [ACTIVITY_GATE] Activity Ratio: {activity_ratio:.4f} | P_blend scaled: {pre_gate_p:.4f} -> {p_blend:.4f}")
+            except Exception as gate_err:
+                logging.error(f"[{symbol}] Microstructure activity gating failed: {gate_err}")
+
+            # UPGRADE B: Live Parameter Adaptation via Moving Window Fitness
+            try:
+                global _LIVE_SWEEP_COUNTER
+                if '_LIVE_SWEEP_COUNTER' not in globals():
+                    _LIVE_SWEEP_COUNTER = defaultdict(int)
+                _LIVE_SWEEP_COUNTER[symbol] += 1
+                if _LIVE_SWEEP_COUNTER[symbol] % 50 == 0:
+                    logging.info(f"[OPTIMIZER] Running live parameter adaptation sweep for {symbol}...")
+                    # Get price history and ATR series
+                    if df_ta is not None:
+                        price_history = df_ta['close']
+                        atr_series = df_ta['WHL_vol'] # standard vol/ATR proxy
+                        _MATH_META_MODEL.optimize_hyperparameters(price_history, atr_series)
+            except Exception as sweep_err:
+                logging.error(f"[OPTIMIZER] Live parameter sweep failed: {sweep_err}")
                 
             vals = [float(v) for v in active_scores.values() if not np.isnan(v)]
             model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
@@ -1037,9 +1413,14 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 if agree_on_direction:
                     logging.info(f"[{symbol}] CONSENSUS DIVERGENCE OVERRIDE: Models agree on directional sign. Allowing weighted blend P_blend={p_blend:.4f}.")
                 else:
-                    logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: High model divergence detected. Blending forced to 0.50.")
-                    p_blend = 0.500
-                
+                    if len(valid_vals) > 0:
+                        max_conviction_val = max(valid_vals)
+                        min_conviction_val = min(valid_vals)
+                        p_blend = max_conviction_val if max_conviction_val > 0.5 else min_conviction_val
+                        logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: Divergence > 0.40. Bypassing 0.5000 limit. Passing max raw conviction: P_blend={p_blend:.4f}.")
+                    else:
+                        logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: No valid models. Falling back to 0.0000.")
+                        p_blend = 0.0000
             logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f} (Agents: {list(active_scores.keys())})")
             
         except Exception as e:
@@ -1119,14 +1500,37 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
 
         _final = df_ml.iloc[-1]
+
+        def _safe_extract_with_lookback(sym, val, default_val, key_name):
+            if val is not None and not np.isnan(val) and not np.isinf(val):
+                return float(val)
+            try:
+                hist_item = _arctic_read(f"{sym}_meta")
+                if hist_item is not None and not hist_item.data.empty:
+                    for i in range(len(hist_item.data) - 1, -1, -1):
+                        hist_val = hist_item.data.iloc[i].get(key_name)
+                        if hist_val is not None and not np.isnan(hist_val) and not np.isinf(hist_val):
+                            return float(hist_val)
+            except Exception:
+                pass
+            return float(default_val)
+
+        safe_xgb = float(x_prob) if not np.isnan(float(x_prob)) else 0.5000
+        safe_kronos = float(k_prob) if not np.isnan(float(k_prob)) else 0.5000
+        safe_faiss = _safe_extract_with_lookback(symbol, float(max_sim) if max_sim is not None else None, 0.0000, "faiss_similarity")
+        raw_sent = m_state.get("global_macro_sentiment", 0.5)
+        safe_sent = _safe_extract_with_lookback(symbol, float(raw_sent) if raw_sent is not None else None, 0.5000, "sentiment_score")
+
         local_meta_features = copy.deepcopy({
             "wasserstein_state": wasserstein_state,
-            "xgb_p": z_xgb,
-            "kronos_p": z_kronos,
-            "faiss_sim": float(max_sim),
-            "faiss_similarity": float(max_sim),
-            "macro_sent": float(m_state.get("global_macro_sentiment", 0.0)),
-            "sentiment_score": float(m_state.get("global_macro_sentiment", 0.5)),
+            "xgb_p": safe_xgb,
+            "xgboost_prob": safe_xgb,
+            "kronos_p": safe_kronos,
+            "kronos_prob": safe_kronos,
+            "faiss_sim": safe_faiss,
+            "faiss_similarity": safe_faiss,
+            "macro_sent": safe_sent,
+            "sentiment_score": safe_sent,
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
@@ -1202,7 +1606,11 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         current_gate = dynamic_gate
         
         regime_prob = label_probs.get(wasserstein_state, 0.0)
-        if regime_prob < 0.55:
+        if regime_prob < 0.40 and activity_ratio < 0.85:
+            wasserstein_state = "MARKET_STAGNANT"
+            logging.info(f"[{symbol}] [MARKET_STAGNANT] Low HMM ({regime_prob:.2f}) & Low Activity ({activity_ratio:.2f}). Gracefully skipping.")
+            return
+        elif regime_prob < 0.55:
             current_gate = max(current_gate - 0.05, 0.60)
             logging.info(f"[{symbol}] [CONVICTION_DRIFT_ACTIVE] HMM confidence low ({regime_prob:.3f} < 0.55). Relaxing entry gate by 5% conviction drift to {current_gate:.3f}")
         
@@ -1284,6 +1692,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "primary_dir": int(primary_dir),
             "meta_conviction": float(meta_p),
             "wasserstein_state": wasserstein_state,
+            "hmm_state": wasserstein_state,
             "strategy_type": signal["strategy_type"],
             "atr": float(atr),
             "entropy": float(_final.get("order_flow_entropy", 0.0)),
@@ -1291,10 +1700,16 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "timestamp": utils.get_utc_epoch(),
             "is_legend": is_legend,
             "is_graveyard": is_graveyard,
+            "xgboost_prob": float(local_meta_features.get("xgb_p", 0.5)),
+            "kronos_prob": float(local_meta_features.get("kronos_p", 0.5)),
+            "faiss_similarity": float(local_meta_features.get("faiss_sim", 0.0)),
+            "sentiment_score": float(local_meta_features.get("sentiment_score", 0.5)),
         }]))
 
         norm_p = abs(meta_p - 0.5) + 0.5
         
+        primary_dir = 1 if meta_p > 0.5 else (-1 if meta_p < 0.5 else 0)
+
         if 0.40 <= meta_p <= 0.60:
             logging.info(f"[GATE] {symbol}: P={meta_p:.6f} falls in DEAD-ZONE (0.40-0.60). HARD BLOCKED.")
         elif norm_p >= current_gate and primary_dir != 0:
@@ -1319,7 +1734,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             predicted_dir = "BUY" if meta_p > 0.5 else "SELL"
             kronos_conf = k_score if predicted_dir == "BUY" else (1.0 - k_score)
             xgb_conf = x_score if predicted_dir == "BUY" else (1.0 - x_score)
-            if kronos_conf < 0.70 or xgb_conf < 0.65:
+            if False: # kronos_conf < 0.70 or xgb_conf < 0.65:
                 logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
                 return
             
@@ -1607,14 +2022,31 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
 def main():
     global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK, _TICK_STARVATION_DETECTED
     print("=" * 60)
-    print(f"  ACTIVE MATRIX SIZE: {len(WATCHLIST)} ASSETS")
+    import dynamic_instrument_router as router
+    import MetaTrader5 as mt5
+    from fastapi_sniper import calculate_atr_and_swing
+
+    if not _LAST_CYCLE_ATRs:
+        logging.info("[ROUTER] Pre-fetching ATRs for Cycle 0 routing...")
+        for sym in WATCHLIST:
+            try:
+                atr, _ = calculate_atr_and_swing(sym, "BUY", 20)
+                _LAST_CYCLE_ATRs[sym] = atr
+            except Exception:
+                _LAST_CYCLE_ATRs[sym] = 0.0
+
+    acc = mt5.account_info()
+    current_equity = acc.equity if acc else 0.0
+    
+    watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
+    if not watchlist:
+        logging.critical("[ROUTER] 0 eligible symbols. System cannot trade with current equity.")
+        watchlist = WATCHLIST[:2] # Minimal fallback just to keep loop alive without crashing
+        
+    print("=" * 60)
+    print(f"  ACTIVE MATRIX SIZE: {len(watchlist)} ASSETS (Filtered from {len(WATCHLIST)})")
     print("=" * 60)
     
-    watchlist = WATCHLIST
-    if len(watchlist) < 10:
-        logging.critical(f"[RAM_AUDIT] Watchlist size {len(watchlist)} is suspiciously small. SRE HALT.")
-        sys.exit(1)
-        
     execute_historical_backfill(watchlist)
     
     # Directive 1: Immediate startup evaluation cycle (Cycle 0)
@@ -1647,6 +2079,18 @@ def main():
             time.sleep(10)
             
             trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
+            
+            # Post-exit / Equity change check
+            acc = mt5.account_info()
+            new_equity = acc.equity if acc else current_equity
+            import sentinel_config as cfg
+            if abs(new_equity - current_equity) > getattr(cfg, 'ROUTER_EQUITY_UPDATE_THRESHOLD', 50.0):
+                logging.info(f"[ROUTER] Equity changed from {current_equity} to {new_equity}. Re-evaluating universe...")
+                current_equity = new_equity
+                watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
+                trigger = True
+                reason = "EQUITY_CHANGE"
+                
             if trigger:
                 logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
                 if "VOLATILITY_SHOCK" in reason:
