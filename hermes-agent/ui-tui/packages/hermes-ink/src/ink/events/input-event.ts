@@ -46,10 +46,7 @@ function parseKey(keypress: ParsedKey): [Key, string] {
     backspace: keypress.name === 'backspace',
     delete: keypress.name === 'delete',
     // `parseKeypress` parses \u001B\u001B[A (meta + up arrow) as meta = false
-    // but with option = true, so we need to take this into account here
-    // to avoid breaking changes in Ink.
-    // TODO(vadimdemedes): consider removing this in the next major version.
-    meta: keypress.meta || keypress.name === 'escape' || keypress.option,
+    meta: keypress.meta || keypress.name === 'escape',
     // Super (Cmd on macOS / Win key) — only arrives via kitty keyboard
     // protocol CSI u sequences. Distinct from meta (Alt/Option) so
     // bindings like cmd+c can be expressed separately from opt+c.
@@ -92,11 +89,6 @@ function parseKey(keypress: ParsedKey): [Key, string] {
     input = ''
   }
 
-  // Strip meta if it's still remaining after `parseKeypress`
-  // TODO(vadimdemedes): remove this in the next major version.
-  if (input.startsWith('\u001B')) {
-    input = input.slice(1)
-  }
 
   // Track whether we've already processed this as a special sequence
   // that converted input to the key name (CSI u or application keypad mode).

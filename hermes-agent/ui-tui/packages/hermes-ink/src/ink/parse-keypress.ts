@@ -72,7 +72,6 @@ function createPasteKey(content: string): ParsedKey {
     ctrl: false,
     meta: false,
     shift: false,
-    option: false,
     super: false,
     sequence: content,
     raw: content,
@@ -551,7 +550,6 @@ export type ParsedKey = {
   ctrl: boolean
   meta: boolean
   shift: boolean
-  option: boolean
   super: boolean
   sequence: string | undefined
   raw: string | undefined
@@ -630,7 +628,6 @@ function parseKeypress(s: string = ''): ParsedKey {
     ctrl: false,
     meta: false,
     shift: false,
-    option: false,
     super: false,
     sequence: s,
     raw: s,
@@ -657,7 +654,6 @@ function parseKeypress(s: string = ''): ParsedKey {
       ctrl: mods.ctrl,
       meta: mods.meta,
       shift: mods.shift,
-      option: false,
       super: mods.super,
       sequence: s,
       raw: s,
@@ -679,7 +675,6 @@ function parseKeypress(s: string = ''): ParsedKey {
       ctrl: mods.ctrl,
       meta: mods.meta,
       shift: mods.shift,
-      option: false,
       super: mods.super,
       sequence: s,
       raw: s,
@@ -764,7 +759,7 @@ function parseKeypress(s: string = ''): ParsedKey {
     const segs = [...s]
 
     if (segs[0] === '\u001b' && segs[1] === '\u001b') {
-      key.option = true
+      key.meta = true
     }
 
     const code = [parts[1], parts[2], parts[4], parts[6]].filter(Boolean).join('')
@@ -772,7 +767,7 @@ function parseKeypress(s: string = ''): ParsedKey {
     const modifier = ((parts[3] || parts[5] || 1) as number) - 1
 
     key.ctrl = !!(modifier & 4)
-    key.meta = !!(modifier & 2)
+    key.meta = !!(modifier & 2) || key.meta
     key.super = !!(modifier & 8)
     key.shift = !!(modifier & 1)
     key.code = code
@@ -821,7 +816,6 @@ function createNavKey(s: string, name: string, ctrl: boolean): ParsedKey {
     ctrl,
     meta: false,
     shift: false,
-    option: false,
     super: false,
     fn: false,
     sequence: s,
