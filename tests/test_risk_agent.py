@@ -1,11 +1,11 @@
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 import pytest
 
 # Mock MetaTrader5 module before importing from risk_agent
 sys.modules['MetaTrader5'] = MagicMock()
 
-from agents.risk_agent import parse_base_quote
+from agents.risk_agent import parse_base_quote, calculate_currency_exposure
 
 def test_parse_base_quote_standard_forex():
     """Test standard 6-character clean forex pairs."""
@@ -34,3 +34,15 @@ def test_parse_base_quote_indices_and_fallbacks():
     assert parse_base_quote("FRA40") == ("EUR", "USD")
     assert parse_base_quote("US30") == ("US30", "USD")
     assert parse_base_quote("SPX500") == ("SPX500", "USD")
+
+def test_calculate_currency_exposure_error_path():
+    """Test that calculate_currency_exposure handles position parsing exceptions."""
+    # Create a mock position that raises an Exception when symbol is accessed
+    mock_position = MagicMock()
+    type(mock_position).symbol = PropertyMock(side_effect=Exception("Test Exception"))
+
+    positions = [mock_position]
+
+    # Should not raise an exception, should return an empty dict
+    exposures = calculate_currency_exposure(positions)
+    assert exposures == {}
