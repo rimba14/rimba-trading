@@ -155,16 +155,16 @@ def execute_trade(symbol: str, kronos_conviction: float, hmm_regime: str) -> str
         account = mt5.account_info()
         
         # 3. Risk Gates (Directive 2)
-        positions = mt5.positions_get()
-        
         # Amnesia Lock: Ensure we don't stack trades on the same symbol (magic=142)
-        if positions:
-            for p_pos in positions:
-                if p_pos.symbol == symbol and p_pos.magic == MAGIC_NUMBER:
+        symbol_positions = mt5.positions_get(symbol=symbol)
+        if symbol_positions:
+            for p_pos in symbol_positions:
+                if p_pos.magic == MAGIC_NUMBER:
                     return json.dumps({"status": "REJECTED", "reason": f"Amnesia Lock: Position already exists for {symbol}"})
 
         current_open_risk = 0
         total_notional = 0
+        positions = mt5.positions_get()
         if positions:
             for p_pos in positions:
                 p_info = mt5.symbol_info(p_pos.symbol)
