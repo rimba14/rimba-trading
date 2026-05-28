@@ -81,7 +81,7 @@ def parse_base_quote(symbol: str) -> Tuple[str, str]:
         return "XAG", "USD"
         
     # Standard G8 / Forex Forex 6-character clean pairs
-    if len(sym) == 6 and not any(c.isdigit() for c in sym):
+    if len(sym) == 6 and sym.isalpha():
         return sym[:3], sym[3:]
         
     # Indices & Commodities fallbacks
