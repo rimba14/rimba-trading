@@ -1,7 +1,6 @@
 import pandas as pd
 from deepchecks.tabular.suites import train_test_validation
 from deepchecks.tabular import Dataset
-import os
 
 class SentinelDashboard:
     def __init__(self):
