@@ -36,6 +36,104 @@ class PreExecutionVerdict:
     def summary(self) -> str:
         return self._summary
 
+BLOCK = "BLOCK"
+ALLOW = "ALLOW"
+
+@dataclass
+class GateResult:
+    gate: str
+    status: str
+    message: str
+
+def _get_cluster(symbol: str) -> str:
+    s = symbol.upper()
+    crypto_keys = {"BTC", "ETH", "SOL", "AVAX", "LINK", "LTC", "BCH", "XRP", "ADA", "DOT", "MATIC", "DOGE", "UNI", "ATOM", "TRX"}
+    if any(k in s for k in crypto_keys):
+        return "RISK_ON_CRYPTO"
+    
+    equity_keys = {"SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40", "UK100", "JPN225", "STOXX50"}
+    if any(k in s for k in equity_keys):
+        return "RISK_ON_EQUITY"
+        
+    commodity_keys = {"XAU", "XAG", "OIL", "CL-OIL", "XPT", "XPD", "GAS", "NGAS", "COPPER"}
+    if any(k in s for k in commodity_keys):
+        return "COMMODITIES"
+        
+    risk_on_fx_keys = {"GBPJPY", "EURJPY", "AUDJPY", "NZDJPY", "CADJPY", "CHFJPY", "USDJPY", "EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "EURAUD", "GBPAUD"}
+    if any(k in s for k in risk_on_fx_keys):
+        return "RISK_ON_FX"
+        
+    return "RISK_OFF"
+
+def _get_direction(p) -> str:
+    if p.type in [0, 2, 4]:
+        return "BUY"
+    return "SELL"
+
+def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
+    if not mt5.initialize():
+        mt5.initialize()
+        
+    MAGIC_NUMBER = 142
+    MAGIC_LEGACY = 17300
+    
+    positions = mt5.positions_get() or ()
+    open_positions = [p for p in positions if getattr(p, 'magic', 0) in (142, 17300)]
+    
+    orders = mt5.orders_get() or ()
+    pending_orders = [o for o in orders if getattr(o, 'magic', 0) in (142, 17300)]
+    
+    all_active_exposure = open_positions + pending_orders
+    
+    cluster = _get_cluster(symbol)
+    
+    cluster_positions = [
+        p for p in all_active_exposure 
+        if _get_cluster(p.symbol) == cluster
+    ]
+    
+    global_risk_on_count = len([
+        p for p in all_active_exposure 
+        if _get_cluster(p.symbol) in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]
+    ])
+    
+    if cluster in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"] and global_risk_on_count >= 3:
+        return GateResult(
+            gate="GATE-0-GLOBAL-CONTAGION", 
+            status=BLOCK, 
+            message="GLOBAL RISK-ON CAP REACHED (Max 3). Halting all new risk-on exposure."
+        )
+        
+    candidate_direction = str(direction).upper()
+    
+    if cluster in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY"]:
+        if len(cluster_positions) >= 2:
+            return GateResult(
+                gate="GATE-0-CLUSTER-LIMIT",
+                status=BLOCK,
+                message=f"Cluster {cluster} limit reached (Max 2). Halting new exposure."
+            )
+    elif cluster == "RISK_ON_FX":
+        if len(cluster_positions) >= 1:
+            return GateResult(
+                gate="GATE-0-CLUSTER-LIMIT",
+                status=BLOCK,
+                message=f"Cluster {cluster} limit reached (Max 1). Halting new exposure."
+            )
+            
+    if cluster in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]:
+        same_dir_count = sum(1 for p in all_active_exposure
+                             if _get_cluster(p.symbol) in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]
+                             and _get_direction(p) == candidate_direction)
+        if same_dir_count >= 1:
+            return GateResult(
+                gate="GATE-0-SAME-DIRECTION",
+                status=BLOCK,
+                message=f"Maximum same-direction limit of 1 across risk-on clusters reached for {candidate_direction}."
+            )
+            
+    return GateResult(gate="GATE-0", status=ALLOW, message="Passed Correlation Cluster Limiter.")
+
 def run_all_gates(
     symbol: str, 
     direction: str, 
@@ -52,6 +150,15 @@ def run_all_gates(
     embargo_registry: dict
 ) -> PreExecutionVerdict:
     
+    # Helper to return rejection
+    def reject(reason: str) -> PreExecutionVerdict:
+        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: {reason}")
+
+    # GATE-0: Cross-Asset Correlation Cluster Limiter
+    gate0_res = gate0_correlation_cluster_limit(symbol, direction)
+    if gate0_res.status == BLOCK:
+        return reject(f"Gate 0 Failed ({gate0_res.gate}): {gate0_res.message}")
+
     # Enforce strict parameter type-safety and dimension checking
     try:
         PriceUnit(entry_price)
@@ -60,11 +167,7 @@ def run_all_gates(
         LotVolume(kelly_lots)
     except (TypeError, ValueError) as type_err:
         logger.error(f"Type-Safety Gate Violation for {symbol}: {type_err}")
-        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: Type-Safety Violation: {type_err}")
-
-    # Helper to return rejection
-    def reject(reason: str) -> PreExecutionVerdict:
-        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: {reason}")
+        return reject(f"Type-Safety Violation: {type_err}")
 
     # GATE-1: ECN Minimum Contract Conflict
     # Rule A: If equity < GATE_MIN_EQUITY[symbol], BLOCK
@@ -102,6 +205,36 @@ def run_all_gates(
     risk_pct = risk_usd / equity if equity > 0 else 1.0
     if risk_pct > cfg.GATE_MAX_RISK_PCT_PER_TRADE:
         return reject(f"Gate 5 Failed: Risk Pct {risk_pct:.4f} > Max {cfg.GATE_MAX_RISK_PCT_PER_TRADE}")
+
+    # v30.96 Structural Risk Distance Floor Check
+    stop_loss = entry_price - sl_distance if str(direction).upper() in ["BUY", "1", "LONG"] else entry_price + sl_distance
+    sl_distance_price = abs(entry_price - stop_loss)
+    
+    current_ATR = 0.0
+    try:
+        if not mt5.initialize():
+            mt5.initialize()
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 20)
+        if rates is not None and len(rates) >= 2:
+            highs  = [r[2] for r in rates]
+            lows   = [r[3] for r in rates]
+            closes = [r[4] for r in rates]
+            current_ATR = sum([
+                max(highs[i] - lows[i],
+                    abs(highs[i]  - closes[i-1]),
+                    abs(lows[i]   - closes[i-1]))
+                for i in range(1, len(rates))
+            ]) / (len(rates) - 1)
+    except Exception as atr_err:
+        logger.error(f"Failed to calculate ATR in PreExecutionGate for {symbol}: {atr_err}")
+
+    if current_ATR > 0.0:
+        minimum_allowed_distance = current_ATR * 3.5  # Absolute volatility floor
+        if sl_distance_price < minimum_allowed_distance:
+            logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
+                              f"Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
+            return reject(f"Gate 5 Failed: Stop Loss position ({stop_loss}) is non-compliant. "
+                          f"Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}).")
 
     # GATE-6: Portfolio Heat Ceiling
     heat_pct = (current_heat_usd + risk_usd) / equity if equity > 0 else 1.0
