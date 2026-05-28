@@ -20,7 +20,7 @@ $p_sre = Start-Process python -ArgumentList "sre_watchdog.py" -PassThru -WindowS
 Start-Sleep -Seconds 3
 
 Write-Output "Step 4: Igniting Profit Manager v25.0"
-$p_profit = Start-Process python -ArgumentList "profit_manager_v25.py" -PassThru -WindowStyle Hidden
+$p_profit = Start-Process python -ArgumentList "profit_manager_v28_34.py" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 Write-Output "Step 5: Igniting Execution Bridge (FastAPI Sniper)"
@@ -40,7 +40,7 @@ Write-Output "=== PIDs ==="
 Write-Output "macro_calendar_sync.py : $($p_macro.Id)"
 Write-Output "risk_agent.py          : $($p_risk.Id)"
 Write-Output "sre_watchdog.py        : $($p_sre.Id)"
-Write-Output "profit_manager_v25.py  : $($p_profit.Id)"
+Write-Output "profit_manager_v28_34.py  : $($p_profit.Id)"
 Write-Output "fastapi_sniper.py      : $($p_fastapi.Id)"
 Write-Output "sentinel_slow_loop.py  : $($p_slow.Id)"
 Write-Output "============"

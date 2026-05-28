@@ -53,7 +53,7 @@ Start-Process .\venv\Scripts\python.exe -ArgumentList 'sre_watchdog.py' -PassThr
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine A (Profit Manager v25.0)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v25.py' -PassThru
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v28_34.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine B (FastAPI Sniper)...' -ForegroundColor Yellow
