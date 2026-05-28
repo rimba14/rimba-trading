@@ -20,7 +20,7 @@ class MockFastMCP:
 mock_mcp_module.FastMCP = MockFastMCP
 sys.modules['mcp.server.fastmcp'] = mock_mcp_module
 
-from agents.hermes_diagnostics_mcp import get_pending_diagnostics, DIAGNOSTICS_DIR
+from agents.hermes_diagnostics_mcp import get_pending_diagnostics, DIAGNOSTICS_DIR, resolve_diagnostic
 
 def test_get_pending_diagnostics_success():
     """Test get_pending_diagnostics when a valid JSON file is present."""
@@ -87,3 +87,31 @@ def test_get_pending_diagnostics_json_parse_error():
 
                 mock_log_error.assert_called_once()
                 assert "Failed to read diagnostic invalid_diagnostic.json" in mock_log_error.call_args[0][0]
+
+def test_resolve_diagnostic_success():
+    """Test resolve_diagnostic when the file exists and is deleted."""
+    filename = "test_diagnostic.json"
+    with patch('os.path.exists', return_value=True) as mock_exists:
+        with patch('os.remove') as mock_remove:
+            result_json = resolve_diagnostic(filename)
+            result = json.loads(result_json)
+
+            assert result['status'] == 'success'
+            assert result['message'] == f'Resolved {filename}'
+
+            mock_exists.assert_called_once_with(os.path.join(DIAGNOSTICS_DIR, filename))
+            mock_remove.assert_called_once_with(os.path.join(DIAGNOSTICS_DIR, filename))
+
+def test_resolve_diagnostic_not_found():
+    """Test resolve_diagnostic when the file does not exist."""
+    filename = "missing_diagnostic.json"
+    with patch('os.path.exists', return_value=False) as mock_exists:
+        with patch('os.remove') as mock_remove:
+            result_json = resolve_diagnostic(filename)
+            result = json.loads(result_json)
+
+            assert result['status'] == 'error'
+            assert result['message'] == 'FILE_NOT_FOUND'
+
+            mock_exists.assert_called_once_with(os.path.join(DIAGNOSTICS_DIR, filename))
+            mock_remove.assert_not_called()
