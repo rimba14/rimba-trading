@@ -87,8 +87,8 @@ def main():
     risk_proc = subprocess.Popen([sys.executable, "agents/risk_agent.py"])
     
     # 2. profit_manager.py (The Naked Kill Switch)
-    print("[IGNITION] Starting profit_manager_v25.py (Naked Kill Switch)...")
-    profit_proc = subprocess.Popen([sys.executable, "profit_manager_v25.py"])
+    print("[IGNITION] Starting profit_manager_v28_34.py (Naked Kill Switch)...")
+    profit_proc = subprocess.Popen([sys.executable, "profit_manager_v28_34.py"])
     
     print("[IGNITION] Waiting 5 seconds for execution bridges and shields to stabilize...")
     time.sleep(5)
