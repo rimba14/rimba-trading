@@ -1,5 +1,6 @@
 import sys
+import os
+sys.path.insert(0, os.path.abspath("."))
 from unittest.mock import MagicMock
-
-# The root codebase relies on Windows-only MetaTrader5. Mock it for tests in Linux environments.
 sys.modules['MetaTrader5'] = MagicMock()
+sys.modules['fastapi_sniper'] = MagicMock()
