@@ -1,6 +1,5 @@
 import sys
 import os
-from pathlib import Path
 import MetaTrader5 as mt5
 
 def run_preflight():
