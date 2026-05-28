@@ -11,10 +11,6 @@ FILES_MAP = {
     "api-v1-order.csv": "orders_ledger.csv"
 }
 
-# Create a local directory to store the raw data
-# if not os.path.exists(SAVE_DIR):
-#     os.makedirs(SAVE_DIR)
-
 def download_file(file_name):
     url = BASE_URL + file_name
     save_path = os.path.join(SAVE_DIR, FILES_MAP[file_name])
