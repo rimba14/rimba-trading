@@ -1,7 +1,6 @@
 import os
 import requests
 import json
-import time
 from typing import Dict, Any, List
 import typing
 from gitagent_base import BaseModule
@@ -10,13 +9,15 @@ from gitagent_kronos_adapter import get_kronos_forecast
 from gitagent_vision_audit import VisionPatternAgent
 
 try:
-    from google import genai as google_genai
+    from google import genai as _genai
+    _ = _genai
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
 
 try:
-    from groq import Groq as GroqClient
+    from groq import Groq as _Groq
+    _ = _Groq
     HAS_GROQ_SDK = True
 except ImportError:
     HAS_GROQ_SDK = False
