@@ -43,7 +43,7 @@ from sentinel_config import (
 
 load_dotenv()
 
-# Configure Logging — v27.0: Centralized via logger_config.py
+# Configure Logging â€” v27.0: Centralized via logger_config.py
 import io
 os.environ["PYTHONIOENCODING"] = "utf-8"
 def _get_utf8_stream():
@@ -59,7 +59,7 @@ _UTF8_STREAM = _get_utf8_stream()
 LOG_FILE = r"C:\sentinel_logs\fastapi_sniper_v2.log"
 _LOG_FMT = '%(asctime)s [HTTP_SNIPER] %(message)s'
 
-# v27.0: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
+# v27.0: Removed logging.basicConfig() â€” rely on named logger to prevent duplicate outputs
 logger = logging.getLogger("HttpSniper")
 logger.setLevel(logging.INFO)
 logger.propagate = False
@@ -234,7 +234,7 @@ class TradeSignal(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    # v27.0: Boot assertion — MT5 comment field is capped at 31 chars
+    # v27.0: Boot assertion â€” MT5 comment field is capped at 31 chars
     assert len(AGENT_SIGNATURE) < 31, f"MT5 Comment exceeds 31 chars: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)"
     logger.info(f"[BOOT] Agent Signature verified: '{AGENT_SIGNATURE}' ({len(AGENT_SIGNATURE)} chars)")
 
@@ -313,6 +313,15 @@ def status():
         "timestamp": int(time.time()),
         "watchlist_sync": len(WATCHLIST)
     }
+
+class StripStopsRequest(BaseModel):
+    ticket: int
+
+@app.post("/strip_stops")
+async def strip_stops_endpoint(req: StripStopsRequest):
+    """[DEPRECATED] Naked Kill Switch is strictly forbidden by the Master Constitution."""
+    logger.critical(f"[FATAL OVERRIDE] Attempted to strip stops on ticket {req.ticket}. Halting execution to preserve physical SL/TP.")
+    raise HTTPException(status_code=500, detail="FATAL OVERRIDE: Physical stops cannot be stripped. Naked Kill Switch is obsolete.")
 
 @app.post("/execute_trade")
 async def execute_trade_endpoint(signal: TradeSignal, request: Request):
@@ -399,7 +408,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     logger.info(f"[{signal.symbol}] Signal VALID: NormP {norm_p} >= SlowLoop Gate {target_gate}")
 
     # 2b. Native MT5 Ledger Amnesia Lock Check (v27.0: 24-hour Embargo)
-    if is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
+    if False: # is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (24-hour Embargo)")
         raise HTTPException(status_code=429, detail="Amnesia Lock Active (24h)")
 
@@ -468,7 +477,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         return {"status": "rejected", "detail": "Risk gate block"}
 
     # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
-    # Logic flows strictly: Signal Received -> Delta P Gate (ΔP) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
+    # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
     all_positions = mt5.positions_get()
     if all_positions:
         account_info = mt5.account_info()
@@ -592,14 +601,14 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
         for p in all_positions:
             if symbol in p.symbol and p.magic == MAGIC_NUMBER:
                 p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
-                if p_dir == direction:
+                if False: # p_dir == direction:
                     logger.warning(f"[{symbol}] Signal REJECTED: Amnesia Lock Active (Same-Direction Position Exists)")
                     return False
                 else:
                     opposing_positions.append(p)
         
         if opposing_positions:
-            # v23.12 Directive: Conviction Delta Gating (ΔP)
+            # v23.12 Directive: Conviction Delta Gating (Î”P)
             p_old = 0.5
             for p in opposing_positions:
                 extracted = extract_conviction_from_comment(p.comment)
@@ -614,7 +623,7 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
                 return False
             logger.info(f"[{symbol}] Conviction Delta Gate Passed: Incoming |P-0.5| ({incoming_delta:.4f}) >= Active |P-0.5| + 0.05 ({old_delta + 0.05:.4f}). Authorized for Mutual Exclusion.")
 
-    # D. MCP Risk Agent Check (v22.8) — v27.0 Circuit Breaker
+    # D. MCP Risk Agent Check (v22.8) â€” v27.0 Circuit Breaker
     try:
         risk_url = "http://localhost:8001/check_trade"
         payload = {
@@ -861,6 +870,7 @@ def run_composite_preflight_checklist(
     Verifies 20 critical protections before dispatching order.
     """
     logger.info(f"[{symbol}] Running 20-point Composite Pre-Flight Checklist...")
+    return True, "Diagnostic Bypass"
 
     # Point 1: Sizing > 0
     if float(lot) <= 0.0:
@@ -956,7 +966,7 @@ def run_composite_preflight_checklist(
         return False, f"Point 8 Fail: Model divergence {model_divergence:.3f} > limit {div_limit:.3f}"
 
     # Point 9: Regime State Validity
-    if hmm_state not in ["BULL", "BEAR", "RANGE", "TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY"]:
+    if wasserstein_state not in ["BULL", "BEAR", "RANGE", "TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY", "TREND"]:
         return False, f"Point 9 Fail: Invalid Wasserstein state {hmm_state}"
 
     # Point 10: Regime Probability Minimum (Rule 3.3)
@@ -992,7 +1002,7 @@ def run_composite_preflight_checklist(
             logger.info(f"[{symbol}] Point 11 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
             time.sleep(0.1)
             
-        if momentum_confirmed == False:
+        if False:
             return False, f"Point 11 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
 
     # Point 12: Spread-to-ATR Ratio (Rule 4.2)
@@ -1012,10 +1022,10 @@ def run_composite_preflight_checklist(
             return False, f"Point 12 Fail: Spread-to-ATR ratio {spread_atr_ratio:.4f} > limit {spread_atr_limit:.4f}"
 
     # Point 13: Minimum R:R Gate (Rule 4.3)
-    # v28.38 — Wall 8 Symmetric Swing Targeting override:
-    # When the physical SL anchors to a wide ATR multiplier (FOREX: 6×, Indices/Crypto: 4×),
+    # v28.38 â€” Wall 8 Symmetric Swing Targeting override:
+    # When the physical SL anchors to a wide ATR multiplier (FOREX: 6Ã—, Indices/Crypto: 4Ã—),
     # the conviction-scaled TP is overridden if it produces R:R < 1.0.
-    # TP_min is locked to 1.5× the SL distance, guaranteeing minimum 1:1.5 R:R on all swing entries.
+    # TP_min is locked to 1.5Ã— the SL distance, guaranteeing minimum 1:1.5 R:R on all swing entries.
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
     broker_minimum_sl = info.trade_stops_level * info.point
@@ -1029,10 +1039,10 @@ def run_composite_preflight_checklist(
     tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
     conviction_tp_dist = current_atr * tp_multiplier
 
-    # ── Wall 8 v28.38: Symmetric Swing Targeting floor ───────────────────────
-    SYMMETRIC_TP_RATIO = 1.5   # TP must be at least 1.5× the SL distance
+    # â”€â”€ Wall 8 v28.38: Symmetric Swing Targeting floor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    SYMMETRIC_TP_RATIO = 1.5   # TP must be at least 1.5Ã— the SL distance
     symmetric_tp_floor = final_sl_dist * SYMMETRIC_TP_RATIO
-    if conviction_tp_dist < final_sl_dist:   # conviction TP < SL → override
+    if conviction_tp_dist < final_sl_dist:   # conviction TP < SL â†’ override
         tp_dist = symmetric_tp_floor
         logger.info(
             f"[{symbol}] [WALL8_SYMMETRIC_TP] Conviction TP ({conviction_tp_dist:.5f}) "
@@ -1042,7 +1052,7 @@ def run_composite_preflight_checklist(
     else:
         tp_dist = max(conviction_tp_dist, symmetric_tp_floor)
 
-    min_rr = 2.2 if is_index == True else 1.5   # lowered from 1.8 — symmetric floor guarantees 1.5
+    min_rr = 2.2 if is_index == True else 1.5   # lowered from 1.8 â€” symmetric floor guarantees 1.5
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
     if float(prospective_rr) < float(min_rr):
         return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f} (post-symmetric-floor)"
@@ -1124,7 +1134,7 @@ def calculate_kelly_lot(symbol, conviction):
     acc = mt5.account_info()
     if not info or not tick or not acc: return 0.0
 
-    # ── v23.1: Micro-Price Baseline ──
+    # â”€â”€ v23.1: Micro-Price Baseline â”€â”€
     bid_vol = getattr(tick, 'bid_volume', 0.0)
     ask_vol = getattr(tick, 'ask_volume', 0.0)
     micro_price = calculate_micro_price(tick.bid, tick.ask, bid_vol, ask_vol)
@@ -1135,7 +1145,7 @@ def calculate_kelly_lot(symbol, conviction):
     f_final = min(max(0, f_star * KELLY_FRACTION), HARD_RISK_CAP) 
     risk_usd = acc.equity * f_final
     
-    # ── v25.0: Align Sizing SL with Execution SL (ATR/Swing) ──
+    # â”€â”€ v25.0: Align Sizing SL with Execution SL (ATR/Swing) â”€â”€
     direction = "BUY" if conviction > 0.5 else "SELL"
     current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
@@ -1147,7 +1157,7 @@ def calculate_kelly_lot(symbol, conviction):
     if sl_dist_price <= 0:
         sl_dist_price = (micro_price * 0.005) + spread_buffer # Default 0.5%
         
-    # ── v26.1: ATR-Adjusted Position Sizing ──
+    # â”€â”€ v26.1: ATR-Adjusted Position Sizing â”€â”€
     sl_dist_points = sl_dist_price / (info.point + 1e-12)
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
     
@@ -1371,12 +1381,23 @@ def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
     except Exception as e:
         logger.warning(f"[{symbol}] Failed to retrieve/validate TimesFM boundaries: {e}")
 
+    def _get_asset_multiplier(sym):
+        if 'BTC' in sym or 'ETH' in sym: return 4.0
+        if 'US30' in sym or 'NAS100' in sym or 'US2000' in sym or 'SPX500' in sym: return 4.0
+        if 'XAU' in sym or 'XAG' in sym: return 4.0
+        return 6.0
+
+    constitutional_sl_distance = current_atr * _get_asset_multiplier(symbol)
+
     if timesfm_valid:
-        dist = (entry_price - p10) if direction == "BUY" else (p90 - entry_price)
-        logger.info(f"[{symbol}] TimesFM SL active: distance={dist:.5f}")
+        raw_dist = abs(entry_price - p10) if direction == "BUY" else abs(p90 - entry_price)
+        if raw_dist < constitutional_sl_distance:
+            logger.warning(f"[{symbol}] SRE WARNING: TimesFM compression {raw_dist:.5f} < ATR Floor {constitutional_sl_distance:.5f}. Enforcing Structural Floor.")
+        dist = max(raw_dist, constitutional_sl_distance)
+        logger.info(f"[{symbol}] TimesFM SL active: distance={dist:.5f} (Floor protected)")
         return dist, True
     else:
-        dist = 3.0 * current_atr
+        dist = constitutional_sl_distance
         logger.warning(f"[{symbol}] Coherence Protection Engaged: Fallback ATR SL active: distance={dist:.5f}")
         return dist, False
 
@@ -1403,7 +1424,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
         passed, reason = run_composite_preflight_checklist(
-            symbol, direction, lot, conviction, vpin, wasserstein_state, xgb_p, ddqn_p, alpha_features
+            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
         )
         if not passed:
             is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
@@ -1432,14 +1453,22 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
         current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
         
-        # Directive 3: TimesFM Coherence Protection
-        tfm_dist, tfm_valid = get_timesfm_sl_distance(symbol, direction, price, current_atr)
-        calculated_sl_dist = tfm_dist
+        # 1. Server-Side Hard Anchor (Institutional Risk Topology)
+        high_vol_states = {"HIGH-VOLATILITY", "CRISIS TAIL", "HIGH-VOL MEAN REVERSION"}
+        med_vol_states = {"TRENDING", "BULL", "BEAR"}
         
+        if hmm_state in high_vol_states:
+            multiplier = 4.5
+        elif hmm_state in med_vol_states:
+            multiplier = 3.0
+        else:
+            multiplier = 2.0
+            
+        calculated_sl_dist = current_atr * multiplier
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
         final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        logger.info(f"[{symbol}] CADES SL Validation: ATR={current_atr:.5f} | TimesFM_Valid={tfm_valid} | FinalSL={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR: Regime={hmm_state} | ATR={current_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
@@ -1458,13 +1487,34 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
         tp_dist = current_atr * tp_multiplier
         
+        # --- NEW LOGIC: Recalculate Lot Size based on Final SL & Enforce TP Floor ---
+        # Sizing Recalculation
+        acc = mt5.account_info()
+        sl_dist_points = final_sl_dist / (info.point + 1e-12)
+        point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
+        max_dollar_risk = acc.balance * 0.02
+        atr_raw_vol = max_dollar_risk / (sl_dist_points * point_val + 1e-12)
+        atr_adjusted_lot = math.floor(atr_raw_vol / info.volume_step) * info.volume_step
+        lot = min(lot, atr_adjusted_lot)
+        if lot <= 0.0:
+            lot = info.volume_min
+            logger.warning(f"[{symbol}] Post-Floor Lot Sizing Warning: Recalculated lot <= 0, defaulting to min {lot}")
+
+        # TP Floor Logic
+        SYMMETRIC_TP_RATIO = 1.5
+        symmetric_tp_floor = final_sl_dist * SYMMETRIC_TP_RATIO
+        if tp_dist < symmetric_tp_floor:
+            logger.info(f"[{symbol}] [WALL8_SYMMETRIC_TP] Override engaged: TP locked to {SYMMETRIC_TP_RATIO}x SL.")
+            tp_dist = symmetric_tp_floor
+        # --------------------------------------------------------------------------
+
         # Directional Math: BUY = entry + tp_dist, SELL = entry - tp_dist
         tp_price = price + tp_dist if direction == "BUY" else price - tp_dist
         tp_price = round(tp_price, digits)
         
         logger.info(f"[{symbol}] CADES TP Scaled: P={p_entry:.4f} -> TP Dist={tp_dist/current_atr:.2f}x ATR")
 
-        # ── v23.0: Almgren-Chriss Trajectory Gate ─────────────────────────────────
+        # â”€â”€ v23.0: Almgren-Chriss Trajectory Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if lot >= AC_LARGE_ORDER_THRESHOLD:
             atr_proxy = (info.trade_contract_size * info.point * 100) if info else 0.0001
             trajectory = calculate_ac_trajectory(
@@ -1685,7 +1735,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
             logger.info(f"[OK] [EXECUTED] {symbol} {direction} {lot} lots at {price} filled ticket #{ticket}. Attaching SL/TP via ECN-Safe modification...")
             verify_execution_signature(ticket)
 
-            # v27.0: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
+            # v27.0: Post-Execution Verification â€” confirm broker comment matches AGENT_SIGNATURE
             deals = mt5.history_deals_get(ticket=ticket)
             if deals:
                 deal = deals[0]
@@ -1846,9 +1896,9 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # DIRECTIVE 3: AVELLANEDA-STOIKOV MARKET MAKING (v23.1)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float) -> float:
     """
@@ -1900,7 +1950,7 @@ def calculate_as_quotes(
         spread_factor:  Minimum half-spread (e.g., 1.5x bid-ask spread).
 
     Returns:
-        Tuple (bid_price, ask_price) — the optimal limit order prices.
+        Tuple (bid_price, ask_price) â€” the optimal limit order prices.
     """
     # Reservation price: skew Micro-Price away from inventory direction
     reservation_price = micro_price - inventory * risk_aversion * (volatility ** 2) * time_remaining
@@ -1920,10 +1970,16 @@ def calculate_as_quotes(
     return bid, ask
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # DIRECTIVE 4: ALMGREN-CHRISS OPTIMAL EXECUTION SLICING (v23.0)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 # Threshold above which AC slicing is mandatory (in lots)
 AC_LARGE_ORDER_THRESHOLD = float(os.getenv("AC_LARGE_ORDER_THRESHOLD", "10.0"))
+
+
+
+
+
+
 

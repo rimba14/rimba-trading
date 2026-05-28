@@ -155,6 +155,25 @@ def classify_symbol(symbol: str) -> str:
     return "FOREX"
 
 
+def calculate_institutional_hard_stop(current_price: float, is_buy: bool, atr: float, hmm_state: str) -> float:
+    high_vol_states = {"HIGH-VOLATILITY", "CRISIS TAIL", "HIGH-VOL MEAN REVERSION"}
+    med_vol_states = {"TRENDING", "BULL", "BEAR"}
+    
+    if hmm_state in high_vol_states:
+        multiplier = 4.5
+    elif hmm_state in med_vol_states:
+        multiplier = 3.0
+    else:
+        multiplier = 2.0
+        
+    distance = atr * multiplier
+    
+    if is_buy:
+        return current_price - distance
+    else:
+        return current_price + distance
+
+
 def get_atr_multipliers(symbol: str, hmm_state: str) -> tuple[float, float]:
     """Returns (SL_mult, TP_mult) adjusted for asset class and HMM regime."""
     asset = classify_symbol(symbol)
@@ -1364,15 +1383,6 @@ class SentinelProfitManager:
         info = mt5.symbol_info(pos.symbol)
         if not tick or not info:
             return
-        time_held = tick.time - pos.time
-
-        if time_held > 10:
-            logger.critical(
-                f"[KILL] Orphaned #{pos.ticket} ({pos.symbol}) held {time_held}s without SL/TP. "
-                "Hostile liquidation."
-            )
-            market_close(pos, "ORPHAN_HOSTILE_LIQ")
-            return
 
         # Instrument-safe ATR
         macro_atr = get_safe_atr(pos.symbol, 0.0, pos.price_open)
@@ -1382,13 +1392,15 @@ class SentinelProfitManager:
         # Fetch HMM state and multipliers
         oracle = self._oracle.get(pos.symbol)
         hmm_state = oracle.get("hmm_state", "NEUTRAL") if oracle else "NEUTRAL"
-        sl_mult, tp_mult = get_atr_multipliers(pos.symbol, hmm_state)
-
-        sl_dist = sl_mult * macro_atr
+        
+        # 1. Server-Side Hard Anchor
+        raw_sl = calculate_institutional_hard_stop(pos.price_open, is_buy, macro_atr, hmm_state)
+        
+        sl_dist = abs(pos.price_open - raw_sl)
+        tp_mult = get_atr_multipliers(pos.symbol, hmm_state)[1]
         min_tp_dist = 1.5 * sl_dist
         tp_dist = max(tp_mult * macro_atr, min_tp_dist)
-
-        raw_sl = (pos.price_open - sl_dist) if is_buy else (pos.price_open + sl_dist)
+        
         raw_tp = (pos.price_open + tp_dist) if is_buy else (pos.price_open - tp_dist)
 
         final_sl = normalize_stop(pos.symbol, curr, pos.sl if pos.sl != 0.0 else raw_sl, is_sl=True,  is_buy=is_buy)
@@ -1576,36 +1588,22 @@ class SentinelProfitManager:
             trade_ticks = int(np.sum(rates_since["tick_volume"])) if rates_since is not None else 999
             data_sparse = (trade_ticks < 100) and ((broker_now - pos.time) < 600)
 
+            # ── Memory-Based Execution Layer (Soft Stop) ──────────────────────
+            soft_stop_distance = 2.0 * macro_atr
+            d_current = abs(current_price - pos.price_open)
+            is_in_profit = (pos.type == mt5.ORDER_TYPE_BUY and current_price > pos.price_open) or \
+                           (pos.type == mt5.ORDER_TYPE_SELL and current_price < pos.price_open)
+                           
+            if not is_in_profit and d_current >= soft_stop_distance:
+                logger.warning(f"[MEMORY_SOFT_STOP] {symbol} #{pos.ticket} exceeded {soft_stop_distance:.5f} (2.0x ATR). Liquidating before Hard Anchor.")
+                info = mt5.symbol_info(symbol)
+                if safe_scale_out(pos, ps, 1.0, "MEMORY_SOFT_STOP", info, tick):
+                    continue
+
             # ── Profit Locking ────────────────────────────────────────────────
             self._apply_profit_locks(
                 pos, ps, macro_atr, sl_mult, tp_mult, current_price, drawdown
             )
-
-            # SWING TRADING NON-INTERFERENCE SHIELD
-            # Position has NOT reached the 80% profit milestone.
-            # It is CONSTITUTIONALLY FORBIDDEN from being modified by any secondary module.
-            # Skip all early exit evaluations, divergence scale-outs, and event horizon shifts.
-            initial_sl = getattr(ps, "initial_sl", 0.0)
-            if initial_sl == 0.0:
-                initial_sl = pos.price_open - (sl_mult * macro_atr) if ps.is_buy() else pos.price_open + (sl_mult * macro_atr)
-            sl_dist = abs(pos.price_open - initial_sl)
-            if sl_dist <= 0.0:
-                sl_dist = sl_mult * macro_atr
-            if sl_dist <= 0.0:
-                sl_dist = 1.0
-            min_tp_dist = 1.5 * sl_dist
-            tp_dist = max(tp_mult * macro_atr, min_tp_dist)
-            
-            d_target = tp_dist
-            d_guard = 0.80 * d_target
-            d_current = abs(current_price - pos.price_open)
-            
-            is_in_profit = (pos.type == mt5.ORDER_TYPE_BUY and current_price > pos.price_open) or \
-                           (pos.type == mt5.ORDER_TYPE_SELL and current_price < pos.price_open)
-                           
-            if not (is_in_profit and d_current >= d_guard):
-                logger.info(f"[SWING_SHIELD] {symbol} #{pos.ticket} (d_current={d_current:.5f}, d_guard={d_guard:.5f}) protected by Non-Interference Shield.")
-                continue
 
             # ── Event Horizon Protection (shielded secondary module) ──────────
             self._event_horizon_protection(pos, ps)
@@ -1699,15 +1697,9 @@ class SentinelProfitManager:
                 sentinel_pos  = mt5.positions_get(magic=MAGIC_NUMBER)  or []
                 legacy_pos    = mt5.positions_get(magic=MAGIC_LEGACY)  or []
                 all_positions = list(sentinel_pos) + list(legacy_pos)
-                import requests
-                for pos in all_positions:
-                    if pos.sl > 0.0 or pos.tp > 0.0:
-                        print(f"[CONSTITUTIONAL_VIOLATION] Physical stops detected on ticket {pos.ticket}. Stripping immediately.")
-                        try:
-                            requests.post("http://127.0.0.1:8000/strip_stops", json={"ticket": pos.ticket}, timeout=5)
-                        except Exception as e:
-                            print(f"[STRIP_STOPS_FAIL] Could not strip stops on {pos.ticket}: {e}")
-
+                
+                # Naked Kill Switch disabled: We want physical stops.
+                
                 active_tickets = {p.ticket for p in all_positions}
 
                 # State cleanup [ARCH FIX] — prevents ticket reuse state corruption
@@ -1719,7 +1711,7 @@ class SentinelProfitManager:
                 for pos in all_positions:
                     ps = self._get_state(pos)
                     
-                    # Naked sweep for orphaned SL/TP
+                    # Naked sweep to enforce SL/TP
                     if pos.tp == 0.0 or pos.sl == 0.0:
                         self._naked_sweep(pos)
                     
