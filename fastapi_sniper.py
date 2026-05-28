@@ -9,6 +9,7 @@ import os
 import json
 import math
 import time
+import asyncio
 import logging
 import sys
 import io
@@ -513,7 +514,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         "is_fuzzing": is_fuzzing,
         "strategy_type": signal.strategy_type
     }
-    success = perform_mt5_trade(
+    success = await perform_mt5_trade(
         signal.symbol,
         signal.direction,
         lot_size,
@@ -854,7 +855,7 @@ def is_consec_losses_paused() -> Tuple[bool, float]:
         pass
     return False, 0.0
 
-def run_composite_preflight_checklist(
+async def run_composite_preflight_checklist(
     symbol: str,
     direction: str,
     lot: float,
@@ -1000,7 +1001,7 @@ def run_composite_preflight_checklist(
                     momentum_confirmed = True
                     break
             logger.info(f"[{symbol}] Point 11 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
             
         if False:
             return False, f"Point 11 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
@@ -1401,7 +1402,7 @@ def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
         logger.warning(f"[{symbol}] Coherence Protection Engaged: Fallback ATR SL active: distance={dist:.5f}")
         return dist, False
 
-def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
+async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
     if alpha_features is None:
         alpha_features = {'P': conviction, 'vpin': vpin}
     assert len(alpha_features) > 0, "alpha_features must be populated"
@@ -1423,7 +1424,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         ddqn_p = alpha_features.get("ddqn_p", 0.5) if alpha_features else 0.5
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
-        passed, reason = run_composite_preflight_checklist(
+        passed, reason = await run_composite_preflight_checklist(
             symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
         )
         if not passed:
