@@ -9,6 +9,7 @@ import os
 import json
 import math
 import time
+import asyncio
 import logging
 import sys
 import io
@@ -148,7 +149,7 @@ def enforce_stoplevel_and_normalize(symbol, current_price, target_price, is_sl, 
         normalized_price = target_price
     return round(normalized_price, info.digits)
 
-def atomic_sl_tp_modification(pos, new_sl, new_tp):
+async def atomic_sl_tp_modification(pos, new_sl, new_tp):
     """
     v27.0: Level 42 SRE Atomic Modification Block.
     Retries SL/TP attachment 3 times. If all fail, fires the Naked Kill Switch.
@@ -174,7 +175,7 @@ def atomic_sl_tp_modification(pos, new_sl, new_tp):
         attempt += 1
         if attempt < max_retries:
             logger.warning(f"[WARN] [MT5 RETRY] Ticket {pos.ticket} SL/TP mod failed (Retcode: {result.retcode if result else 'None'}). Retrying in 250ms (Attempt {attempt}/{max_retries})...")
-            time.sleep(0.25)
+            await asyncio.sleep(0.25)
             
     # IF WE REACH HERE, ALL RETRIES FAILED. FIRE THE NAKED KILL SWITCH.
     logger.critical(f"[ALERT] [CRITICAL] SL/TP modification failed after 3 retries for Ticket {pos.ticket}. Firing Emergency Naked Kill Switch.")
@@ -530,7 +531,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         "is_fuzzing": is_fuzzing,
         "strategy_type": signal.strategy_type
     }
-    success = perform_mt5_trade(
+    success = await perform_mt5_trade(
         signal.symbol,
         signal.direction,
         lot_size,
@@ -871,7 +872,7 @@ def is_consec_losses_paused() -> Tuple[bool, float]:
         pass
     return False, 0.0
 
-def run_composite_preflight_checklist(
+async def run_composite_preflight_checklist(
     symbol: str,
     direction: str,
     lot: float,
@@ -1016,7 +1017,7 @@ def run_composite_preflight_checklist(
                     momentum_confirmed = True
                     break
             logger.info(f"[{symbol}] Point 11 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
             
         if False:
             return False, f"Point 11 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
@@ -1448,7 +1449,7 @@ def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
         logger.warning(f"[{symbol}] Coherence Protection Engaged: Fallback ATR SL active: distance={dist:.5f}")
         return dist, False
 
-def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
+async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
     if alpha_features is None:
         alpha_features = {'P': conviction, 'vpin': vpin}
     assert len(alpha_features) > 0, "alpha_features must be populated"
@@ -1470,7 +1471,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         ddqn_p = alpha_features.get("ddqn_p", 0.5) if alpha_features else 0.5
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
-        passed, reason = run_composite_preflight_checklist(
+        passed, reason = await run_composite_preflight_checklist(
             symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
         )
         if not passed:
@@ -1699,11 +1700,11 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                                 new_tp = round(new_tp, info.digits)
                                 
                                 # OPERATION VISIBLE HORIZON: Reinstating physical stops
-                                atomic_sl_tp_modification(pos, new_sl, new_tp)
+                                await atomic_sl_tp_modification(pos, new_sl, new_tp)
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
                         success = False
-                time.sleep(0.05)
+                await asyncio.sleep(0.05)
             return success
 
         # Directive 3: Passive Maker Routing for High Toxicity
@@ -1880,7 +1881,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                     new_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_tp, is_sl=False, is_buy=is_buy)
                     
                     # OPERATION VISIBLE HORIZON: Reinstating physical stops
-                    atomic_sl_tp_modification(pos, target_sl, target_tp)
+                    await atomic_sl_tp_modification(pos, new_sl, new_tp)
             return True
         else:
             # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)
