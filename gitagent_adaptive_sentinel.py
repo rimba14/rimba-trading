@@ -108,14 +108,26 @@ class AdaptiveSentinel:
         return {"p1_hard": p1, "p2_dist": dist_trail}
 
     def audit_circuit_breakers(self, current_equity: float, account_info: dict) -> Tuple[bool, str]:
-        """Phase 3: P5 Portfolio Guard"""
+        """Phase 3: P5 Portfolio Guard with JSON FileLock integration"""
         if time.time() < self.state.get('halt_until', 0):
             return True, "HALTED"
 
+        # Phase 4 Action 1: FileLock integration for circuit_breaker.json
+        max_dd = 15.0
+        try:
+            from filelock import FileLock
+            lock = FileLock("C:\\Sentinel_Project\\circuit_breaker.json.lock", timeout=2)
+            with lock:
+                with open("C:\\Sentinel_Project\\circuit_breaker.json", "r") as f:
+                    cb_data = json.load(f)
+                    max_dd = float(cb_data.get("max_daily_drawdown_pct", 15.0))
+        except Exception as e:
+            print(f"[CIRCUIT_BREAKER] Lock/Read failed on circuit_breaker.json: {e}")
+
         balance = account_info.get('balance', current_equity)
-        dd_pct = (balance - current_equity) / balance * 100
+        dd_pct = (balance - current_equity) / (balance + 1e-9) * 100
         
-        if dd_pct >= 15.0:
+        if dd_pct >= max_dd:
             self.state['halt_until'] = time.time() + (24 * 3600) # 24h halt
             self.save_state()
             return True, "LIQUIDATE_AND_HALT"

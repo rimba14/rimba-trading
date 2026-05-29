@@ -146,7 +146,14 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
         f_raw = p - (q / b)
         
     params = get_dynamic_risk_params()
-    f_kelly = max(0, f_raw) * params["kelly_fraction"] * size_mult
+    
+    # Phase 4 Action 2: ATR Volatility Scaling
+    atr_scalar = 1.0
+    if atr > 0.0001:
+        # Inverse relationship: smaller size for high volatility, capped at 2x
+        atr_scalar = min(2.0, 0.01 / atr)
+        
+    f_kelly = max(0, f_raw) * params["kelly_fraction"] * size_mult * atr_scalar
     
     # Enforce the 2% maximum absolute risk cap per idea
     risk_dollars = equity * min(f_kelly, RISK_BUDGET_PCT)

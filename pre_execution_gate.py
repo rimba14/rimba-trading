@@ -71,6 +71,9 @@ def _get_direction(p) -> str:
     return "SELL"
 
 def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
+    """v30.98: ALL clusters enforced including RISK_OFF and COMMODITIES.
+    Previously, exotic pairs (USDTRY, USDCNH) fell into RISK_OFF which had
+    NO limits — allowing unlimited simultaneous correlated entries."""
     if not mt5.initialize():
         mt5.initialize()
         
@@ -85,6 +88,14 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
     
     all_active_exposure = open_positions + pending_orders
     
+    # v30.98: GLOBAL POSITION CAP — no more than 5 total positions across ALL clusters
+    if len(all_active_exposure) >= 5:
+        return GateResult(
+            gate="GATE-0-GLOBAL-CAP",
+            status=BLOCK,
+            message=f"GLOBAL POSITION CAP REACHED ({len(all_active_exposure)}/5). No new entries until positions close."
+        )
+    
     cluster = _get_cluster(symbol)
     
     cluster_positions = [
@@ -92,6 +103,24 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
         if _get_cluster(p.symbol) == cluster
     ]
     
+    # v30.98: Cluster-specific limits — ALL clusters now enforced
+    CLUSTER_LIMITS = {
+        "RISK_ON_CRYPTO": 2,
+        "RISK_ON_EQUITY": 2,
+        "RISK_ON_FX": 1,
+        "COMMODITIES": 2,
+        "RISK_OFF": 2,   # v30.98: Exotic FX pairs (USDTRY, USDCNH, etc.)
+    }
+    
+    max_in_cluster = CLUSTER_LIMITS.get(cluster, 2)
+    if len(cluster_positions) >= max_in_cluster:
+        return GateResult(
+            gate="GATE-0-CLUSTER-LIMIT",
+            status=BLOCK,
+            message=f"Cluster {cluster} limit reached ({len(cluster_positions)}/{max_in_cluster}). Halting new exposure."
+        )
+    
+    # v30.98: Global risk-on contagion cap
     global_risk_on_count = len([
         p for p in all_active_exposure 
         if _get_cluster(p.symbol) in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]
@@ -106,33 +135,27 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
         
     candidate_direction = str(direction).upper()
     
-    if cluster in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY"]:
-        if len(cluster_positions) >= 2:
-            return GateResult(
-                gate="GATE-0-CLUSTER-LIMIT",
-                status=BLOCK,
-                message=f"Cluster {cluster} limit reached (Max 2). Halting new exposure."
-            )
-    elif cluster == "RISK_ON_FX":
-        if len(cluster_positions) >= 1:
-            return GateResult(
-                gate="GATE-0-CLUSTER-LIMIT",
-                status=BLOCK,
-                message=f"Cluster {cluster} limit reached (Max 1). Halting new exposure."
-            )
+    # v30.98: Same-direction limit across ALL clusters (not just risk-on)
+    same_dir_count = sum(1 for p in all_active_exposure
+                         if _get_direction(p) == candidate_direction)
+    if same_dir_count >= 3:
+        return GateResult(
+            gate="GATE-0-SAME-DIRECTION-GLOBAL",
+            status=BLOCK,
+            message=f"Maximum same-direction limit of 3 globally reached for {candidate_direction}."
+        )
+    
+    # Same-direction within same cluster — max 1
+    same_dir_cluster = sum(1 for p in cluster_positions
+                           if _get_direction(p) == candidate_direction)
+    if same_dir_cluster >= 1:
+        return GateResult(
+            gate="GATE-0-SAME-DIRECTION-CLUSTER",
+            status=BLOCK,
+            message=f"Same-direction {candidate_direction} already exists in cluster {cluster}. Max 1 per cluster."
+        )
             
-    if cluster in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]:
-        same_dir_count = sum(1 for p in all_active_exposure
-                             if _get_cluster(p.symbol) in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]
-                             and _get_direction(p) == candidate_direction)
-        if same_dir_count >= 1:
-            return GateResult(
-                gate="GATE-0-SAME-DIRECTION",
-                status=BLOCK,
-                message=f"Maximum same-direction limit of 1 across risk-on clusters reached for {candidate_direction}."
-            )
-            
-    return GateResult(gate="GATE-0", status=ALLOW, message="Passed Correlation Cluster Limiter.")
+    return GateResult(gate="GATE-0", status=ALLOW, message="Passed Correlation Cluster Limiter v30.98.")
 
 def run_all_gates(
     symbol: str, 
@@ -206,7 +229,7 @@ def run_all_gates(
     if risk_pct > cfg.GATE_MAX_RISK_PCT_PER_TRADE:
         return reject(f"Gate 5 Failed: Risk Pct {risk_pct:.4f} > Max {cfg.GATE_MAX_RISK_PCT_PER_TRADE}")
 
-    # v30.96 Structural Risk Distance Floor Check
+    # v30.98 Structural Risk Distance Floor Check (D1 ATR — H1/M15 PROHIBITED)
     stop_loss = entry_price - sl_distance if str(direction).upper() in ["BUY", "1", "LONG"] else entry_price + sl_distance
     sl_distance_price = abs(entry_price - stop_loss)
     
@@ -214,7 +237,7 @@ def run_all_gates(
     try:
         if not mt5.initialize():
             mt5.initialize()
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 20)
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 16)
         if rates is not None and len(rates) >= 2:
             highs  = [r[2] for r in rates]
             lows   = [r[3] for r in rates]
@@ -226,15 +249,15 @@ def run_all_gates(
                 for i in range(1, len(rates))
             ]) / (len(rates) - 1)
     except Exception as atr_err:
-        logger.error(f"Failed to calculate ATR in PreExecutionGate for {symbol}: {atr_err}")
+        logger.error(f"Failed to calculate D1 ATR in PreExecutionGate for {symbol}: {atr_err}")
 
     if current_ATR > 0.0:
-        minimum_allowed_distance = current_ATR * 3.5  # Absolute volatility floor
+        minimum_allowed_distance = current_ATR * 3.5  # Absolute volatility floor on D1 ATR
         if sl_distance_price < minimum_allowed_distance:
             logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
-                              f"Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
+                              f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
             return reject(f"Gate 5 Failed: Stop Loss position ({stop_loss}) is non-compliant. "
-                          f"Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}).")
+                          f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}).")
 
     # GATE-6: Portfolio Heat Ceiling
     heat_pct = (current_heat_usd + risk_usd) / equity if equity > 0 else 1.0

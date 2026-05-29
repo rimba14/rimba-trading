@@ -40,3 +40,5 @@ BOOTNXT
 bootTel.dat
 BOOTSECT.BAK
 $WINDOWS.~BT/
+boot/
+bootmgr

@@ -5,6 +5,19 @@ import numpy as np
 
 import gitagent_wavelet as wave
 
+def get_nearest_prime(n: int) -> int:
+    if n <= 1:
+        return 2
+    for p in range(n, n + 50):
+        is_p = True
+        for i in range(2, int(p**0.5) + 1):
+            if p % i == 0:
+                is_p = False
+                break
+        if is_p:
+            return p
+    return n
+
 def Wavelet_for_Period(x, k=3):
     """
     COMPONENT 4: Wavelet-based period detection.
@@ -58,7 +71,8 @@ class TimesBlock(nn.Module):
 
         res = []
         for i in range(self.k):
-            period = period_list[i]
+            # Align period with prime-field configurations to minimize edge noise
+            period = get_nearest_prime(int(period_list[i]))
             # padding
             if self.seq_len % period != 0:
                 length = (((self.seq_len // period) + 1) * period)

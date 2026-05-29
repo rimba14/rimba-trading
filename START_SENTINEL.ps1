@@ -52,8 +52,8 @@ Write-Host '[LAUNCH] Starting Machine E (SRE Watchdog Daemon)...' -ForegroundCol
 Start-Process .\venv\Scripts\python.exe -ArgumentList 'sre_watchdog.py' -PassThru
 Start-Sleep -Seconds 3
 
-Write-Host '[LAUNCH] Starting Machine A (Profit Manager v25.0)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v25.py' -PassThru
+Write-Host '[LAUNCH] Starting Machine A (Profit Manager v28.34 - Composite HMM)...' -ForegroundColor Yellow
+Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v28_34.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine B (FastAPI Sniper)...' -ForegroundColor Yellow
@@ -63,4 +63,4 @@ Start-Sleep -Seconds 5
 Write-Host '[LAUNCH] Starting Slow Loop...' -ForegroundColor Yellow
 Start-Process .\venv\Scripts\python.exe -ArgumentList 'sentinel_slow_loop.py' -PassThru
 
-Write-Host '[OK] All services launched successfully under v28.31 (Target Volatility Overlays)!' -ForegroundColor Green
+Write-Host '[OK] All services launched successfully under v30.50 (CADES Empirical & Microstructure)!' -ForegroundColor Green

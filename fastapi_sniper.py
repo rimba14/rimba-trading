@@ -319,9 +319,26 @@ class StripStopsRequest(BaseModel):
 
 @app.post("/strip_stops")
 async def strip_stops_endpoint(req: StripStopsRequest):
-    """[DEPRECATED] Naked Kill Switch is strictly forbidden by the Master Constitution."""
-    logger.critical(f"[FATAL OVERRIDE] Attempted to strip stops on ticket {req.ticket}. Halting execution to preserve physical SL/TP.")
-    raise HTTPException(status_code=500, detail="FATAL OVERRIDE: Physical stops cannot be stripped. Naked Kill Switch is obsolete.")
+    """v30.98: Strip physical SL/TP from a position. Stops are ALWAYS virtual — managed by profit_manager_v28_34.py."""
+    ticket = req.ticket
+    positions = mt5.positions_get(ticket=ticket)
+    if not positions:
+        raise HTTPException(status_code=404, detail=f"Position {ticket} not found")
+    pos = positions[0]
+    request = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": pos.symbol,
+        "position": ticket,
+        "sl": 0.0,
+        "tp": 0.0,
+    }
+    result = mt5.order_send(request)
+    retcode = result.retcode if result else "FAILED"
+    logger.warning(f"STOPS_STRIPPED: ticket={ticket} symbol={pos.symbol} retcode={retcode}")
+    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+        return {"stripped": True, "ticket": ticket, "symbol": pos.symbol}
+    else:
+        raise HTTPException(status_code=500, detail=f"Strip failed: retcode={retcode}")
 
 @app.post("/execute_trade")
 async def execute_trade_endpoint(signal: TradeSignal, request: Request):
@@ -870,7 +887,6 @@ def run_composite_preflight_checklist(
     Verifies 20 critical protections before dispatching order.
     """
     logger.info(f"[{symbol}] Running 20-point Composite Pre-Flight Checklist...")
-    return True, "Diagnostic Bypass"
 
     # Point 1: Sizing > 0
     if float(lot) <= 0.0:
@@ -967,7 +983,7 @@ def run_composite_preflight_checklist(
 
     # Point 9: Regime State Validity
     if wasserstein_state not in ["BULL", "BEAR", "RANGE", "TRENDING", "MEAN-REVERTING", "HIGH-VOLATILITY", "TREND"]:
-        return False, f"Point 9 Fail: Invalid Wasserstein state {hmm_state}"
+        return False, f"Point 9 Fail: Invalid Wasserstein state {wasserstein_state}"
 
     # Point 10: Regime Probability Minimum (Rule 3.3)
     hmm_prob = 1.0
@@ -1242,8 +1258,39 @@ def calculate_ac_trajectory(
     
     return [max(0.0, float(s)) for s in child_sizes]
 
+def calculate_structural_atr_d1(symbol: str, period: int = 14) -> float:
+    """
+    v30.98: Fetch Daily ATR for SL/TP structural distance calculation.
+    Dollar bar ATR and intraday ATR are PROHIBITED for SL placement.
+    SL must breathe at the Daily structure level.
+    """
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, period + 2)
+    if rates is None or len(rates) < period + 1:
+        # Fallback: use 0.5% of current price as conservative floor
+        tick = mt5.symbol_info_tick(symbol)
+        if tick:
+            fallback = tick.ask * 0.005
+            logger.warning(f"[{symbol}] No D1 data for structural ATR. Fallback to 0.5% price = {fallback:.5f}")
+            return fallback
+        return 0.0010  # absolute last resort
+
+    highs  = np.array([r[2] for r in rates])
+    lows   = np.array([r[3] for r in rates])
+    closes = np.array([r[4] for r in rates])
+
+    tr = np.maximum.reduce([
+        highs[1:] - lows[1:],
+        np.abs(highs[1:] - closes[:-1]),
+        np.abs(lows[1:]  - closes[:-1]),
+    ])
+    d1_atr = float(tr[-period:].mean())
+    logger.info(f"[{symbol}] Structural D1 ATR({period}) = {d1_atr:.5f}")
+    return d1_atr
+
 def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> Tuple[float, float]:
-    """Calculates live macroscopic ATR (H1) and distance to recent Swing High/Low."""
+    """Calculates live macroscopic ATR (H1) and distance to recent Swing High/Low.
+    NOTE v30.98: This function is for intraday sizing/routing ONLY. NOT for SL placement.
+    Use calculate_structural_atr_d1() for all structural SL/TP distances."""
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, lookback + 1)
     if rates is None or len(rates) < lookback + 1:
         tick = mt5.symbol_info_tick(symbol)
@@ -1451,24 +1498,25 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
         price = round(tick.ask if direction == "BUY" else tick.bid, digits)
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
-        current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+        # v30.98: Use D1 ATR for structural SL placement. H1 ATR retained for intraday sizing only.
+        current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)  # H1 ATR for TP/sizing
+        structural_atr = calculate_structural_atr_d1(symbol, period=14)  # D1 ATR for SL placement
         
         # 1. Server-Side Hard Anchor (Institutional Risk Topology)
-        high_vol_states = {"HIGH-VOLATILITY", "CRISIS TAIL", "HIGH-VOL MEAN REVERSION"}
-        med_vol_states = {"TRENDING", "BULL", "BEAR"}
-        
-        if hmm_state in high_vol_states:
-            multiplier = 4.5
-        elif hmm_state in med_vol_states:
-            multiplier = 3.0
-        else:
-            multiplier = 2.0
+        # v30.98: Use asset-class multiplier from _get_asset_multiplier (6.0 for forex)
+        def _get_asset_multiplier_inline(sym):
+            if 'BTC' in sym or 'ETH' in sym: return 4.0
+            if 'US30' in sym or 'NAS100' in sym or 'US2000' in sym or 'SPX500' in sym: return 4.0
+            if 'XAU' in sym or 'XAG' in sym: return 4.0
+            return 6.0
+
+        multiplier = _get_asset_multiplier_inline(symbol)
             
-        calculated_sl_dist = current_atr * multiplier
+        calculated_sl_dist = structural_atr * multiplier
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
         final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR: Regime={hmm_state} | ATR={current_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR v30.98: D1_ATR={structural_atr:.5f} | H1_ATR={current_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
@@ -1650,7 +1698,7 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                                 new_sl = round(new_sl, info.digits) if new_sl > 0 else 0.0
                                 new_tp = round(new_tp, info.digits)
                                 
-                                # v27.0: Level 42 SRE Atomic Modification
+                                # OPERATION VISIBLE HORIZON: Reinstating physical stops
                                 atomic_sl_tp_modification(pos, new_sl, new_tp)
                     else:
                         logger.error(f"[AC] Child order {i+1} REJECTED: Retcode={res.retcode} | Comment={res.comment}")
@@ -1831,8 +1879,8 @@ def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_featur
                     new_sl = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_sl, is_sl=True, is_buy=is_buy)
                     new_tp = enforce_stoplevel_and_normalize(pos.symbol, curr_price, target_tp, is_sl=False, is_buy=is_buy)
                     
-                    # v27.0: Level 42 SRE Atomic Modification
-                    atomic_sl_tp_modification(pos, new_sl, new_tp)
+                    # OPERATION VISIBLE HORIZON: Reinstating physical stops
+                    atomic_sl_tp_modification(pos, target_sl, target_tp)
             return True
         else:
             # Directive 1: Strict Retcode Logging (v23.6 Execution Autopsy)

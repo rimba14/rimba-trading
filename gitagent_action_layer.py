@@ -5,6 +5,11 @@ import timesfm_bridge
 import pandas as pd
 import os
 import time
+from profit_manager_v28_34 import get_safe_atr
+from gitagent_types import ProposedTradePayload
+from verification_layer import underwriter
+from broker_client import dispatch_permit
+
 
 class ActionLayer:
     """
@@ -43,7 +48,9 @@ class ActionLayer:
 
         acc = mt5.account_info()
         if acc is None: return False, "NO_ACCOUNT_INFO"
-        if acc.margin_level < self.min_margin_level:
+        
+        # MT5 sets margin_level to 0.0 when there are no open positions (margin == 0.0)
+        if acc.margin > 0.0 and acc.margin_level < self.min_margin_level:
             print(f"[RISK_GATE] MARGIN_LEVEL too low: {acc.margin_level:.1f}%")
             return False, "MARGIN_GUARD"
 
@@ -60,6 +67,9 @@ class ActionLayer:
         """
         allowed, reason = self.check_risk_gate(symbol)
         if not allowed: return None
+
+        # FORCE INSTITUTIONAL ATR FLOOR ON ENTRY
+        atr = get_safe_atr(symbol, atr, current_price)
 
         info = mt5.symbol_info(symbol)
         if not info: return None
@@ -95,28 +105,59 @@ class ActionLayer:
                 # Fallback to ATR-based hard stop
                 mult_hard = 10.0 if "XAUUSD" in symbol else 8.0
                 sl_price = target_price - (mult_hard * atr) if side == "BUY" else target_price + (mult_hard * atr)
+            
+            # Formulate the Take Profit target
+            tp_mult = 1.5
+            if tps > 0:
+                tp_mult = 2.0  # Basic expansion for demonstration
+            tp_price = target_price + (tp_mult * atr) if side == "BUY" else target_price - (tp_mult * atr)
 
-            request = {
+            # Build the Payload for Verification
+            payload = ProposedTradePayload(
+                symbol=symbol,
+                side=side,
+                volume=float(chunk_vol),
+                current_price=target_price,
+                requested_sl=sl_price,
+                requested_tp=tp_price,
+                macro_atr=atr,
+                variance_p10=p10,
+                variance_p90=p90
+            )
+            # Build the Draft Request for the Verification Engine
+            draft_request = {
                 "action": mt5.TRADE_ACTION_DEAL if i == 0 else mt5.TRADE_ACTION_PENDING,
                 "symbol": symbol,
-                "volume": float(chunk_vol),
                 "type": (mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL) if i == 0 else \
                         (mt5.ORDER_TYPE_BUY_LIMIT if side == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT),
                 "price": round(float(target_price), info.digits),
-                "sl": round(float(sl_price), info.digits),
                 "comment": metadata_comment[:31],
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": mt5.ORDER_FILLING_IOC if i == 0 else mt5.ORDER_FILLING_RETURN,
             }
-            
             if position_ticket:
-                request["position"] = int(position_ticket)
+                draft_request["position"] = int(position_ticket)
+
+            # --- PILLAR 1: INDEPENDENT UNDERWRITING ENGINE GATE ---
+            permit = underwriter.underwrite_payload(payload, draft_request)
             
-            res = mt5.order_send(request)
+            if not permit.is_valid:
+                print(f"[ACTION_LAYER] Trade for {symbol} REJECTED by Underwriting Engine pre-flight. Reason: {permit.rejection_reason}")
+                for anomaly in payload.anomalies:
+                    print(f" -> {anomaly}")
+                break # Abort the entire sub-order loop if a hard veto occurs
+            
+            if payload.graceful_degradation_triggered:
+                print(f"[ACTION_LAYER] {symbol} triggered Graceful Degradation. Parameters successfully padded.")
+
+            # --- SYNCHRONOUS BROKER GATEWAY ---
+            res = dispatch_permit(permit)
             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                 orders.append(res.order)
             else:
                 print(f"[SUB_ORDER_ERR] Part {i+1} failed: {res.comment if res else 'Unknown'}")
+                break # If execution fails, abort further chunks
+
         
         return orders
 

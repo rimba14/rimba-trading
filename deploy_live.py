@@ -10,6 +10,17 @@ def main():
     print("      [BOOT] SENTINEL v28.27 MASTER ORCHESTRATOR COLD-BOOT")
     print("="*60)
 
+    # Calculate and write the active git hash to secure handshake
+    try:
+        active_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip().decode("utf-8")
+        hash_file = "C:/Sentinel_Project/data/active_git_hash.txt"
+        os.makedirs(os.path.dirname(hash_file), exist_ok=True)
+        with open(hash_file, "w") as f:
+            f.write(active_hash)
+        print(f"[BOOT] Initialized active version handshake signature: {active_hash}")
+    except Exception as e:
+        print(f"[BOOT] Warning: Could not write active version handshake signature: {e}")
+
     # -------------------------------------------------------------
     # Phase 1: The Purge (Wall 1 Process Dominance)
     # -------------------------------------------------------------
@@ -87,8 +98,8 @@ def main():
     risk_proc = subprocess.Popen([sys.executable, "agents/risk_agent.py"])
     
     # 2. profit_manager.py (The Naked Kill Switch)
-    print("[IGNITION] Starting profit_manager_v25.py (Naked Kill Switch)...")
-    profit_proc = subprocess.Popen([sys.executable, "profit_manager_v25.py"])
+    print("[IGNITION] Starting profit_manager_v28_34.py (Naked Kill Switch)...")
+    profit_proc = subprocess.Popen([sys.executable, "profit_manager_v28_34.py"])
     
     print("[IGNITION] Waiting 5 seconds for execution bridges and shields to stabilize...")
     time.sleep(5)

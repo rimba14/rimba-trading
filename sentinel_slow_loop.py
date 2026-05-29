@@ -13,6 +13,8 @@ import time
 import json
 import logging
 import random
+from dotenv import load_dotenv
+load_dotenv()
 import asyncio
 import traceback
 import threading
@@ -322,18 +324,26 @@ else:
     registry.update("ddqn", is_initialized=False, training_episodes=0)
 
 # -- ArcticDB Singleton (300 ms timeout enforced via ThreadPoolExecutor) -------
-from arcticdb import Arctic
-_ARCTIC = Arctic("lmdb://./data/arctic_cache")
-oracle_lib = (
-    _ARCTIC["oracle_cache"]
-    if "oracle_cache" in _ARCTIC.list_libraries()
-    else _ARCTIC.create_library("oracle_cache")
-)
+_ARCTIC = None
+oracle_lib = None
+
+def _get_oracle_lib():
+    global _ARCTIC, oracle_lib
+    if oracle_lib is None:
+        from arcticdb import Arctic
+        _ARCTIC = Arctic("lmdb://./data/arctic_cache")
+        oracle_lib = (
+            _ARCTIC["oracle_cache"]
+            if "oracle_cache" in _ARCTIC.list_libraries()
+            else _ARCTIC.create_library("oracle_cache")
+        )
+    return oracle_lib
 
 def _arctic_read(key: str):
     """ArcticDB read with hard 300 ms timeout (Phase 1)."""
+    lib = _get_oracle_lib()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(oracle_lib.read, key)
+        fut = ex.submit(lib.read, key)
         try:
             return fut.result(timeout=ARCTIC_TIMEOUT)
         except concurrent.futures.TimeoutError:
@@ -342,8 +352,9 @@ def _arctic_read(key: str):
 
 def _arctic_write(key: str, df: pd.DataFrame):
     """ArcticDB write with hard 300 ms timeout (Phase 1)."""
+    lib = _get_oracle_lib()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(oracle_lib.write, key, df)
+        fut = ex.submit(lib.write, key, df)
         try:
             fut.result(timeout=ARCTIC_TIMEOUT)
         except concurrent.futures.TimeoutError:
@@ -546,6 +557,54 @@ def calculate_ofi_and_bocpd(df_bars: pd.DataFrame) -> np.ndarray:
     except Exception:
         return np.zeros(len(df_bars))
 
+def calculate_atr_df(df: pd.DataFrame, period: int) -> float:
+    if df is None or len(df) < period + 1:
+        return 0.0010
+    try:
+        high = df['high'].values
+        low = df['low'].values
+        close = df['close'].values
+        tr_list = []
+        for i in range(len(df) - period, len(df)):
+            tr = max(high[i] - low[i], abs(high[i] - close[i-1]), abs(low[i] - close[i-1]))
+            tr_list.append(tr)
+        return float(np.mean(tr_list)) if tr_list else 0.0010
+    except Exception:
+        return 0.0010
+
+def _fetch_ofi_velocity(symbol: str, df_bars: pd.DataFrame) -> float:
+    """
+    Fetch the rolling 5-minute continuous cumulative OFI change-point value
+    directly from the microsecond signal cache in ArcticDB. Falls back to
+    calculating it from df_bars if cache is uninitialized or missing.
+    """
+    try:
+        from arcticdb import Arctic
+        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+        lib = store["oracle_cache"]
+        cache_symbol = f"{symbol}_microsecond_cache"
+        if cache_symbol in lib.list_symbols():
+            df_cache = lib.read(cache_symbol).data
+            if not df_cache.empty and "ofi_velocity" in df_cache.columns:
+                val = float(df_cache["ofi_velocity"].iloc[-1])
+                if not np.isnan(val):
+                    return val
+    except Exception:
+        pass
+
+    if df_bars is not None and not df_bars.empty:
+        try:
+            cp_probs = calculate_ofi_and_bocpd(df_bars)
+            if cp_probs is not None and len(cp_probs) > 0:
+                val = float(cp_probs[-1])
+                if not np.isnan(val):
+                    return val
+        except Exception:
+            pass
+
+    return 0.0
+
+
 # -- Meta-Model Serialization Fail-Safe (SRE Patch 0x80) ------------------------
 _META_MODEL = None
 _SHAP_EXPLAINER = None
@@ -611,7 +670,7 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
             logging.info(f"[ROUTER] {symbol} -> Math Meta-Model (Zero-Latency)")
             p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
             if p_val == 0.0:
-                return {"decision": "HOLD", "confidence": 0.500, "reasoning": "Math Meta-Model Hard Rejection"}
+                return {"decision": "HOLD", "confidence": 0.0, "reasoning": "[COLD_START_QUARANTINE] Math Meta-Model Hard Rejection"}
             decision = "BUY" if direction == 1 else ("SELL" if direction == -1 else "HOLD")
             return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Bypass"}
         except ValueError as e:
@@ -724,8 +783,12 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
     reasoning_decision = moe.get("decision", "HOLD")
 
     if reasoning_decision == "HOLD" or "rejection" in reasoning_text.lower() or reasoning_conf == 0.500 or reasoning_conf == 0.0:
-        p_final = 0.500
-        logging.warning(f"[{symbol}] MoE Gate Hard Rejection engaged -> Forced Neutral 0.500")
+        if "cold_start_quarantine" in reasoning_text.lower() or reasoning_conf == 0.0:
+            p_final = 0.0
+            logging.warning(f"[{symbol}] [COLD_START_QUARANTINE] Meta-model Veto active -> Forced 0.0")
+        else:
+            p_final = 0.500
+            logging.warning(f"[{symbol}] MoE Gate Hard Rejection engaged -> Forced Neutral 0.500")
     else:
         # v20.4: Soft Confidence Blending max(0.6, MoE)
         strength = max(0.6, reasoning_conf)
@@ -759,6 +822,8 @@ def _post_to_sniper(payload: Dict[str, Any], url: str):
 def push_to_orchestrator(payload: Dict[str, Any]):
     """Direct ultra-low-latency execution bridge (Phase 5)."""
     endpoint_url = os.getenv("EXECUTION_ENDPOINT_URL")
+    if endpoint_url:
+        endpoint_url = endpoint_url.strip("'").strip('"').rstrip('/')
     if not endpoint_url:
         logging.error("[COGNITION_ROUTE] EXECUTION_ENDPOINT_URL not found in .env. Falling back to local queue.")
         fname = SIGNAL_DIR / f"sig_{payload['symbol']}_{int(time.time())}.json"
@@ -961,8 +1026,10 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
         if df_m15 is not None and not df_m15.empty:
             price_variance = df_m15['close'].tail(10).std()
             cumulative_volume = df_m15['tick_volume'].tail(10).sum() if 'tick_volume' in df_m15.columns else 0
+            # Allow active price variance to bypass the cumulative_volume == 0 check.
+            # Stagnation is only triggered if the price variance is flat or NaN.
             import sentinel_config
-            if pd.isna(price_variance) or price_variance < getattr(sentinel_config, 'STAGNANT_VARIANCE_THRESHOLD', 1e-7) or cumulative_volume == 0:
+            if pd.isna(price_variance) or price_variance < getattr(sentinel_config, 'STAGNANT_VARIANCE_THRESHOLD', 1e-7):
                 logging.warning(f"[SLOW_LOOP] [STAGNANT] Asset flatlining. Skipping cycle to protect matrix stability.")
                 import os as _os, json as _json
                 _os.makedirs("shap_diagnostics", exist_ok=True)
@@ -1162,6 +1229,36 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             
         wasserstein_state = _OFFICIAL_REGIME[symbol]
         
+        regime_state = wasserstein_state
+        adjusted_conviction = None
+        # Cross-verify Crisis with actual market panic metrics
+        if regime_state == "CRISIS_TAIL":
+            if df_h1 is not None and len(df_h1) >= 20:
+                h_high = df_h1['high'].values
+                h_low = df_h1['low'].values
+                h_close = df_h1['close'].values
+                h_vol = df_h1['tick_volume'].values if 'tick_volume' in df_h1.columns else df_h1['volume'].values
+                
+                tr_list = []
+                for i in range(1, len(df_h1)):
+                    tr = max(h_high[i] - h_low[i], abs(h_high[i] - h_close[i-1]), abs(h_low[i] - h_close[i-1]))
+                    tr_list.append(tr)
+                
+                trailing_20_period_ATR = sum(tr_list[-20:]) / min(len(tr_list), 20) if len(tr_list) > 0 else 0.0010
+                current_ATR = tr_list[-1] if len(tr_list) > 0 else 0.0010
+                
+                current_volume = float(h_vol[-1])
+                trailing_20_period_volume = float(np.mean(h_vol[-20:]))
+                
+                import sentinel_config
+                is_crypto_or_index = symbol.upper() in getattr(sentinel_config, 'CRYPTO_BASE_SYMBOLS', []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
+                if not is_crypto_or_index and (current_ATR < trailing_20_period_ATR or current_volume < trailing_20_period_volume):
+                    # This is not a crisis; it is a liquidity vacuum/dead zone.
+                    regime_state = "MARKET_CLOSED_OR_STAGNANT"
+                    adjusted_conviction = 0.0
+                    logging.warning(f"[{symbol}] False CRISIS_TAIL detected (Low Vol/Vol). Downgrading to STAGNANT.")
+        wasserstein_state = regime_state
+        
         atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
         logging.info(f"[HMM] {symbol}: Raw={raw_wasser_state} -> Official={wasserstein_state} (p={wasser_prob:.3f}) | ATR(H1)={atr:.5f}")
 
@@ -1181,7 +1278,14 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             # 2. Compute OFI and run BOCPD
             cp_probs = calculate_ofi_and_bocpd(df_bars)
             
-            hmm_prices = df_ta["close"].values if df_ta is not None else None
+            if df_ta is not None and 'time' in df_ta.columns:
+                times = pd.to_datetime(df_ta['time'])
+                mask = (times.dt.weekday < 5) & (times.dt.hour >= 7) & (times.dt.hour <= 21)
+                df_active = df_ta[mask]
+                hmm_prices = df_active["close"].values
+            else:
+                hmm_prices = df_ta["close"].values if df_ta is not None else None
+                
             if hmm_prices is not None and len(hmm_prices) >= 60:
                 _, _, hmm_label_probs = gitagent_hmm.get_current_state(hmm_prices, lookback=200, cp_probs=cp_probs)
                 cond_num = hmm_label_probs.get("regime_condition_number", 1.0)
@@ -1211,7 +1315,8 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             "data_quality_flag": data_quality_flag,
             "is_this_symbol_starved": is_this_symbol_starved,
             "atr": atr,
-            "m_state": m_state
+            "m_state": m_state,
+            "adjusted_conviction": adjusted_conviction
         }
     except Exception as e:
         logging.error(f"[{symbol}] Feature extraction failed: {e}\n{traceback.format_exc()}")
@@ -1236,6 +1341,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
     is_this_symbol_starved = prep_data["is_this_symbol_starved"]
     atr = prep_data["atr"]
     m_state = prep_data["m_state"]
+    adjusted_conviction = prep_data.get("adjusted_conviction", None)
 
     try:
         # Directive 1: Zero-Variance Bypass Check
@@ -1521,6 +1627,14 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         raw_sent = m_state.get("global_macro_sentiment", 0.5)
         safe_sent = _safe_extract_with_lookback(symbol, float(raw_sent) if raw_sent is not None else None, 0.5000, "sentiment_score")
 
+        # STEP 1: CAUSAL FEATURE EXPANSION (v30.95)
+        instant_atr_10 = calculate_atr_df(df_m15, 10)
+        baseline_atr_200 = calculate_atr_df(df_m15, 200)
+        volatility_ratio = float(instant_atr_10 / baseline_atr_200) if baseline_atr_200 > 0.0 else 1.0
+        
+        df_bars_hft = ticks_to_dollar_bars(df_m15, threshold=500000.0) if df_m15 is not None else None
+        ofi_velocity = _fetch_ofi_velocity(symbol, df_bars_hft)
+
         local_meta_features = copy.deepcopy({
             "wasserstein_state": wasserstein_state,
             "xgb_p": safe_xgb,
@@ -1531,6 +1645,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "faiss_similarity": safe_faiss,
             "macro_sent": safe_sent,
             "sentiment_score": safe_sent,
+            "volatility_ratio": volatility_ratio,
+            "ofi_velocity": ofi_velocity,
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
@@ -1561,14 +1677,14 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         else:
             p_range = 0.50
             
-        w_trend = label_probs.get("TRENDING", 0.0) + label_probs.get("HIGH-VOLATILITY", 0.0) + label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0)
-        w_range = label_probs.get("MEAN-REVERTING", 0.0) + label_probs.get("RANGE", 0.0)
+        w_trend = label_probs.get("TRENDING", 0.0) + label_probs.get("HIGH-VOLATILITY", 0.0) + label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0) + label_probs.get("LOW-VOL TREND", 0.0) + label_probs.get("CRISIS TAIL", 0.0)
+        w_range = label_probs.get("MEAN-REVERTING", 0.0) + label_probs.get("RANGE", 0.0) + label_probs.get("HIGH-VOL MEAN REVERSION", 0.0)
         
         total_w = w_trend + w_range + 1e-9
         w_trend /= total_w
         w_range /= total_w
         
-        wasserstein_selector_state = "TREND" if "TREND" in wasserstein_state else "RANGE"
+        wasserstein_selector_state = "TREND" if ("TREND" in wasserstein_state or "CRISIS" in wasserstein_state) else "RANGE"
         
         if wasserstein_selector_state == "TREND":
             signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
@@ -1588,6 +1704,9 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
             meta_p = p_trend
         
+        if p_trend == 0.0:
+            meta_p = 0.0
+            
         range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
         
@@ -1606,9 +1725,35 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         current_gate = dynamic_gate
         
         regime_prob = label_probs.get(wasserstein_state, 0.0)
-        if regime_prob < 0.40 and activity_ratio < 0.85:
+        import sentinel_config
+        is_crypto_or_index = symbol.upper() in getattr(sentinel_config, 'CRYPTO_BASE_SYMBOLS', []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
+        stagnant_regime_threshold = 0.25 if is_crypto_or_index else 0.40
+        stagnant_activity_threshold = 0.40 if is_crypto_or_index else 0.85
+        if regime_prob < stagnant_regime_threshold and activity_ratio < stagnant_activity_threshold:
             wasserstein_state = "MARKET_STAGNANT"
-            logging.info(f"[{symbol}] [MARKET_STAGNANT] Low HMM ({regime_prob:.2f}) & Low Activity ({activity_ratio:.2f}). Gracefully skipping.")
+            logging.info(f"[{symbol}] [MARKET_STAGNANT] Low HMM ({regime_prob:.2f}) & Low Activity ({activity_ratio:.2f}). Gracefully skipping but writing neutral conviction.")
+            with _CYCLE_LOCK:
+                _CYCLE_P_SCORES[symbol] = 0.5000
+            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
+                "primary_dir": 0,
+                "meta_conviction": 0.500,
+                "wasserstein_state": "MARKET_STAGNANT",
+                "hmm_state": "MARKET_STAGNANT",
+                "strategy_type": "MOMENTUM",
+                "atr": float(atr),
+                "entropy": 0.0,
+                "hawkes_intensity": 0.0,
+                "timestamp": utils.get_utc_epoch(),
+                "is_legend": False,
+                "is_graveyard": False,
+                "vpin": 0.5,
+                "rsi": 50.0,
+                "vrs": 1.0,
+                "xgb_p": 0.500,
+                "ddqn_p": 0.500,
+                "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
+                "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
+            }]))
             return
         elif regime_prob < 0.55:
             current_gate = max(current_gate - 0.05, 0.60)
@@ -1640,6 +1785,26 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             )
         # ────────────────────────────────────────────────────────────────────────
 
+        if adjusted_conviction is not None and adjusted_conviction == 0.0:
+            meta_p = 0.50
+            
+        if meta_p == 0.0:
+            logging.warning(f"[{symbol}] [COLD_START_QUARANTINE] Meta-model returned 0.0 due to cold/null features. HARD REJECTION. Skipping signal.")
+            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
+                "primary_dir": 0,
+                "meta_conviction": 0.0,
+                "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
+                "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+                "strategy_type": "COLD_START_QUARANTINE",
+                "atr": float(atr),
+                "entropy": 0.0,
+                "hawkes_intensity": 0.0,
+                "timestamp": utils.get_utc_epoch(),
+                "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
+                "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
+            }]))
+            return
+        
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
 
         if float(meta_p) != 0.50:
@@ -1675,6 +1840,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     )
                     _P_SCORE_HISTORY.clear()
                     try:
+                        _get_oracle_lib()
                         _ARCTIC.delete_library("oracle_cache")
                         oracle_lib = _ARCTIC.create_library("oracle_cache")
                         _load_meta_model_with_failsafe()
@@ -1704,6 +1870,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "kronos_prob": float(local_meta_features.get("kronos_p", 0.5)),
             "faiss_similarity": float(local_meta_features.get("faiss_sim", 0.0)),
             "sentiment_score": float(local_meta_features.get("sentiment_score", 0.5)),
+            "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
+            "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
         }]))
 
         norm_p = abs(meta_p - 0.5) + 0.5
@@ -2072,51 +2240,65 @@ def main():
     _IS_STARTUP_OR_SHOCK = False
     logging.info("[SYSTEM] Cycle 0 execution completed. Entering short-polling event loop.")
 
-    # Directive 2: Information-Driven Awakening (Short polling volume/volatility loop)
-    while True:
-        _TICK_STARVATION_DETECTED = False
-        try:
-            time.sleep(10)
-            
-            trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
-            
-            # Post-exit / Equity change check
-            acc = mt5.account_info()
-            new_equity = acc.equity if acc else current_equity
-            import sentinel_config as cfg
-            if abs(new_equity - current_equity) > getattr(cfg, 'ROUTER_EQUITY_UPDATE_THRESHOLD', 50.0):
-                logging.info(f"[ROUTER] Equity changed from {current_equity} to {new_equity}. Re-evaluating universe...")
-                current_equity = new_equity
-                watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
-                trigger = True
-                reason = "EQUITY_CHANGE"
+    # Directive 2: Information-Driven Awakening (Event-Driven asyncio.Queue)
+    async def mt5_event_loop():
+        nonlocal last_run_hour, watchlist, current_equity
+        mt5_queue = asyncio.Queue()
+        
+        async def mock_mt5_tick_producer():
+            while True:
+                await asyncio.sleep(10)
+                await mt5_queue.put("TICK")
                 
-            if trigger:
-                logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
-                if "VOLATILITY_SHOCK" in reason:
-                    _IS_STARTUP_OR_SHOCK = True
-                else:
-                    _IS_STARTUP_OR_SHOCK = False
+        asyncio.create_task(mock_mt5_tick_producer())
+        
+        while True:
+            global _TICK_STARVATION_DETECTED, _IS_STARTUP_OR_SHOCK
+            _TICK_STARVATION_DETECTED = False
+            try:
+                event = await mt5_queue.get()
+                
+                trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
+                
+                # Post-exit / Equity change check
+                acc = mt5.account_info()
+                new_equity = acc.equity if acc else current_equity
+                import sentinel_config as cfg
+                if abs(new_equity - current_equity) > getattr(cfg, 'ROUTER_EQUITY_UPDATE_THRESHOLD', 50.0):
+                    logging.info(f"[ROUTER] Equity changed from {current_equity} to {new_equity}. Re-evaluating universe...")
+                    current_equity = new_equity
+                    watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
+                    trigger = True
+                    reason = "EQUITY_CHANGE"
                     
-                asyncio.run(process_matrix_parallel(watchlist, force_refresh=True))
-                _pre_scan_watchlist(watchlist)
+                if trigger:
+                    logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
+                    if "VOLATILITY_SHOCK" in reason:
+                        _IS_STARTUP_OR_SHOCK = True
+                    else:
+                        _IS_STARTUP_OR_SHOCK = False
+                        
+                    await process_matrix_parallel(watchlist, force_refresh=True)
+                    _pre_scan_watchlist(watchlist)
+                    
+                    # Update loop states
+                    last_run_hour = datetime.now().hour
+                    _IS_STARTUP_OR_SHOCK = False
+                    for symbol in watchlist:
+                        try:
+                            tick = mt5.symbol_info_tick(symbol)
+                            if tick:
+                                _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
+                            meta_item = _arctic_read(f"{symbol}_meta")
+                            if meta_item is not None:
+                                _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
+                        except Exception as e:
+                            logging.debug(f"[UPDATE_PRICE_ERR] {symbol}: {e}")
+            except Exception as e:
+                logging.error(f"[HEARTBEAT_ERROR] {e}")
+                await asyncio.sleep(10)
                 
-                # Update loop states
-                last_run_hour = datetime.now().hour
-                _IS_STARTUP_OR_SHOCK = False
-                for symbol in watchlist:
-                    try:
-                        tick = mt5.symbol_info_tick(symbol)
-                        if tick:
-                            _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
-                        meta_item = _arctic_read(f"{symbol}_meta")
-                        if meta_item is not None:
-                            _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
-                    except Exception as e:
-                        logging.debug(f"[UPDATE_PRICE_ERR] {symbol}: {e}")
-        except Exception as e:
-            logging.error(f"[HEARTBEAT_ERROR] {e}")
-            time.sleep(10)
+    asyncio.run(mt5_event_loop())
 
 if __name__ == "__main__":
     main()

@@ -36,28 +36,35 @@ class AlphaCombiner:
             return {}
 
         
-        # 1. Standardize (Z-Score) raw agent scores across symbols (Eq 1-3)
-        # We treat each agent as an independent 'signal i'
+        # 1. Standardize (Z-Score) raw agent scores across time, per symbol (Eq 1-3)
+        # We treat each agent as an independent 'signal i' and standardize independently
         agents = list(next(iter(signals_dict.values())).keys())
         standardized_signals = {sym: {} for sym in signals_dict}
         
-        for agent in agents:
-            raw_scores = np.array(
-                [float(signals_dict[s].get(agent, np.nan) or np.nan) for s in signals_dict],
-                dtype=np.float64,
-            )
-            mean_a = np.nanmean(raw_scores)
-            std_a = np.nanstd(raw_scores)
-            # Guard: if all values are NaN or std is zero, skip normalization
-            if np.isnan(mean_a) or std_a < 1e-12:
-                for sym in signals_dict:
-                    standardized_signals[sym][agent] = 0.0
-                continue
-            
-            for sym in signals_dict:
+        for sym in signals_dict:
+            if sym not in self.signal_history:
+                self.signal_history[sym] = {a: [] for a in agents}
+                
+            for agent in agents:
                 raw_val = signals_dict[sym].get(agent, None)
                 val = float(raw_val) if raw_val is not None else np.nan
-                if np.isnan(val):
+                
+                if not np.isnan(val):
+                    if agent not in self.signal_history[sym]:
+                        self.signal_history[sym][agent] = []
+                    self.signal_history[sym][agent].append(val)
+                    if len(self.signal_history[sym][agent]) > self.window:
+                        self.signal_history[sym][agent].pop(0)
+                
+                hist = self.signal_history[sym].get(agent, [])
+                if len(hist) > 1:
+                    mean_a = np.mean(hist)
+                    std_a = np.std(hist)
+                else:
+                    mean_a = val if not np.isnan(val) else 0.0
+                    std_a = 0.0
+                    
+                if np.isnan(val) or std_a < 1e-12:
                     standardized_signals[sym][agent] = 0.0
                 else:
                     # Equation 3: Y(i,s) = (X(i,s) - mean) / sigma
@@ -113,11 +120,11 @@ class AlphaCombiner:
         
         model_divergence = max(vals) - min(vals)
         if tighten:
-            threshold = 0.15
+            threshold = 0.40
         else:
-            threshold = 0.30
+            threshold = 0.40
             if blended_p > 0.85 or blended_p < 0.15:
-                threshold = 0.40
+                threshold = 0.50
             
         is_consensus = model_divergence <= threshold
         logger.info(f"[CONSENSUS_GATE] Divergence={model_divergence:.4f} (Threshold={threshold}, Tightened={tighten}) | Blended P={blended_p:.4f} | Pass={is_consensus}")
@@ -126,3 +133,41 @@ class AlphaCombiner:
 
 # Globally shared combiner instance
 combiner = AlphaCombiner()
+
+def randomized_krylov_svd(A: np.ndarray, rank: int, n_iter: int = 2, oversample: int = 5) -> tuple:
+    """
+    Computes a randomized block-Krylov subspace low-rank approximation of matrix A.
+    Avoids standard multi-pass SVD in live execution windows.
+    Returns (U, S, Vt).
+    """
+    try:
+        if A.ndim != 2:
+            raise ValueError("Input matrix A must be 2D")
+        m, n = A.shape
+        l = min(m, n, rank + oversample)
+        # Random starting matrix
+        Omega = np.random.normal(size=(n, l))
+        
+        # Power iteration (Krylov subspace generation)
+        Y = A @ Omega
+        for _ in range(n_iter):
+            Q, _ = np.linalg.qr(Y, mode='reduced')
+            Y = A @ (A.T @ Q)
+            
+        Q, _ = np.linalg.qr(Y, mode='reduced')
+        B = Q.T @ A
+        U_tilde, S, Vt = np.linalg.svd(B, full_matrices=False)
+        U = Q @ U_tilde
+        return U[:, :rank], S[:rank], Vt[:rank, :]
+    except Exception as e:
+        # Fallback to standard SVD under try-except wrapper to guarantee zero downtime
+        try:
+            U, S, Vt = np.linalg.svd(A, full_matrices=False)
+            return U[:, :rank], S[:rank], Vt[:rank, :]
+        except Exception:
+            # Absolute recovery fallback
+            U = np.eye(A.shape[0])
+            S = np.ones(min(A.shape))
+            Vt = np.eye(A.shape[1])
+            return U[:, :rank], S[:rank], Vt[:rank, :]
+

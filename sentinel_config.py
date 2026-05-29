@@ -36,6 +36,33 @@ PORTFOLIO_HEAT_CAP = float(DYN_PARAMS.get("portfolio_heat_cap", 0.20))
 HARD_RISK_CAP      = 0.02   # 2.0% per-trade absolute maximum
 LEVERAGE_WALL      = 10.0   # 10× notional margin limit
 
+# Phase 4 Gate Layer — v30.60
+GATE_MAX_LEVERAGE          = 10.0
+GATE_MAX_RISK_PCT_PER_TRADE = 0.02
+GATE_MAX_PORTFOLIO_HEAT    = 0.20
+GATE_BLACKOUT_FRIDAY_HOUR  = 23
+GATE_BLACKOUT_FRIDAY_MIN   = 55
+GATE_BLACKOUT_MONDAY_HOUR  = 0
+GATE_BLACKOUT_MONDAY_MIN   = 15
+
+# Dynamic Router
+ROUTER_EQUITY_UPDATE_THRESHOLD = 50.0
+ROUTER_LOG_PATH = "C:\\Sentinel_Project\\shap_diagnostics\\instrument_eligibility_{date}.json"
+
+# ECN minimum lots — update when broker changes
+GATE_ECN_MIN_LOTS = {
+    "ETHUSD": 0.10, "BTCUSD": 0.01, "SOLUSD": 0.10,
+    "NAS100": 0.10, "US500":  0.10, "US30":   0.10,
+    "NGAS":   0.10, "COPPER": 0.10,    
+    # Forex default: 0.01
+}
+
+# Minimum equity per instrument
+GATE_MIN_EQUITY = {
+    "ETHUSD": 0.0, "BTCUSD": 0.0, "NAS100": 0.0,
+    "SOLUSD": 500.0,  "NGAS":   500.0,  "COPPER": 500.0,
+}
+
 # SYSTEM CONSTANTS (v19.2)
 STALENESS_THRESHOLD = 900   # Hard 900 s signal staleness gate
 ARCTIC_TIMEOUT      = 0.3   # Hard 300ms latency cap for ArcticDB (v19.1)
@@ -163,3 +190,9 @@ else:
 # ---------------------------------------------------------------------------
 MAGIC_NUMBER  = 142
 BROKER_SUFFIX = ""   # Never set manually — always use get_valid_mt5_symbol()
+
+
+# v30.75 Consensus & Variance Safeguards
+CONSENSUS_DIVERGENCE_THRESHOLD = 0.40
+MIN_INFERENCE_AGENTS_REQUIRED  = 2
+STAGNANT_VARIANCE_THRESHOLD    = 1e-7

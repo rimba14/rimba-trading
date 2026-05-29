@@ -129,13 +129,16 @@ class MixTSAgent:
         v_t = X @ X.T # Outer product
         b_t = X * y
         
+        gamma = 0.99
         for s in range(self.L):
-            # 1. Update Covariance: Sigma_{t+1,s} = (Sigma_0^{-1} + sigma^-2 * V_t)^-1
-            new_cov_inv = self.p0_cov_inv[s] + sigma2_inv * v_t
+            # 1. Update Covariance: Apply decay factor to prior precision matrix
+            decayed_cov_inv = self.p0_cov_inv[s] * gamma
+            new_cov_inv = decayed_cov_inv + sigma2_inv * v_t
             new_cov = np.linalg.inv(new_cov_inv + np.eye(self.dim) * 1e-9)
             
-            # 2. Update Mean: mu_{t+1,s} = Sigma_{t+1,s}(Sigma_0^-1 * mu_0 + sigma^-2 * b_t)
-            new_mean = new_cov @ (self.p0_cov_inv[s] @ self.p0_means[s].reshape(-1, 1) + sigma2_inv * b_t)
+            # 2. Update Mean: Decay the prior weighted mean component
+            prior_weighted_mean = decayed_cov_inv @ self.p0_means[s].reshape(-1, 1)
+            new_mean = new_cov @ (prior_weighted_mean + sigma2_inv * b_t)
             
             self.regime_covs[s] = new_cov
             self.regime_means[s] = new_mean.flatten()

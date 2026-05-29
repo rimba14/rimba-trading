@@ -35,6 +35,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+import threading
+import signal
+from gitagent_types import TelemetryState
 
 import numpy as np
 import requests
@@ -322,8 +325,9 @@ def get_conviction_for_tf(oracle: dict, entry_tf: str) -> float:
 # ══════════════════════════════════════════════════════════════════════════════
 #  ATR — INSTRUMENT-SAFE [ARCH FIX] crypto/index-aware floor
 # ══════════════════════════════════════════════════════════════════════════════
-def calculate_atr_h1(symbol: str, period: int = 14) -> float:
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 1, period + 1)
+def calculate_atr_d1(symbol: str, period: int = 14) -> float:
+    """v30.98: Structural ATR uses D1 timeframe ONLY. H1/M15 ATR is PROHIBITED for SL placement."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 1, period + 1)
     if rates is None or len(rates) < period + 1:
         return 0.0
     h, lo, cl = rates["high"], rates["low"], rates["close"]
@@ -336,15 +340,19 @@ def calculate_atr_h1(symbol: str, period: int = 14) -> float:
 
 def get_safe_atr(symbol: str, oracle_atr: float, pos_open: float) -> float:
     """
-    v25.0 instrument-safe ATR.
-    BUG FIX: raw_atr=0.0010 was a hardcoded forex value — useless for BTCUSD/indices.
-    Three floors: H1 computed, 0.20% of price, broker stop level.
+    v30.98 instrument-safe ATR using D1 timeframe.
+    BUG FIX v25.0: raw_atr=0.0010 was a hardcoded forex value — useless for BTCUSD/indices.
+    BUG FIX v30.98: Changed from H1 to D1 ATR. H1 ATR produced SL 6-12x too tight.
+    Three floors: D1 computed, 0.20% of price, broker stop level.
     """
-    h1_atr      = calculate_atr_h1(symbol)
+    d1_atr      = calculate_atr_d1(symbol)
     price_floor = pos_open * 0.002          # 0.20% of open price
     info        = mt5.symbol_info(symbol)
+    tick        = mt5.symbol_info_tick(symbol)
     broker_floor = (info.trade_stops_level * info.point * 3) if info else 0.0
-    candidates  = [v for v in [h1_atr, oracle_atr, price_floor, broker_floor] if v > 0]
+    spread_floor = ((tick.ask - tick.bid) * 1.5) if tick and (tick.ask - tick.bid) > 0 else 0.0
+    
+    candidates  = [v for v in [d1_atr, oracle_atr, price_floor, broker_floor, spread_floor] if v > 0]
     return max(candidates) if candidates else 1e-5
 
 
@@ -453,20 +461,23 @@ def compute_exit_score(
     profit_r = ps.profit_r(current_price, macro_atr, sl_mult)
     elapsed  = broker_now - ps.entry_time
 
-    # ── 1. Virtual Stop Loss / Take Profit (HARD EXIT) ───────────────────────
-    sl_level = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
-    tp_level = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
+    # ── 1. Secondary Failsafe (Broker Execution Failure) (HARD EXIT) ─────────
+    # OPERATION VISIBLE HORIZON: Profit Manager is now a failsafe.
+    # Uses pos.sl and pos.tp if available. If they fail, we add a 10% ATR buffer and force market exit.
+    buffer = macro_atr * 0.10
+    sl_target = pos.sl if pos.sl > 0 else ((ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr))
+    tp_target = pos.tp if pos.tp > 0 else ((ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr))
 
-    if (is_buy and current_price <= sl_level) or (not is_buy and current_price >= sl_level):
+    if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
         sig.hard_exit = True
-        sig.reason_primary = "[HARD VIRTUAL SL]"
-        sig.reasons.append(f"Price={current_price:.5f} ≤ VSL={sl_level:.5f}")
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past SL={sl_target:.5f} by buffer={buffer:.5f}")
         return sig
 
-    if (is_buy and current_price >= tp_level) or (not is_buy and current_price <= tp_level):
+    if (is_buy and current_price >= (tp_target + buffer)) or (not is_buy and current_price <= (tp_target - buffer)):
         sig.hard_exit = True
-        sig.reason_primary = "[VIRTUAL TP]"
-        sig.reasons.append(f"Price={current_price:.5f} ≥ VTP={tp_level:.5f}")
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past TP={tp_target:.5f} by buffer={buffer:.5f}")
         return sig
 
     # ── 2. Macro Shock / Sentiment Kill (HARD EXIT) ──────────────────────────
@@ -1393,28 +1404,33 @@ class SentinelProfitManager:
         oracle = self._oracle.get(pos.symbol)
         hmm_state = oracle.get("hmm_state", "NEUTRAL") if oracle else "NEUTRAL"
         
-        # 1. Server-Side Hard Anchor
+        # 1. Server-Side Hard Anchor Minimums
         raw_sl = calculate_institutional_hard_stop(pos.price_open, is_buy, macro_atr, hmm_state)
-        
         sl_dist = abs(pos.price_open - raw_sl)
+        
         tp_mult = get_atr_multipliers(pos.symbol, hmm_state)[1]
         min_tp_dist = 1.5 * sl_dist
         tp_dist = max(tp_mult * macro_atr, min_tp_dist)
         
         raw_tp = (pos.price_open + tp_dist) if is_buy else (pos.price_open - tp_dist)
+        
+        # Only inject if missing
+        final_sl = normalize_stop(pos.symbol, curr, raw_sl if pos.sl == 0.0 else pos.sl, is_sl=True,  is_buy=is_buy)
+        final_tp = normalize_stop(pos.symbol, curr, raw_tp if pos.tp == 0.0 else pos.tp, is_sl=False, is_buy=is_buy)
 
-        final_sl = normalize_stop(pos.symbol, curr, pos.sl if pos.sl != 0.0 else raw_sl, is_sl=True,  is_buy=is_buy)
-        final_tp = normalize_stop(pos.symbol, curr, pos.tp if pos.tp != 0.0 else raw_tp, is_sl=False, is_buy=is_buy)
-
-        res = mt5.order_send({
-            "action": mt5.TRADE_ACTION_SLTP, "symbol": pos.symbol,
-            "position": pos.ticket, "sl": final_sl, "tp": final_tp,
-        })
-        if res and res.retcode == mt5.TRADE_RETCODE_DONE:
-            logger.info(f"[NAKED_RESCUE] #{pos.ticket} {pos.symbol}: SL={final_sl:.5f} TP={final_tp:.5f}")
-        else:
-            code = res.retcode if res else "N/A"
-            logger.warning(f"[NAKED_FAIL] #{pos.ticket} {pos.symbol}: {code}")
+        if pos.sl == 0.0 or pos.tp == 0.0:
+            res = mt5.order_send({
+                "action": mt5.TRADE_ACTION_SLTP, "symbol": pos.symbol,
+                "position": pos.ticket, "sl": final_sl, "tp": final_tp,
+            })
+            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                msg = f"SL={final_sl:.5f} TP={final_tp:.5f}"
+                logger.info(f"[NAKED_RESCUE] #{pos.ticket} {pos.symbol}: {msg}")
+                TelemetryState.log_audit("PROFIT_MANAGER", pos.symbol, f"Naked Sweep Attached: {msg}")
+            else:
+                code = res.retcode if res else "N/A"
+                logger.warning(f"[NAKED_FAIL] #{pos.ticket} {pos.symbol}: {code}")
+                TelemetryState.log_audit("PROFIT_MANAGER", pos.symbol, f"Naked Sweep Failed: {code}")
 
     def monitor_correlation_shock(self, positions: list):
         if not check_correlation_shock():
@@ -1711,7 +1727,7 @@ class SentinelProfitManager:
                 for pos in all_positions:
                     ps = self._get_state(pos)
                     
-                    # Naked sweep to enforce SL/TP
+                    # Naked sweep strictly attaches missing SL/TP, no retroactive widening
                     if pos.tp == 0.0 or pos.sl == 0.0:
                         self._naked_sweep(pos)
                     

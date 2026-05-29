@@ -62,7 +62,13 @@ class portfolio_guardian:
             chol = np.linalg.cholesky(cov_matrix)
         except np.linalg.LinAlgError:
             # Fallback if matrix is not positive definite
-            chol = np.linalg.svd(cov_matrix)[0] # PCA-based alternative
+            # Use randomized Krylov subspace proxy instead of standard SVD
+            try:
+                from alpha_combiner import randomized_krylov_svd
+                U, _, _ = randomized_krylov_svd(cov_matrix.values, rank=cov_matrix.shape[1])
+                chol = U
+            except Exception:
+                chol = np.linalg.svd(cov_matrix)[0] # PCA-based alternative
             
         # Simulating correlated random returns
         sim_rets = np.random.normal(size=(iterations, len(symbols)))

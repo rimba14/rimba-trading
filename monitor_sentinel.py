@@ -138,3 +138,44 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+class ArcticDBClientWrapper:
+    def __init__(self, arctic_instance):
+        self.arctic = arctic_instance
+        # ensure oracle_cache library exists
+        if "oracle_cache" not in self.arctic.list_libraries():
+            self.arctic.create_library("oracle_cache")
+        self.lib = self.arctic["oracle_cache"]
+
+    def read_latest_timestamp(self, key: str) -> dict:
+        try:
+            df = self.lib.read(key).data
+            if df is None or df.empty:
+                return {}
+            # Convert last row of DataFrame to a dictionary
+            last_row = df.iloc[-1]
+            return last_row.to_dict()
+        except Exception:
+            return {}
+
+def verify_regime_matrix_integrity(db_client, asset_symbol: str) -> bool:
+    """
+    Evaluates condition number sensitivity of our transition matrices.
+    Acts as a proactive circuit breaker prior to real-time risk deterioration.
+    """
+    try:
+        regime_payload = db_client.read_latest_timestamp(f"{asset_symbol}_regime_metrics")
+        print(f"[DEBUG GATING] regime_payload for {asset_symbol}: {regime_payload}")
+        cond_num = regime_payload.get("regime_condition_number", 1.0)
+        print(f"[DEBUG GATING] cond_num: {cond_num}")
+        
+        # Hard boundary: Matrix sensitivity degradation flags unstable states
+        if cond_num > 15.0:
+            # Proactively clamp the Epistemic Entry Gate to risk-off (0.95)
+            return False 
+        return True
+    except Exception as e:
+        print(f"[DEBUG GATING] Exception in verification: {e}")
+        # Failsafe: if we can't read/verify, return True (no block)
+        return True
+

@@ -91,9 +91,10 @@ class ForensicEngine:
 if __name__ == "__main__":
     if mt5.initialize():
         # Test logic (latest deal)
-        import datetime
-        from_date = datetime.datetime.now() - datetime.timedelta(days=1)
-        deals = mt5.history_deals_get(from_date, datetime.datetime.now())
+
+        import datetime as dt
+        from_date = dt.datetime.now() - dt.timedelta(days=1)
+        deals = mt5.history_deals_get(from_date, dt.datetime.now())
         if deals:
             fe = ForensicEngine()
             # In a real run, we'd pass the actual thesis snapshot

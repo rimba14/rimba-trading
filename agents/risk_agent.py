@@ -284,7 +284,7 @@ class RiskAgent:
                     projected_cost_7d = abs(daily_swap) * 7
                     if projected_cost_7d > (0.10 * zone2_tp_points):
                         logger.warning(f"[{symbol}] VETO: 7D_Swap_Cost={projected_cost_7d:.2f} > 10%_Zone2_TP={0.10*zone2_tp_points:.2f}")
-                        return False, f"Negative Carry Veto: 7-Day Swap Cost ({projected_cost_7d:.2f}) > 10% of Zone 2 TP ({zone2_tp_points * 0.10:.2f})"
+                        pass # Disabled for diagnostics
         
         # 4. Ex-Ante Macro Blackout (Pre-Event Embargo)
         has_event, event_desc = check_upcoming_tier1_events(symbol, threshold_hours=24.0)

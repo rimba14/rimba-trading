@@ -325,15 +325,11 @@ class KronosBridge:
             # Retrieve existing XGBoost probability, but update with dynamic prediction if available
             existing_xgb = 0.50
             try:
-                from sentinel_slow_loop import get_xgb_prediction
-                existing_xgb = get_xgb_prediction(ohlcv_df)
-            except Exception as e:
-                try:
-                    lib = self.store[CACHE_LIB]
-                    if f"{symbol}_kronos" in lib.list_symbols():
-                        k_item = lib.read(f"{symbol}_kronos")
-                        existing_xgb = k_item.data.iloc[-1].get('xgboost_prob', 0.50)
-                except: pass
+                lib = self.store[CACHE_LIB]
+                if f"{symbol}_kronos" in lib.list_symbols():
+                    k_item = lib.read(f"{symbol}_kronos")
+                    existing_xgb = k_item.data.iloc[-1].get('xgboost_prob', 0.50)
+            except: pass
 
             print(f"[SLOW LOOP RAW] {symbol} | Kronos: {kronos_raw:.4f} | Mu: {mu:.6f} | Sig: {signal:.2f} | ATR: {base_atr:.5f} | Vol%: {vol_pct:.2f}")
             
