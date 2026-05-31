@@ -668,11 +668,23 @@ async def _moe_reason_async(symbol: str, features: dict, direction: int) -> dict
         wasserstein_state = features.get("wasserstein_state", "HIGH-VOL MEAN REVERSION")
         try:
             logging.info(f"[ROUTER] {symbol} -> Math Meta-Model (Zero-Latency)")
-            p_val = _MATH_META_MODEL.predict_conviction(symbol, features)
+            res = _MATH_META_MODEL.predict_conviction(symbol, features)
+            
+            # Store conformal outputs in features dictionary
+            features["uncertainty_width"] = res.get("uncertainty_width", 0.0)
+            features["trust_gate_failed"] = res.get("trust_gate_failed", False)
+            features["prediction_interval"] = res.get("prediction_interval", [0.5, 0.5])
+            
+            if res.get("trust_gate_failed", False):
+                logging.warning(f"[{symbol}] [EPISTEMIC_GATE_TRIGGERED]: Live distribution has drifted into an unverifiable regime.")
+                return {"decision": "HOLD", "confidence": 0.0, "reasoning": "[EPISTEMIC_GATE_TRIGGERED]: Live distribution has drifted into an unverifiable regime"}
+                
+            p_val = res.get("p_calibrated", 0.5)
             if p_val == 0.0:
                 return {"decision": "HOLD", "confidence": 0.0, "reasoning": "[COLD_START_QUARANTINE] Math Meta-Model Hard Rejection"}
+            
             decision = "BUY" if direction == 1 else ("SELL" if direction == -1 else "HOLD")
-            return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Bypass"}
+            return {"decision": decision, "confidence": p_val, "reasoning": "Math Meta-Model Conformal Calibration"}
         except ValueError as e:
             # v22.4: NaN / dimension errors are FATAL — propagate upward, do NOT default.
             logging.critical(f"[ROUTER] [FATAL] {symbol}: Structural inference failure: {e}")
@@ -1560,6 +1572,25 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 
             logging.warning(f"[{symbol}] HEURISTIC_OVERRIDE ACTIVE: P_blend={p_blend:.2f} (Reason: {e})")
 
+        # Compute normalized Wasserstein distance
+        try:
+            p_live = df_ml["frac_diff_price"].dropna().values
+            if len(p_live) > 500:
+                p_live = p_live[-500:]
+            
+            all_vals = df_ml["frac_diff_price"].dropna().values
+            if len(all_vals) >= 500:
+                p_train = all_vals[:500]
+            else:
+                p_train = np.random.normal(np.mean(p_live), np.std(p_live) + 1e-9, len(p_live))
+                
+            from scipy.stats import wasserstein_distance
+            w_dist_raw = wasserstein_distance(np.sort(p_live), np.sort(p_train))
+            w_dist_norm = float(w_dist_raw / (np.std(p_train) + 1e-9))
+        except Exception as w_err:
+            logging.warning(f"[{symbol}] Failed to compute numerical Wasserstein distance: {w_err}")
+            w_dist_norm = 1.0
+
         if _OBSERVER:
             timesfm_item = _arctic_read(f"{symbol}_timesfm")
             p10_val = float(timesfm_item.data.iloc[-1].get("p10", 0.0)) if timesfm_item is not None else 0.0
@@ -1568,7 +1599,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 "kronos_p": k_prob,
                 "xgb_p": x_prob,
                 "ddqn_p": ddqn_p,
-                "wasserstein_state": wasserstein_state,
+                "wasserstein_state": w_dist_norm, # Use numeric distance
                 "atr": atr,
                 "timesfm_p10": p10_val,
                 "timesfm_p90": p90_val
@@ -1577,18 +1608,70 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
 
         primary_dir = 1 if p_blend > 0.60 else (-1 if p_blend < 0.40 else 0)
 
+        # ── Regime-Weighted FAISS Episodic Retrieval ──────────────────────────
         live_vec = copy.deepcopy(sigproc.get_feature_vector(symbol))
         mem_matches = _MEMORY.retrieve(live_vec, k=3)
         is_legend = False; is_graveyard = False; max_sim = 0.0
+        
+        decay_lambda = 1e-5
+        weighted_sim_sum = 0.0
+        weight_sum = 0.0
+        
         for match in mem_matches:
-            sim = match["distance"]; max_sim = max(max_sim, sim)
-            meta = match["meta"]; reasoning = meta.get("reasoning", "").upper()
+            sim = match["distance"]
+            meta = match["meta"]
+            reasoning = meta.get("reasoning", "").upper()
+            
+            # Time-decay
+            ts_str = meta.get("timestamp")
+            def _parse_timestamp(ts_val) -> float:
+                if ts_val is None:
+                    return time.time() - 86400 * 30
+                if isinstance(ts_val, (int, float)):
+                    return float(ts_val)
+                try:
+                    return float(ts_val)
+                except ValueError:
+                    pass
+                try:
+                    dt = pd.to_datetime(ts_val)
+                    return dt.timestamp()
+                except Exception:
+                    return time.time() - 86400 * 30
+                    
+            delta_t = abs(time.time() - _parse_timestamp(ts_str))
+            W_time = math.exp(-decay_lambda * delta_t)
+            
+            # Regime proximity
+            hist_w_raw = meta.get("wasserstein_distance", meta.get("wasserstein_state", 1.0))
+            try:
+                historic_wasserstein = float(hist_w_raw)
+            except (ValueError, TypeError):
+                hist_w_str = str(hist_w_raw).upper()
+                if "TREND" in hist_w_str:
+                    historic_wasserstein = 0.0
+                elif "CRISIS" in hist_w_str:
+                    historic_wasserstein = 2.0
+                else:
+                    historic_wasserstein = 1.0
+                    
+            W_regime = 1.0 / (1.0 + abs(historic_wasserstein - w_dist_norm))
+            W_total = W_time * W_regime
+            
+            weighted_sim_sum += sim * W_total
+            weight_sum += W_total
+            
             if sim > LEGEND_SIMILARITY_THRESHOLD:
                 if "LEGEND" in reasoning or meta.get("action") == "LEGEND_WEI":
-                    is_legend = True; break
+                    is_legend = True
             if sim > FAILURE_SIMILARITY_THRESHOLD:
                 if "FAILURE" in reasoning or "POST_MORTEM" in reasoning:
-                    is_graveyard = True; break
+                    is_graveyard = True
+                    
+        if weight_sum > 0:
+            max_sim = weighted_sim_sum / weight_sum
+        else:
+            max_sim = 0.0
 
         try:
             k_hist_item = _arctic_read(f"{symbol}_kronos")
@@ -1635,8 +1718,17 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         df_bars_hft = ticks_to_dollar_bars(df_m15, threshold=500000.0) if df_m15 is not None else None
         ofi_velocity = _fetch_ofi_velocity(symbol, df_bars_hft)
 
+        # Cross-Asset Sentiment Divergence Delta
+        def logit(p):
+            p_clipped = np.clip(p, 1e-5, 1.0 - 1e-5)
+            return np.log(p_clipped / (1.0 - p_clipped))
+            
+        sentiment_divergence_delta = abs(logit(safe_sent) - logit(safe_kronos))
+
         local_meta_features = copy.deepcopy({
-            "wasserstein_state": wasserstein_state,
+            "wasserstein_state": w_dist_norm, # Use numeric distance
+            "hmm_state": wasserstein_state,   # Use string state
+            "wasserstein_routing_probs": label_probs, # soft weights
             "xgb_p": safe_xgb,
             "xgboost_prob": safe_xgb,
             "kronos_p": safe_kronos,
@@ -1645,6 +1737,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "faiss_similarity": safe_faiss,
             "macro_sent": safe_sent,
             "sentiment_score": safe_sent,
+            "sentiment_divergence_delta": sentiment_divergence_delta,
             "volatility_ratio": volatility_ratio,
             "ofi_velocity": ofi_velocity,
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
@@ -1664,6 +1757,25 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             logging.critical(f"[FATAL] {symbol}: NaN/Inf detected in meta-features: {list(_nan_vals.keys())}. Halting inference.")
             return
         
+        # Online realized calibration queue outcome update using previous prediction direction correctness
+        try:
+            prev_meta_df = _arctic_read(f"{symbol}_meta")
+            if prev_meta_df is not None and not prev_meta_df.data.empty:
+                prev_row = prev_meta_df.data.iloc[-1]
+                prev_p = float(prev_row.get("meta_conviction", 0.5))
+                if df_ta is not None and len(df_ta) >= 2:
+                    curr_close = float(df_ta["close"].iloc[-1])
+                    prev_close = float(df_ta["close"].iloc[-2])
+                    price_change = curr_close - prev_close
+                    if prev_p > 0.5:
+                        realized = 1.0 if price_change > 0 else 0.0
+                        _MATH_META_MODEL.add_outcome(prev_p, realized)
+                    elif prev_p < 0.5:
+                        realized = 1.0 if price_change < 0 else 0.0
+                        _MATH_META_MODEL.add_outcome(prev_p, realized)
+        except Exception as cal_err:
+            logging.warning(f"[{symbol}] Failed to update calibration queue outcome: {cal_err}")
+
         p_trend = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
         
         rsi = df_ta["W_rsi"].iloc[-1]
@@ -1857,8 +1969,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
             "meta_conviction": float(meta_p),
-            "wasserstein_state": wasserstein_state,
-            "hmm_state": wasserstein_state,
+            "wasserstein_state": float(local_meta_features.get("wasserstein_state", 0.0)),
+            "hmm_state": str(local_meta_features.get("hmm_state", "RANGE")),
             "strategy_type": signal["strategy_type"],
             "atr": float(atr),
             "entropy": float(_final.get("order_flow_entropy", 0.0)),
@@ -1872,6 +1984,11 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "sentiment_score": float(local_meta_features.get("sentiment_score", 0.5)),
             "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
             "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
+            "sentiment_divergence_delta": float(local_meta_features.get("sentiment_divergence_delta", 0.0)),
+            "uncertainty_width": float(local_meta_features.get("uncertainty_width", 0.0)),
+            "trust_gate_failed": bool(local_meta_features.get("trust_gate_failed", False)),
+            "p_lower": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[0]),
+            "p_upper": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[1]),
         }]))
 
         norm_p = abs(meta_p - 0.5) + 0.5

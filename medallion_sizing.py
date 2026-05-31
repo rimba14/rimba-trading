@@ -100,9 +100,21 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
     """
     Secondary Model (Meta-Labeling): Institutional Kelly Sizing
     Augmented by Kronos Cognition Bridge (Phase 165)
+    Integrated with Conformal Uncertainty & Epistemic Gate (Amendment VII)
     """
     equity = account_info.get('equity', 1000.0)
     
+    # Conformal Epistemic Validation check
+    features = features or {}
+    if features.get("trust_gate_failed", False):
+        return {
+            "calculated_risk_dollars": 0.0000,
+            "kelly_f": 0.0000,
+            "win_prob": 0.5,
+            "hcs": hcs,
+            "trust_gate_failed": True
+        }
+
     # 1. Structural Gate: If the technicals are garbage, block the trade before ML is queried.
     if hcs < 2:
         return {"calculated_risk_dollars": 0.0, "kelly_f": 0.0, "win_prob": 0.0, "hcs": hcs}
@@ -146,6 +158,21 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
         f_raw = p - (q / b)
         
     params = get_dynamic_risk_params()
+    base_kelly_fraction = params.get("kelly_fraction", KELLY_FRACTION)
+    
+    # Read Conformal Uncertainty Width & apply scaling penalty
+    uncertainty_width = float(features.get("uncertainty_width", 0.0))
+    scaling_factor = 1.0
+    try:
+        import json
+        if os.path.exists("C:/Sentinel_Project/dynamic_risk_params.json"):
+            with open("C:/Sentinel_Project/dynamic_risk_params.json", "r") as f:
+                data = json.load(f)
+                scaling_factor = float(data.get("uncertainty_scaling_factor", 1.0))
+    except Exception:
+        pass
+        
+    final_kelly_fraction = base_kelly_fraction * max(0.0, 1.0 - (uncertainty_width * scaling_factor))
     
     # Phase 4 Action 2: ATR Volatility Scaling
     atr_scalar = 1.0
@@ -153,13 +180,13 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
         # Inverse relationship: smaller size for high volatility, capped at 2x
         atr_scalar = min(2.0, 0.01 / atr)
         
-    f_kelly = max(0, f_raw) * params["kelly_fraction"] * size_mult * atr_scalar
+    f_kelly = max(0, f_raw) * final_kelly_fraction * size_mult * atr_scalar
     
     # Enforce the 2% maximum absolute risk cap per idea
     risk_dollars = equity * min(f_kelly, RISK_BUDGET_PCT)
     
     return {
-        "calculated_risk_dollars": round(risk_dollars, 2),
+        "calculated_risk_dollars": round(risk_dollars, 4),
         "kelly_f": round(f_kelly, 4),
         "win_prob": round(p, 3),
         "hcs": hcs
