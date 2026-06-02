@@ -899,7 +899,7 @@ async def run_composite_preflight_checklist(
     if acc is None or info is None:
         return False, "Point 2 Fail: Failed to fetch account/symbol info"
 
-    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    current_atr = calculate_structural_atr_d1(symbol, period=14)
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
     risk_budget = acc.balance * 0.02
     affordable_lot = risk_budget / (current_atr * point_val * 3.0 + 1e-12)
@@ -1159,7 +1159,7 @@ def calculate_kelly_lot(symbol, conviction):
     
     # â”€â”€ v25.0: Align Sizing SL with Execution SL (ATR/Swing) â”€â”€
     direction = "BUY" if conviction > 0.5 else "SELL"
-    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    current_atr = calculate_structural_atr_d1(symbol, period=14)
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     spread = tick.ask - tick.bid
     spread_buffer = spread * 1.5
@@ -1319,12 +1319,12 @@ def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> 
     return current_atr, distance_to_swing
 
 def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> float:
-    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using H4 data."""
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, lookback)
+    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using D1 data."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, lookback)
     tick = mt5.symbol_info_tick(symbol)
     
     if rates is None or len(rates) == 0 or tick is None:
-        # Fallback if H4 data is missing
+        # Fallback if D1 data is missing
         return 0.0
         
     current_spread = abs(tick.ask - tick.bid)
@@ -1494,9 +1494,9 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         price = round(tick.ask if direction == "BUY" else tick.bid, digits)
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
-        # v30.98: Use D1 ATR for structural SL placement. H1 ATR retained for intraday sizing only.
-        current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)  # H1 ATR for TP/sizing
-        structural_atr = calculate_structural_atr_d1(symbol, period=14)  # D1 ATR for SL placement
+        # Fix: Unify ATR logic across Sizing, SL, and TP strictly to D1 Structural ATR.
+        current_atr = calculate_structural_atr_d1(symbol, period=14)
+        structural_atr = current_atr
         
         # 1. Server-Side Hard Anchor (Institutional Risk Topology)
         # v30.98: Use asset-class multiplier from _get_asset_multiplier (6.0 for forex)

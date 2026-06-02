@@ -2257,13 +2257,13 @@ def main():
     print("=" * 60)
     import dynamic_instrument_router as router
     import MetaTrader5 as mt5
-    from fastapi_sniper import calculate_atr_and_swing
+    from fastapi_sniper import calculate_structural_atr_d1
 
     if not _LAST_CYCLE_ATRs:
         logging.info("[ROUTER] Pre-fetching ATRs for Cycle 0 routing...")
         for sym in WATCHLIST:
             try:
-                atr, _ = calculate_atr_and_swing(sym, "BUY", 20)
+                atr = calculate_structural_atr_d1(sym, period=14)
                 _LAST_CYCLE_ATRs[sym] = atr
             except Exception:
                 _LAST_CYCLE_ATRs[sym] = 0.0
