@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  qlib_alpha_factory:
+    image: qlib-research:latest
+    container_name: cades_qlib_factory
+    volumes:
+      - /opt/sentinel/shared_alpha_registry:/app/registry
+      - /opt/sentinel/data/arcticdb:/app/data
+    environment:
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+    # Hard CPU Pinning: Restrict background heavy matrix math to cores 2-3
+    cpuset: "2-3"
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpu_shares: 256
+    restart: unless-stopped
+    command: ["nice", "-n", "19", "python3", "/app/mine_alphas.py"]
