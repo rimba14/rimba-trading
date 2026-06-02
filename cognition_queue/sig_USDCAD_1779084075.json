@@ -1,0 +1,12 @@
+{
+  "symbol": "USDCAD",
+  "direction": "SELL",
+  "conviction": 0.340856,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.000554999999999988,
+  "timestamp": 1779084039,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

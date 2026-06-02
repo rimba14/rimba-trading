@@ -1,0 +1,20 @@
+{
+  "symbol": "XAUUSD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.287967,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.2687796950340271,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 18.755000000000045,
+  "timestamp": 1779278075,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.15084100806903128,
+  "vrs": 0.9072316735745932,
+  "applied_dynamic_gate": 0.6366034024868535
+}

@@ -1,0 +1,18 @@
+diagnostic_pipeline.py: 211:     print(f"\n  ✅ WOULD PASS ALL GATES — Would proceed to M15 Tactical!")
+forensic_sl_audit.py: 42:         status = "❌ OVER-RISK" if actual_risk_usd > (risk_target * 1.2) else "✅ OK"
+gitagent_native_validator.py: 26:         status = "✅ STABLE" if drift_score < 0.25 else "⚠️ DRIFTING"
+polymarket_weather_daemon.py: 36:                             print(f"✅ [DAEMON] Market Discovered: {m.get('question')}")
+polymarket_weather_daemon.py: 40:             print(f"❌ [DAEMON] Discovery Error: {e}")
+polymarket_weather_daemon.py: 80:                 print(f"❌ [DAEMON] Runtime Error: {e}")
+sentinel_dashboard.py: 98:         st.success("✅ Matrix: RUNNING")
+sentinel_dashboard.py: 133:                 "Fresh":     "⚠️ STALE" if stale else "✅",
+sentinel_dashboard.py: 154:                 "Gate":      "✅ PASS" if norm >= EPISTEMIC_GATE else "❌ BLOCKED",
+sentinel_dashboard.py: 178:                 "Drift":        "🚨 DRIFT" if data.get("concept_drift") else "✅ OK",
+sentinel_dashboard.py: 210:                     "Stale":     "⚠️" if age > 900 else "✅",
+test_exit_logic.py: 11:     print("✅ Bars calculation passed.")
+test_exit_logic.py: 39:     print("✅ Profit Protector logic passed.")
+test_exit_logic.py: 47:         print(f"\n❌ VERIFICATION FAILED: {e}")
+test_utf8_regression.py: 72:         "Emoji stress test: ✅ ❌ ⚠️ 🔴 🟢 💀 🚨",
+test_utf8_regression.py: 121:         logger.info("[OK] ✅ TRADE_ACTION_SLTP phase complete")
+test_utf8_regression.py: 123:         logger.error("[FAIL] ❌ Naked Kill Switch fired for Ticket #99999")
+test_utf8_regression.py: 145:     _assert("💀" not in content and "🚨" not in content and "✅" not in content and "❌" not in content and "⚠️" not in content,

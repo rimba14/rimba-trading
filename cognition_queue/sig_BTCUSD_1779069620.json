@@ -1,0 +1,12 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "BUY",
+  "conviction": 0.634112,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 366.93785714285434,
+  "timestamp": 1779069604,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

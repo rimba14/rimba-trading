@@ -1,0 +1,12 @@
+{
+  "symbol": "XRPUSD",
+  "direction": "BUY",
+  "conviction": 0.653244,
+  "xgb_p": 0.7986485958099365,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.012542857142857093,
+  "timestamp": 1779099350,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

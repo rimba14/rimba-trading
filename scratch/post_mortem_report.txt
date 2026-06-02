@@ -1,0 +1,8 @@
+Ticket: 1329003926
+Symbol: NAS100
+Entry Time: 2026-05-20 22:54:02
+Exit Time: 2026-05-22 19:40:16
+Entry Price: 29201.65
+Exit Price: 29646.26
+Total Profit: -44.46
+Exit Reason/Comment: [sl 29646.26]

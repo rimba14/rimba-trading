@@ -1,0 +1,12 @@
+{
+  "symbol": "EURSEK",
+  "direction": "SELL",
+  "conviction": 0.383997,
+  "xgb_p": 0.36546915769577026,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.016521428571428638,
+  "timestamp": 1779111551,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

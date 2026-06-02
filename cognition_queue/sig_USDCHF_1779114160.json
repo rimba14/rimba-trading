@@ -1,0 +1,12 @@
+{
+  "symbol": "USDCHF",
+  "direction": "SELL",
+  "conviction": 0.278389,
+  "xgb_p": 0.1827601194381714,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0009057142857142875,
+  "timestamp": 1779114074,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "USDTRY",
+  "direction": "BUY",
+  "conviction": 0.739134,
+  "xgb_p": 0.7815365195274353,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.018805714285713395,
+  "timestamp": 1779104828,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

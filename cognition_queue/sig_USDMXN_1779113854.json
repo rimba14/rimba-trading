@@ -1,0 +1,12 @@
+{
+  "symbol": "USDMXN",
+  "direction": "BUY",
+  "conviction": 0.621262,
+  "xgb_p": 0.5415323972702026,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.027812857142857084,
+  "timestamp": 1779113707,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

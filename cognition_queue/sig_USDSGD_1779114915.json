@@ -1,0 +1,12 @@
+{
+  "symbol": "USDSGD",
+  "direction": "SELL",
+  "conviction": 0.274376,
+  "xgb_p": 0.17410744726657867,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0011357142857142716,
+  "timestamp": 1779114768,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

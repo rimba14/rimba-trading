@@ -1,0 +1,12 @@
+{
+  "symbol": "NZDUSD",
+  "direction": "SELL",
+  "conviction": 0.258587,
+  "xgb_p": 0.23086777329444885,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.0010271428571428534,
+  "timestamp": 1779114079,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

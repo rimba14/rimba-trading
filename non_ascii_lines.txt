@@ -1,0 +1,1 @@
+347:         logger.info(f"[THESIS GUARD] {symbol} held {elapsed_seconds/3600:.1f}h — minimum hold is {min_hold_hours}h. Thesis decay blocked.")

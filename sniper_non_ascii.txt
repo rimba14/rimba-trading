@@ -1,0 +1,8 @@
+45: # Configure Logging — v27.0: Centralized via logger_config.py
+61: # v27.0: Removed logging.basicConfig() — rely on named logger to prevent duplicate outputs
+222:     # v27.0: Boot assertion — MT5 comment field is capped at 31 chars
+415:     # Logic flows strictly: Signal Received -> Delta P Gate (ΔP) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
+543:             # v23.12 Directive: Conviction Delta Gating (ΔP)
+558:     # D. MCP Risk Agent Check (v22.8) — v27.0 Circuit Breaker
+1503:             # v27.0: Post-Execution Verification — confirm broker comment matches AGENT_SIGNATURE
+1718:         Tuple (bid_price, ask_price) — the optimal limit order prices.

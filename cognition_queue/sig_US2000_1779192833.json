@@ -1,0 +1,20 @@
+{
+  "symbol": "US2000",
+  "direction": "BUY",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.661545,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.7871384024620056,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 10.446428571428637,
+  "timestamp": 1779192789,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.06889697685559859,
+  "vrs": 0.6262028409958519,
+  "applied_dynamic_gate": 0.6
+}

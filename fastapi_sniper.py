@@ -1081,12 +1081,7 @@ async def run_composite_preflight_checklist(
             return False, "Point 14 Fail: JPY pair session open blackout"
 
     # Point 15: JPY pair dP/dt velocity kill switch (Rule 6.2)
-    if sym_upper in jpy_pairs:
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 2)
-        if rates is not None and len(rates) >= 2:
-            dp_dt = (rates[-1]['close'] - rates[-2]['close']) / (rates[-2]['close'] + 1e-9) * 100.0
-            if float(dp_dt) <= -0.20:
-                return False, f"Point 15 Fail: JPY pair dP/dt velocity kill switch active ({dp_dt:.3f}% <= -0.20%)"
+    # PURGED: Macro Swing invariant strictly bans dP/dt micro-velocity kills.
 
     # Point 16: Metals major USD release blackout (Rule 6.3)
     if is_in_metals_macro_blackout(symbol) == True:

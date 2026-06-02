@@ -1,0 +1,20 @@
+{
+  "symbol": "GBPAUD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.310973,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.17527303099632263,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.002259285714285686,
+  "timestamp": 1779184291,
+  "version": "v28.27-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.07008258484975297,
+  "vrs": 0.9760844217944902,
+  "applied_dynamic_gate": 0.6218687034101267
+}

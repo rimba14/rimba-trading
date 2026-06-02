@@ -1,0 +1,12 @@
+{
+  "symbol": "FRA40",
+  "direction": "SELL",
+  "conviction": 0.254128,
+  "xgb_p": 0.20243869721889496,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 30.507142857142885,
+  "timestamp": 1779116414,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

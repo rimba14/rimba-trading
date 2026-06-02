@@ -1,0 +1,12 @@
+{
+  "symbol": "EURSEK",
+  "direction": "SELL",
+  "conviction": 0.323301,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.030100000000000016,
+  "timestamp": 1779086157,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

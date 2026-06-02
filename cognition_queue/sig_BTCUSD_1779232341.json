@@ -1,0 +1,20 @@
+{
+  "symbol": "BTCUSD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.347481,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.23418107628822327,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 355.393571428569,
+  "timestamp": 1779232298,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.06561998601981245,
+  "vrs": 0.560449566934846,
+  "applied_dynamic_gate": 0.6
+}

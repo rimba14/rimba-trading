@@ -1,0 +1,12 @@
+{
+  "symbol": "UNIUSD",
+  "direction": "SELL",
+  "conviction": 0.278588,
+  "xgb_p": 0.15698720514774323,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.04171428571428572,
+  "timestamp": 1779115061,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

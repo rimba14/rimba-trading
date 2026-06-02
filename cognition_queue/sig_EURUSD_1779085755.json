@@ -1,0 +1,12 @@
+{
+  "symbol": "EURUSD",
+  "direction": "BUY",
+  "conviction": 0.637592,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.000642142857142861,
+  "timestamp": 1779085728,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

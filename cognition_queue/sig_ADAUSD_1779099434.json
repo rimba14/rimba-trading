@@ -1,0 +1,12 @@
+{
+  "symbol": "ADAUSD",
+  "direction": "BUY",
+  "conviction": 0.660487,
+  "xgb_p": 0.8383331298828125,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0025428571428571423,
+  "timestamp": 1779099350,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

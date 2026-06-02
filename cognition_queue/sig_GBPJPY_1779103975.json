@@ -1,0 +1,12 @@
+{
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "conviction": 0.291949,
+  "xgb_p": 0.13796712458133698,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.253857142857143,
+  "timestamp": 1779103811,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

@@ -1,0 +1,20 @@
+{
+  "symbol": "GER40",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.318312,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.1761111170053482,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 125.79285714285705,
+  "timestamp": 1779209955,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.06687834223757705,
+  "vrs": 0.9405611286946944,
+  "applied_dynamic_gate": 0.6486020063300899
+}

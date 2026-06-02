@@ -1,0 +1,20 @@
+{
+  "symbol": "EURSEK",
+  "direction": "BUY",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.68624,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.7752731442451477,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.011872142857142822,
+  "timestamp": 1779192334,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.012090332545001026,
+  "vrs": 0.6151218332426107,
+  "applied_dynamic_gate": 0.6
+}

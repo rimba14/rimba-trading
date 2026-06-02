@@ -1,0 +1,16 @@
+[
+  {
+    "timestamp": "2026-05-28T15:16:59.352822+00:00",
+    "trade_id": 1358791676,
+    "symbol": "BCHUSD",
+    "pnl": -9.69,
+    "critique": "**DE-BRIEF: BCH"
+  },
+  {
+    "timestamp": "2026-05-28T15:17:39.055620+00:00",
+    "trade_id": 1324798892,
+    "symbol": "USDTRY",
+    "pnl": -2.92,
+    "critique": "**FINANCIAL POST-MORTEM:"
+  }
+]

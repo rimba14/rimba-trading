@@ -1,0 +1,12 @@
+{
+  "symbol": "USDZAR",
+  "direction": "BUY",
+  "conviction": 0.624111,
+  "xgb_p": 0.5441367626190186,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.05402214285714254,
+  "timestamp": 1779117554,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

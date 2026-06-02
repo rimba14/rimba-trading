@@ -1,0 +1,12 @@
+{
+  "symbol": "DOTUSD",
+  "direction": "SELL",
+  "conviction": 0.353452,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.011928571428571415,
+  "timestamp": 1779066022,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

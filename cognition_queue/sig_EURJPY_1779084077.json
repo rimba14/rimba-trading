@@ -1,0 +1,12 @@
+{
+  "symbol": "EURJPY",
+  "direction": "SELL",
+  "conviction": 0.349246,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.12428571428571493,
+  "timestamp": 1779084040,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

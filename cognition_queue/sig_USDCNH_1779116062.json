@@ -1,0 +1,12 @@
+{
+  "symbol": "USDCNH",
+  "direction": "BUY",
+  "conviction": 0.63568,
+  "xgb_p": 0.619284987449646,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.004703571428571378,
+  "timestamp": 1779115779,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

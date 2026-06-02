@@ -11,6 +11,7 @@ import sys
 import os
 import time
 import json
+import math
 import logging
 import random
 from dotenv import load_dotenv
@@ -51,8 +52,6 @@ _VRP_SPREAD = 0.0
 CORE_MAJORS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "SP500", "US30", "NAS100"]
 
 # Directive Omega Global Trackers
-_TICK_STARVATION_DETECTED = False
-_INDEX_STARVATION_DETECTED = False
 
 
 
@@ -572,39 +571,6 @@ def calculate_atr_df(df: pd.DataFrame, period: int) -> float:
     except Exception:
         return 0.0010
 
-def _fetch_ofi_velocity(symbol: str, df_bars: pd.DataFrame) -> float:
-    """
-    Fetch the rolling 5-minute continuous cumulative OFI change-point value
-    directly from the microsecond signal cache in ArcticDB. Falls back to
-    calculating it from df_bars if cache is uninitialized or missing.
-    """
-    try:
-        from arcticdb import Arctic
-        store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
-        lib = store["oracle_cache"]
-        cache_symbol = f"{symbol}_microsecond_cache"
-        if cache_symbol in lib.list_symbols():
-            df_cache = lib.read(cache_symbol).data
-            if not df_cache.empty and "ofi_velocity" in df_cache.columns:
-                val = float(df_cache["ofi_velocity"].iloc[-1])
-                if not np.isnan(val):
-                    return val
-    except Exception:
-        pass
-
-    if df_bars is not None and not df_bars.empty:
-        try:
-            cp_probs = calculate_ofi_and_bocpd(df_bars)
-            if cp_probs is not None and len(cp_probs) > 0:
-                val = float(cp_probs[-1])
-                if not np.isnan(val):
-                    return val
-        except Exception:
-            pass
-
-    return 0.0
-
-
 # -- Meta-Model Serialization Fail-Safe (SRE Patch 0x80) ------------------------
 _META_MODEL = None
 _SHAP_EXPLAINER = None
@@ -1002,7 +968,6 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             
             if symbol.upper() in CORE_MAJORS:
                 global _TICK_STARVATION_DETECTED
-                _TICK_STARVATION_DETECTED = True
                 logging.critical(f"[{symbol}] CORE MAJOR STARVATION. Triggering Global Lock.")
             else:
                 logging.warning(f"[{symbol}] Minor asset starved. Quarantining locally.")
@@ -1010,7 +975,6 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
             if symbol.upper() in _INDICES:
                 global _INDEX_STARVATION_DETECTED
-                _INDEX_STARVATION_DETECTED = True
 
             try:
                 # Directive 1: Increase lookback by 100 (from 750 to 850)
@@ -1336,7 +1300,7 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
 
 def run_inference_for_symbol(symbol: str, prep_data: dict):
     global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
-    global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED, _VRP_SPREAD
+    global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _VRP_SPREAD
     
     df_ml = prep_data["df_ml"]
     df_ta = prep_data["df_ta"]
@@ -1519,7 +1483,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
 
             import alpha_combiner
-            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=(_TICK_STARVATION_DETECTED or is_this_symbol_starved))
+            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=is_this_symbol_starved)
             if not is_consensus:
                 agree_on_direction = False
                 valid_vals = [v for v in active_scores.values() if not np.isnan(v)]
@@ -1716,7 +1680,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         volatility_ratio = float(instant_atr_10 / baseline_atr_200) if baseline_atr_200 > 0.0 else 1.0
         
         df_bars_hft = ticks_to_dollar_bars(df_m15, threshold=500000.0) if df_m15 is not None else None
-        ofi_velocity = _fetch_ofi_velocity(symbol, df_bars_hft)
 
         # Cross-Asset Sentiment Divergence Delta
         def logit(p):
@@ -1739,7 +1702,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "sentiment_score": safe_sent,
             "sentiment_divergence_delta": sentiment_divergence_delta,
             "volatility_ratio": volatility_ratio,
-            "ofi_velocity": ofi_velocity,
             "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
             "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
             "frac_diff": float(_final.get("frac_diff_price", 0.0)),
@@ -1823,7 +1785,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
         
         high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
-        is_degraded = (data_quality_flag != "PRISTINE") or _TICK_STARVATION_DETECTED or is_this_symbol_starved
+        is_degraded = (data_quality_flag != "PRISTINE") or is_this_symbol_starved
         if is_degraded:
             min_p_gate = 0.75
         elif symbol.upper() in high_vol_assets:
@@ -1864,7 +1826,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 "xgb_p": 0.500,
                 "ddqn_p": 0.500,
                 "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-                "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
             }]))
             return
         elif regime_prob < 0.55:
@@ -1913,7 +1874,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 "hawkes_intensity": 0.0,
                 "timestamp": utils.get_utc_epoch(),
                 "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-                "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
             }]))
             return
         
@@ -1983,7 +1943,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             "faiss_similarity": float(local_meta_features.get("faiss_sim", 0.0)),
             "sentiment_score": float(local_meta_features.get("sentiment_score", 0.5)),
             "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-            "ofi_velocity": float(local_meta_features.get("ofi_velocity", 0.0)),
             "sentiment_divergence_delta": float(local_meta_features.get("sentiment_divergence_delta", 0.0)),
             "uncertainty_width": float(local_meta_features.get("uncertainty_width", 0.0)),
             "trust_gate_failed": bool(local_meta_features.get("trust_gate_failed", False)),
@@ -2056,10 +2015,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                 logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag}. Blocking signal.")
                 return
             
-            _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
-            if symbol.upper() in _INDICES and _INDEX_STARVATION_DETECTED:
-                logging.warning(f"[{symbol}] [HARD_VETO] [INDEX_STARVATION_VETO] An index has tick starvation in this cycle. Blocking all index entries.")
-                return
             
             with _CYCLE_LOCK:
                 _CYCLE_PENDING_SIGNALS.append({
@@ -2113,7 +2068,7 @@ def update_slow_oracles(symbol: str, force_refresh: bool = False):
         run_inference_for_symbol(symbol, prep)
 
 async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
-    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _TICK_STARVATION_DETECTED, _INDEX_STARVATION_DETECTED, _VRP_SPREAD
+    global _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _VRP_SPREAD
     global _GLOBAL_CS_RANKS
     
     # Directive 1: Calculate VRP Macro Filter
@@ -2124,9 +2079,6 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
     except Exception as e:
         _VRP_SPREAD = 0.0
         logging.warning(f"[VRP_FILTER] Failed to calculate VRP spread: {e}")
-
-    _TICK_STARVATION_DETECTED = False
-    _INDEX_STARVATION_DETECTED = False
     with _CYCLE_LOCK:
         _CYCLE_P_SCORES = {}
         _CYCLE_PENDING_SIGNALS = []
@@ -2207,10 +2159,6 @@ async def process_matrix_parallel(watchlist: list, force_refresh: bool = False):
             if len(batch) == 10:
                 await asyncio.sleep(0.5)
             batch_idx += 1
-
-    # Rule 2.2: Retrospective consensus gate tightening if tick starvation occurred (Directive Omega)
-    if _TICK_STARVATION_DETECTED:
-        logging.warning("[SRE] TICK STARVATION DETECTED in this cycle. Tightening global divergence gate to 0.15 retrospectively!")
         with _CYCLE_LOCK:
             filtered_sigs = []
             for sig in _CYCLE_PENDING_SIGNALS:
@@ -2305,7 +2253,7 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
     return False, None
 
 def main():
-    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK, _TICK_STARVATION_DETECTED
+    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK
     print("=" * 60)
     import dynamic_instrument_router as router
     import MetaTrader5 as mt5
@@ -2371,7 +2319,6 @@ def main():
         
         while True:
             global _TICK_STARVATION_DETECTED, _IS_STARTUP_OR_SHOCK
-            _TICK_STARVATION_DETECTED = False
             try:
                 event = await mt5_queue.get()
                 

@@ -1,0 +1,12 @@
+{
+  "symbol": "US2000",
+  "direction": "SELL",
+  "conviction": 0.310397,
+  "xgb_p": 0.2642582058906555,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 13.475000000000039,
+  "timestamp": 1779115811,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

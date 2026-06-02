@@ -1,0 +1,12 @@
+{
+  "symbol": "USDCAD",
+  "direction": "SELL",
+  "conviction": 0.280396,
+  "xgb_p": 0.2276427000761032,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0009464285714285227,
+  "timestamp": 1779104815,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

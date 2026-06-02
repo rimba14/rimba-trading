@@ -1,0 +1,12 @@
+{
+  "symbol": "XAGUSD",
+  "direction": "BUY",
+  "conviction": 0.654535,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.6518571428571432,
+  "timestamp": 1779076922,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

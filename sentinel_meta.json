@@ -1,0 +1,72 @@
+{
+  "0": {
+    "action": "LONG",
+    "pnl": 79.53802410827245,
+    "reasoning": "Seeding cold-start episode 1 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "1": {
+    "action": "NEUTRAL",
+    "pnl": 64.40083984183661,
+    "reasoning": "Seeding cold-start episode 2 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "2": {
+    "action": "NEUTRAL",
+    "pnl": -10.841773042140716,
+    "reasoning": "Seeding cold-start episode 3 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "3": {
+    "action": "SHORT",
+    "pnl": -33.45031599293877,
+    "reasoning": "Seeding cold-start episode 4 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "4": {
+    "action": "NEUTRAL",
+    "pnl": 56.25315079470681,
+    "reasoning": "Seeding cold-start episode 5 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "5": {
+    "action": "LONG",
+    "pnl": 129.9149146549137,
+    "reasoning": "Seeding cold-start episode 6 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "6": {
+    "action": "SHORT",
+    "pnl": 56.891178251449375,
+    "reasoning": "Seeding cold-start episode 7 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "7": {
+    "action": "SHORT",
+    "pnl": 96.51441944205007,
+    "reasoning": "Seeding cold-start episode 8 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "8": {
+    "action": "SHORT",
+    "pnl": 74.58747658702374,
+    "reasoning": "Seeding cold-start episode 9 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  },
+  "9": {
+    "action": "LONG",
+    "pnl": -9.895054659932654,
+    "reasoning": "Seeding cold-start episode 10 for systemic initialization",
+    "lesson": "Ensure sufficient volatility discrepancy scaling",
+    "timestamp": "2026-05-26T21:27:07"
+  }
+}

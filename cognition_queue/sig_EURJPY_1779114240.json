@@ -1,0 +1,12 @@
+{
+  "symbol": "EURJPY",
+  "direction": "SELL",
+  "conviction": 0.377205,
+  "xgb_p": 0.23341915011405945,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.14814285714285397,
+  "timestamp": 1779114081,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

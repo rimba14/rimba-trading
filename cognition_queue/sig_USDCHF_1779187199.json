@@ -1,0 +1,20 @@
+{
+  "symbol": "USDCHF",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.354405,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.34089693427085876,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.000757142857142861,
+  "timestamp": 1779187124,
+  "version": "v28.27-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.10529178627589991,
+  "vrs": 0.8027921671771037,
+  "applied_dynamic_gate": 0.6
+}

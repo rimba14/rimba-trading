@@ -1,0 +1,20 @@
+{
+  "symbol": "USDSGD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.357535,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.26010945439338684,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0009171428571428704,
+  "timestamp": 1779211091,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.037424883441365075,
+  "vrs": 0.5983700314554958,
+  "applied_dynamic_gate": 0.6
+}

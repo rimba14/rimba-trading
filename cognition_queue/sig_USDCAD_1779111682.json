@@ -1,0 +1,12 @@
+{
+  "symbol": "USDCAD",
+  "direction": "SELL",
+  "conviction": 0.370641,
+  "xgb_p": 0.22059141099452972,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0009349999999999399,
+  "timestamp": 1779111518,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MEAN_REVERSION"
+}

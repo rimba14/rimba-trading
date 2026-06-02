@@ -1,0 +1,12 @@
+{
+  "symbol": "USDMXN",
+  "direction": "SELL",
+  "conviction": 0.344074,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.01303999999999991,
+  "timestamp": 1779084097,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

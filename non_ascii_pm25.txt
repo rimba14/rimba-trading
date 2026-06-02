@@ -1,0 +1,61 @@
+2: profit_manager.py — SENTINEL PROFIT MANAGER v25.0 (INSTITUTION GRADE)
+11:   [CRITICAL FIX] Fortress Mode trails toward current_price, not back to entry−ATR
+19:   [ARCH FIX]     OracleCache — single ArcticDB read per symbol per cycle
+22:   [ARCH FIX]     ExitScoreEngine — weighted multi-dimensional scoring replaces
+25:   [ARCH FIX]     PSR minimum sample raised from 10 → 25
+53: PSR_MIN_SAMPLES         = 25               # [FIX] was 10 — statistically meaningless
+113:     # NEUTRAL / RANGING / CHOPPY → no adjustment (no silent passthrough bug)
+145:     zone1_done:        bool  = False   # +1.5 ATR → 35%
+146:     zone2_done:        bool  = False   # +2.5 ATR → 35%
+147:     divergence_done:   bool  = False   # conviction-weak scale → 50%
+148:     event_horizon_done: bool = False   # pre-event scale → 50%
+202:     """Single ArcticDB read — returns all oracle fields at once."""
+235: #  ATR — INSTRUMENT-SAFE [ARCH FIX] crypto/index-aware floor
+252:     BUG FIX: raw_atr=0.0010 was a hardcoded forex value — useless for BTCUSD/indices.
+269:     BUG FIX: Previous version used history_deals_get (closed only) →
+270:              10 positions each −2.9% open reported 0% drawdown.
+293: #  BROKER STOP ARMOR  (unified — all SL/TP paths go through this)
+300:     BUG FIX: Breakeven lock in v23.2 skipped this → MT5 10016 errors.
+375:         sig.reasons.append(f"Price={current_price:.5f} ≤ VSL={sl_level:.5f}")
+381:         sig.reasons.append(f"Price={current_price:.5f} ≥ VTP={tp_level:.5f}")
+401:                     f"[VEL_GUARD] {symbol} #{ps.ticket}: velocity suppressed — profit_r={profit_r:.2f}R > 2.5R"
+416:         # Higher profit → require more persistent regime conflict before exiting
+417:         r_gate      = max(3, int(3 + max(0, profit_r)))   # 0R→3, 3R→6, 5R→8 confirms
+467:                 logger.info(f"[EVENT_HORIZON_GATE] {symbol}: suppressing cognitive exits — {event_desc}")
+510:             f"remaining={remaining:.3f} < min_vol={min_vol:.3f} — skipping partial close."
+560:             logger.info(f"[EXIT_SIGNAL_OK] {pos.symbol} #{pos.ticket} → Execution Node")
+616:     BUG FIX: v23.2 used raw dollar P&L — lot size changes corrupted the Sharpe distribution.
+617:     v25.0: profit / notional_value → comparable across position sizes.
+634:     if len(arr) < PSR_MIN_SAMPLES:   # [FIX] was 10 — now 25
+635:         return 1.0                    # insufficient data — no halt
+674:       PositionState registry   — single source of truth, GC'd on close
+675:       OracleCache              — one ArcticDB I/O per symbol per 5 s cycle
+676:       ExitScoreEngine          — weighted multi-dimensional scoring
+677:       ScaleOutCoordinator      — live volume, min_lot validation, no overlap
+678:       Equity-inclusive DD      — Fortress now fires on actual open exposure
+679:       R-multiple PSR           — lot-size-agnostic Sharpe distribution
+680:       Fortress trail           — trails toward current price, not retrace below entry
+681:       TP modification fixed    — target_tp always sent (not pos.tp)
+682:       Execution dedup          — liquidation_sent flag prevents double-close
+683:       Instrument-safe ATR      — 0.20% price floor, broker stop floor, H1 floor
+684:       HMM NEUTRAL handled      — NEUTRAL/RANGING/CHOPPY states have no regime conflict
+685:       State GC                 — closed position state removed every loop
+686:       Velocity kill tightened  — 5-sample window, profit_r > 2.5R protection
+687:       BE SL armored            — normalize_stop applied to all SL paths
+704:         logger.info("Profit Manager v25.0 online — Institution-Grade CADES ACTIVE.")
+778:                    v23.2 used pos.tp → once set, TP never moved.
+780:                    v23.2 set tight_sl = price_open − 0.5 ATR (below entry), locking in loss.
+782:                    v23.2 sent raw price_open → MT5 10016 errors on wide-stop instruments.
+798:         # Always recompute TP dynamically — never stale
+816:         # BUG FIX: v23.2 set tight_sl = price_open − 0.5*ATR (BELOW entry for buys).
+823:                     f"drawdown={drawdown:.1%} — SL trailed to {target_sl:.5f}"
+827:         # BUG FIX: v23.2 sent raw price_open without normalize_stop → 10016 errors.
+856:                 "tp":       float(target_tp),   # [BUG FIX] was pos.tp — never updated TP
+883:         logger.warning(f"[EVENT_HORIZON] {pos.symbol}: {event_desc} — 50% scale + BE SL")
+910:         BUG FIX: raw_atr=0.0010 was a forex constant — useless for BTCUSD.
+966:             # Oracle read (cached — single ArcticDB I/O per symbol per cycle)
+987:             # Conviction (TF-matched, from cached oracle — single read)
+1058:                     f"{trade_ticks} ticks < 100 in first 10 min — exits suppressed."
+1114:         logger.info("Monitor loop started — PSR audit every 10 min | scan every 1 s.")
+1128:                 # State cleanup [ARCH FIX] — prevents ticket reuse state corruption
+1135:                     # Event horizon first — may scale before anything else

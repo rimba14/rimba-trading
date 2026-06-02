@@ -51,6 +51,7 @@ load_dotenv()
 # ── Constants ──────────────────────────────────────────────────────────────────
 MAGIC_NUMBER            = 142
 MAGIC_LEGACY            = 17300
+MAGIC_TOP5              = 777777
 PSR_THRESHOLD           = 0.80
 PSR_EPOCH               = 1778483123        # v19.2 Phase 5 SRE Reset
 PSR_MIN_SAMPLES         = 25               # [FIX] was 10 — statistically meaningless
@@ -232,14 +233,12 @@ class PositionState:
     scaled_fraction:   float = 0.0    # cumulative fraction closed so far
 
     # Conviction tracking
-    conviction_history:   list = field(default_factory=list)
-    thesis_decay_streak:  int  = 0
+    last_conviction_update: float = 0.0
 
     # Regime gate
     regime_conflict_count: int = 0
 
-    # Conviction tracking
-    last_conviction_update: float = 0.0
+    current_conviction:     float = 0.50
     current_conviction:     float = 0.50
     telemetry_logger:       Any   = None
 
@@ -463,10 +462,12 @@ def compute_exit_score(
 
     # ── 1. Secondary Failsafe (Broker Execution Failure) (HARD EXIT) ─────────
     # OPERATION VISIBLE HORIZON: Profit Manager is now a failsafe.
-    # Uses pos.sl and pos.tp if available. If they fail, we add a 10% ATR buffer and force market exit.
+    # Uses ps.initial_sl if available. If they fail, we add a 10% ATR buffer and force market exit.
     buffer = macro_atr * 0.10
-    sl_target = pos.sl if pos.sl > 0 else ((ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr))
-    tp_target = pos.tp if pos.tp > 0 else ((ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr))
+    sl_target = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
+    tp_target = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
+    if ps.initial_sl > 0:
+        sl_target = ps.initial_sl
 
     if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
         sig.hard_exit = True
@@ -487,23 +488,7 @@ def compute_exit_score(
         sig.reasons.append(f"Sentiment={sentiment:.2f} threshold breached for {pos_dir}")
         return sig
 
-    # ── 3. Velocity Kill (HARD EXIT with profit gate) ────────────────────────
-    # BUG FIX: v23.2 used 3-tick window (too noisy) and had no profit protection.
-    # v25.0: 5-sample minimum, velocity kill suppressed if profit_r > 2.5R.
-    hist = ps.conviction_history
-    if len(hist) >= 5:
-        vel_limit = -0.20 if symbol.upper() in _JPY_PAIRS else -0.30
-        delta_p   = hist[-1] - hist[-5]
-        if delta_p < vel_limit:
-            if profit_r > 2.5:
-                logger.info(
-                    f"[VEL_GUARD] {symbol} #{ps.ticket}: velocity suppressed — profit_r={profit_r:.2f}R > 2.5R"
-                )
-            else:
-                sig.hard_exit = True
-                sig.reason_primary = "[VELOCITY KILL]"
-                sig.reasons.append(f"dP/dt={delta_p:.3f} < {vel_limit} over 5 ticks | R={profit_r:.2f}")
-                return sig
+    # ── 3. (REMOVED) Velocity Kill ───────────────────────────────────────────
 
     # ── From here: soft scored exits ─────────────────────────────────────────
 
@@ -522,41 +507,22 @@ def compute_exit_score(
     else:
         ps.regime_conflict_count = 0
 
-    # ── 5. Thesis Decay (scored) ─────────────────────────────────────────────
-    decay_rules     = get_decay_rules(symbol, config)
-    min_hold_secs   = decay_rules.get("min_hold_hours", 12) * 3600
-    decay_threshold = decay_rules.get("decay_threshold", 0.45)
-    thesis_p        = live_p if is_buy else (1.0 - live_p)
+    # ── 5. (REMOVED) Thesis/Dead Money/Theta Exits ───────────────────────────
 
-    if elapsed >= min_hold_secs:
-        entry_c        = abs(ps.entry_conviction - 0.5) + 0.5
-        live_c         = abs(live_p - 0.5) + 0.5
-        conviction_drop = entry_c - live_c
-
-        if thesis_p < decay_threshold:
-            ps.thesis_decay_streak += 1
+    # ── Hysteresis Hardening (v9.5) ──────────────────────────────────────────
+    if sig.score > 0:
+        if elapsed < 1200:
+            logger.info(f"[HARD_HOLD] {symbol}: suppressing exit — age {elapsed:.0f}s < 20m")
+            sig.score = 0.0
+            sig.reasons = [f"SUPPRESSED_HARD_HOLD({elapsed:.0f}s)"]
         else:
-            ps.thesis_decay_streak = 0
-
-        streak_score   = min(ps.thesis_decay_streak / 3, 1.0)
-        drop_score     = min(conviction_drop / 0.15, 1.0) if conviction_drop > 0.10 else 0.0
-        decay_combined = max(streak_score, drop_score)
-
-        if decay_combined > 0:
-            sig.score  += 0.35 * decay_combined
-            sig.reasons.append(
-                f"DECAY(P={thesis_p:.2f}, streak={ps.thesis_decay_streak}, drop={conviction_drop:.3f})"
-            )
-
-    # ── 6. Dead Money (scored) ────────────────────────────────────────────────
-    if h1_candles > 72 and abs(profit_r) < 0.25 and not is_weekend_pause:
-        sig.score += 0.30
-        sig.reasons.append(f"DEAD_MONEY(H1={h1_candles}bars, R={profit_r:.2f})")
-
-    # ── 7. Theta Decay / Time Stop (scored) ──────────────────────────────────
-    if elapsed > MAX_HOLDING_DAYS * 86400 and profit_r <= 0.0:
-        sig.score += 0.50
-        sig.reasons.append(f"THETA(held={elapsed/3600:.1f}h, R={profit_r:.2f})")
+            info = mt5.symbol_info(symbol)
+            if info:
+                min_edge = 30 * info.point
+                if ps.profit_delta(current_price) > -min_edge:
+                    logger.info(f"[HYSTERESIS] {symbol}: suppressing exit — profit delta > -30 points")
+                    sig.score = 0.0
+                    sig.reasons = [f"SUPPRESSED_MIN_EDGE({ps.profit_delta(current_price):.5f} > -{min_edge:.5f})"]
 
     # ── 8. Event Horizon suppression gate ────────────────────────────────────
     if sig.score > 0:
@@ -817,7 +783,7 @@ def get_trailing_closed_positions(limit: int = 50) -> list[dict]:
     # Group deals by position_id
     positions_deals = defaultdict(list)
     for d in deals:
-        if d.magic in (MAGIC_NUMBER, MAGIC_LEGACY):
+        if d.magic in (MAGIC_NUMBER, MAGIC_LEGACY, MAGIC_TOP5):
             positions_deals[d.position_id].append(d)
             
     closed_positions = []
@@ -1112,7 +1078,7 @@ class SentinelProfitManager:
 
         returns = []
         for d in deals:
-            if d.magic not in (MAGIC_NUMBER, MAGIC_LEGACY):    continue
+            if d.magic not in (MAGIC_NUMBER, MAGIC_LEGACY, MAGIC_TOP5):    continue
             if d.entry != mt5.DEAL_ENTRY_OUT:                  continue
             if d.time < PSR_EPOCH:                             continue
             r = _deal_to_return(d)
@@ -1163,226 +1129,14 @@ class SentinelProfitManager:
             logger.error(f"[SRE_HALT_WRITE_ERR] {e}")
         notify(f"**PSR_DEGRADATION**\nPSR={psr_val:.4f} < {PSR_THRESHOLD}\nSRE halt triggered.")
 
-    # ── Profit Locking: SL/TP Modification ───────────────────────────────────
-    def _apply_profit_locks(
-        self, pos, ps: PositionState, macro_atr: float,
-        sl_mult: float, tp_mult: float, current_price: float, drawdown: float
-    ):
-        """
-        v25.0 profit locking engine with v28.33 Strict Green Guard & 80% Trail Lock.
-        """
-        info = mt5.symbol_info(pos.symbol)
-        if not info:
-            return
-        digits  = info.digits
-        is_buy  = ps.is_buy()
-        entry   = ps.entry_price
-        delta   = ps.profit_delta(current_price)
-        tick    = mt5.symbol_info_tick(pos.symbol)
-        curr    = (tick.bid if is_buy else tick.ask) if tick else current_price
-
-        # For MEAN_REVERSION trades (Meridian), apply the specific meridian exit rules
-        if ps.strategy_type == "MEAN_REVERSION":
-            rates = mt5.copy_rates_from_pos(pos.symbol, mt5.TIMEFRAME_M15, 0, 50)
-            if rates is not None and len(rates) >= 20:
-                closes = np.array([r['close'] for r in rates])
-                
-                # BB Mid (SMA 20)
-                bb_mid = float(np.mean(closes[-20:]))
-                bb_std = float(np.std(closes[-20:]))
-                
-                # KC Mid (EMA 20)
-                alpha = 2.0 / (20.0 + 1.0)
-                kc_mid = closes[-20]
-                for p in closes[-19:]:
-                    kc_mid = p * alpha + kc_mid * (1 - alpha)
-                
-                # ATR 20
-                tr_list = []
-                for i in range(len(rates) - 20, len(rates)):
-                    prev_close = rates[i-1]['close']
-                    tr = max(rates[i]['high'] - rates[i]['low'],
-                             abs(rates[i]['high'] - prev_close),
-                             abs(rates[i]['low'] - prev_close))
-                    tr_list.append(tr)
-                kc_atr = float(np.mean(tr_list))
-                kc_upper = float(kc_mid + 2.0 * kc_atr)
-                kc_lower = float(kc_mid - 2.0 * kc_atr)
-                
-                # Check exit conditions
-                should_exit = False
-                exit_reason = ""
-                if is_buy:
-                    if curr >= bb_mid:
-                        should_exit = True
-                        exit_reason = "Meridian Target hit: Price >= BB Mid"
-                    elif curr >= kc_upper:
-                        should_exit = True
-                        exit_reason = "Meridian Target hit: Price >= KC Upper"
-                else:
-                    if curr <= bb_mid:
-                        should_exit = True
-                        exit_reason = "Meridian Target hit: Price <= BB Mid"
-                    elif curr <= kc_lower:
-                        should_exit = True
-                        exit_reason = "Meridian Target hit: Price <= KC Lower"
-                        
-                if should_exit:
-                    logger.info(f"[MERIDIAN_EXIT] {pos.symbol} #{pos.ticket} exiting: {exit_reason} (Price={curr:.5f}, BB_Mid={bb_mid:.5f}, KC_Upper/Lower={kc_upper if is_buy else kc_lower:.5f})")
-                    market_close(pos, reason=exit_reason)
-                    return
-            return  # Skip Momentum profit locks/Fortress Trail for Mean-Reversion trades
-
-        # ── Strict Green Guard Check (v28.33) ────────────────────────────────
-        is_in_profit = (pos.type == mt5.ORDER_TYPE_BUY and curr > pos.price_open) or \
-                       (pos.type == mt5.ORDER_TYPE_SELL and curr < pos.price_open)
-        if not is_in_profit:
-            return  # STRICT GREEN GUARD: Never calculate or move trails while in the red.
-
-        # Start from current physical levels
-        target_sl = pos.sl
-        modify_sl = False
-
-        # ── Trailing Stop Milestone & Activation Gate (v28.33 Constitution) ──
-        initial_sl = getattr(ps, "initial_sl", 0.0)
-        if initial_sl == 0.0:
-            if pos.sl != 0.0:
-                ps.initial_sl = pos.sl
-                initial_sl = pos.sl
-            else:
-                raw_initial = ps.entry_price - (sl_mult * macro_atr) if is_buy else ps.entry_price + (sl_mult * macro_atr)
-                initial_sl = normalize_stop(pos.symbol, curr, raw_initial, is_sl=True, is_buy=is_buy)
-                initial_sl = round(initial_sl, digits)
-                ps.initial_sl = initial_sl
-
-        # Calculate SL Distance
-        sl_dist = abs(entry - initial_sl)
-        if sl_dist <= 0.0:
-            sl_dist = sl_mult * macro_atr
-        if sl_dist <= 0.0:
-            sl_dist = 1.0
-
-        # Mandate Symmetric Take Profits: structurally lock TP distance to min 1.5x SL distance
-        min_tp_dist = 1.5 * sl_dist
-        tp_dist = max(tp_mult * macro_atr, min_tp_dist)
-
-        # Always recompute TP dynamically
-        new_tp = (entry + tp_dist) if is_buy else (entry - tp_dist)
-        target_tp  = normalize_stop(pos.symbol, curr, new_tp, is_sl=False, is_buy=is_buy)
-        target_tp  = round(target_tp, digits)
-        modify_tp  = (pos.tp == 0.0 or abs(pos.tp - target_tp) > 1e-5)
-
-        # Calculate Target Path
-        d_target = abs(target_tp - entry)
-        
-        # Determine active regime for D_guard (v30.60 RANGE Logic)
-        active_regime_for_guard = "TRENDING"
-        try:
-            from arcticdb import Arctic
-            store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
-            row = store["oracle_cache"].read(f"{pos.symbol}_meta").data.iloc[-1]
-            active_regime_for_guard = str(row["wasserstein_state"]).upper()
-        except:
-            pass
-        
-        if "RANGE" in active_regime_for_guard:
-            d_guard = 0.50 * d_target
-        else:
-            d_guard = 0.80 * d_target
-
-        d_current = abs(curr - entry)
-
-        trail_allowed = (d_current >= d_guard)
-        
-        # Scenario A: Terminal RANGE Harvest
-        if "RANGE" in active_regime_for_guard and d_current >= d_guard and not ps.zone1_done:
-            logger.info(f"[RANGE_HARVEST] {pos.symbol} breached D_guard {d_guard:.5f} in RANGE. Harvesting 75%.")
-            tick = mt5.symbol_info_tick(pos.symbol)
-            info = mt5.symbol_info(pos.symbol)
-            if safe_scale_out(pos, ps, 0.75, "RANGE_TERMINAL_HARVEST", info, tick):
-                ps.zone1_done = True
-
-
-        # Unconditional Stop Freeze
-        if not trail_allowed:
-            # Stop loss must remain frozen at initial_sl
-            target_sl = initial_sl
-            modify_sl = (pos.sl == 0.0 or abs(pos.sl - initial_sl) > 1e-5)
-        else:
-            # Trailing is allowed after 80% target is reached
-            # Let's trail SL at 1.5 * macro_atr behind current price to protect profits
-            trail_sl = (curr - 1.5 * macro_atr) if is_buy else (curr + 1.5 * macro_atr)
-            
-            # Tighter trail at 85% TP Killshot (0.5 * macro_atr behind current price)
-            if d_current >= 0.85 * d_target:
-                trail_sl = (curr - 0.5 * macro_atr) if is_buy else (curr + 0.5 * macro_atr)
-                
-            # Move only in the direction that protects the trade (advance_sl logic)
-            candidate = normalize_stop(pos.symbol, curr, trail_sl, is_sl=True, is_buy=is_buy)
-            candidate = round(candidate, digits)
-            if is_buy and (target_sl == 0.0 or candidate > target_sl):
-                target_sl = candidate
-                modify_sl = True
-            elif not is_buy and (target_sl == 0.0 or candidate < target_sl):
-                target_sl = candidate
-                modify_sl = True
-
-        # ── Dispatch modification ────────────────────────────────────────────
-        if modify_sl or modify_tp:
-            mod_req = {
-                "action":   mt5.TRADE_ACTION_SLTP,
-                "symbol":   pos.symbol,
-                "position": pos.ticket,
-                "sl":       float(target_sl),
-                "tp":       float(target_tp),
-            }
-            res = mt5.order_send(mod_req)
-            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
-                logger.info(
-                    f"[PROFIT_LOCK] {pos.symbol} #{pos.ticket}: "
-                    f"SL={target_sl:.5f} TP={target_tp:.5f} | "
-                    f"R={ps.profit_r(current_price, macro_atr, sl_mult):.2f}"
-                )
-            else:
-                code = res.retcode if res else "N/A"
-                msg  = res.comment if res else ""
-                logger.warning(
-                    f"[PROFIT_LOCK_FAIL] {pos.symbol} #{pos.ticket}: {code} {msg}"
-                )
+    def _apply_profit_locks(self, pos, ps, macro_atr, sl_mult, tp_mult, current_price, drawdown):
+        """PURGED: Green Guard Trailing logic is strictly forbidden in Macro Swing mode."""
+        pass
 
     # ── Event Horizon Protection ──────────────────────────────────────────────
-    def _event_horizon_protection(self, pos, ps: PositionState):
-        if ps.event_horizon_done:
-            return
-        try:
-            has_event, event_desc = check_upcoming_tier1_events(pos.symbol, threshold_hours=12.0)
-        except Exception:
-            return
-        if not has_event:
-            return
-
-        logger.warning(f"[EVENT_HORIZON] {pos.symbol}: {event_desc} — 50% scale + BE SL")
-        tick = mt5.symbol_info_tick(pos.symbol)
-        info = mt5.symbol_info(pos.symbol)
-        if not tick or not info:
-            return
-
-        if safe_scale_out(pos, ps, 0.50, "EVENT_HORIZON_50PCT", info, tick):
-            ps.event_horizon_done = True
-
-        is_buy  = ps.is_buy()
-        curr    = tick.bid if is_buy else tick.ask
-        offset  = info.trade_stops_level * info.point + info.spread * info.point
-        be_sl   = (ps.entry_price + offset) if is_buy else (ps.entry_price - offset)
-        be_sl   = normalize_stop(pos.symbol, curr, be_sl, is_sl=True, is_buy=is_buy)
-
-        should_move = (is_buy  and (pos.sl == 0.0 or be_sl > pos.sl)) or \
-                      (not is_buy and (pos.sl == 0.0 or be_sl < pos.sl))
-        if should_move:
-            mt5.order_send({
-                "action": mt5.TRADE_ACTION_SLTP, "symbol": pos.symbol,
-                "position": pos.ticket, "sl": be_sl, "tp": pos.tp,
-            })
+    def _event_horizon_protection(self, pos, ps):
+        """PURGED: Event horizon scale-outs violate structural Swing metrics."""
+        pass
 
     # ── Naked Sweep (orphaned positions) ──────────────────────────────────────
     def _naked_sweep(self, pos):
@@ -1432,81 +1186,8 @@ class SentinelProfitManager:
                 logger.warning(f"[NAKED_FAIL] #{pos.ticket} {pos.symbol}: {code}")
                 TelemetryState.log_audit("PROFIT_MANAGER", pos.symbol, f"Naked Sweep Failed: {code}")
 
-    def monitor_correlation_shock(self, positions: list):
-        if not check_correlation_shock():
-            return
-            
-        logger.warning("[SHOCK_DETECTOR] CORRELATION SHOCK DETECTED! Initiating proactive liquidation protocols.")
-        
-        for pos in positions:
-            cluster = _get_cluster(pos.symbol)
-            if cluster not in ["RISK_ON_CRYPTO", "RISK_ON_EQUITY", "RISK_ON_FX"]:
-                continue
-                
-            tick = mt5.symbol_info_tick(pos.symbol)
-            if not tick:
-                continue
-            current_price = tick.bid if pos.type == 0 else tick.ask
-            
-            macro_atr = get_safe_atr(pos.symbol, 0.0, pos.price_open)
-            
-            if pos.type == 0:  # BUY
-                tighter_sl = pos.price_open - 2.0 * macro_atr
-                if current_price <= tighter_sl:
-                    logger.critical(f"[SHOCK_BREACH_FATAL] BUY {pos.symbol} #{pos.ticket} price {current_price} <= tight SL {tighter_sl}. Executing failsafe MARKET_CLOSE.")
-                    signal = FailsafeSignal(
-                        ticket=pos.ticket,
-                        symbol=pos.symbol,
-                        action=FailsafeAction.MARKET_CLOSE,
-                        trigger=f"SHOCK_BREACH_FATAL: Price {current_price} already below tight SL {tighter_sl}. FORCING MARKET CLOSE."
-                    )
-                    market_close(pos, reason="SHOCK_BREACH_FATAL")
-                else:
-                    logger.warning(f"[SHOCK_TIGHTEN] BUY {pos.symbol} #{pos.ticket} tightening SL to {tighter_sl}")
-                    info = mt5.symbol_info(pos.symbol)
-                    digits = info.digits if info else 5
-                    tighter_sl_norm = normalize_stop(pos.symbol, current_price, tighter_sl, is_sl=True, is_buy=True)
-                    tighter_sl_norm = round(tighter_sl_norm, digits)
-                    
-                    mt5.order_send({
-                        "action": mt5.TRADE_ACTION_SLTP,
-                        "symbol": pos.symbol,
-                        "position": pos.ticket,
-                        "sl": float(tighter_sl_norm),
-                        "tp": pos.tp
-                    })
-            else:  # SELL
-                tighter_sl = pos.price_open + 2.0 * macro_atr
-                if current_price >= tighter_sl:
-                    logger.critical(f"[SHOCK_BREACH_FATAL] SELL {pos.symbol} #{pos.ticket} price {current_price} >= tight SL {tighter_sl}. Executing failsafe MARKET_CLOSE.")
-                    signal = FailsafeSignal(
-                        ticket=pos.ticket,
-                        symbol=pos.symbol,
-                        action=FailsafeAction.MARKET_CLOSE,
-                        trigger=f"SHOCK_BREACH_FATAL: Price {current_price} already above tight SL {tighter_sl}. FORCING MARKET CLOSE."
-                    )
-                    market_close(pos, reason="SHOCK_BREACH_FATAL")
-                else:
-                    logger.warning(f"[SHOCK_TIGHTEN] SELL {pos.symbol} #{pos.ticket} tightening SL to {tighter_sl}")
-                    info = mt5.symbol_info(pos.symbol)
-                    digits = info.digits if info else 5
-                    tighter_sl_norm = normalize_stop(pos.symbol, current_price, tighter_sl, is_sl=True, is_buy=False)
-                    tighter_sl_norm = round(tighter_sl_norm, digits)
-                    
-                    mt5.order_send({
-                        "action": mt5.TRADE_ACTION_SLTP,
-                        "symbol": pos.symbol,
-                        "position": pos.ticket,
-                        "sl": float(tighter_sl_norm),
-                        "tp": pos.tp
-                    })
-
     # ── Main Position Audit ───────────────────────────────────────────────────
     def _audit_positions(self, positions: list, config: dict):
-        try:
-            self.monitor_correlation_shock(positions)
-        except Exception as shock_err:
-            logger.error(f"[SHOCK_ERR] Error in monitor_correlation_shock: {shock_err}")
 
         now               = time.time()
         drawdown, _equity = get_equity_drawdown()
@@ -1563,10 +1244,7 @@ class SentinelProfitManager:
             live_p   = get_conviction_for_tf(oracle, ps.entry_tf)
             thesis_p = live_p if ps.is_buy() else (1.0 - live_p)
 
-            # Update conviction history and peak
-            ps.conviction_history.append(thesis_p)
-            if len(ps.conviction_history) > 50:
-                ps.conviction_history.pop(0)
+    
 
             if ps.is_buy():
                 ps.peak_price = max(ps.peak_price, current_price)
@@ -1576,128 +1254,46 @@ class SentinelProfitManager:
             profit_r_now    = ps.profit_r(current_price, macro_atr, sl_mult)
             ps.peak_profit_r = max(ps.peak_profit_r, profit_r_now)
 
-            # H1 bars since entry
-            h1_rates   = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_H1, int(pos.time), broker_now + 3600)
-            h1_candles = len(h1_rates) if h1_rates is not None else 0
-
-            # Weekend pause (non-crypto only)
-            is_crypto  = classify_symbol(symbol) == "CRYPTO"
-            dt_now     = datetime.fromtimestamp(broker_now, tz=timezone.utc)
-            is_weekend = (not is_crypto) and (
-                (dt_now.weekday() == 4 and dt_now.strftime("%H:%M") >= "23:55") or
-                dt_now.weekday() in [5, 6] or
-                (dt_now.weekday() == 0 and dt_now.strftime("%H:%M") < "00:15")
-            )
-
-            # Sentiment
-            sentiment = 0.0
-            try:
-                from gitagent_utils import fetch_unstructured_sentiment
-                sentiment = fetch_unstructured_sentiment(symbol)
-            except Exception:
-                pass
-
-            # Data density grace (first 10 minutes with thin data)
-            rates_since = mt5.copy_rates_range(
-                symbol, mt5.TIMEFRAME_M1, int(pos.time), broker_now + 60
-            )
-            trade_ticks = int(np.sum(rates_since["tick_volume"])) if rates_since is not None else 999
-            data_sparse = (trade_ticks < 100) and ((broker_now - pos.time) < 600)
-
-            # ── Memory-Based Execution Layer (Soft Stop) ──────────────────────
-            soft_stop_distance = 2.0 * macro_atr
-            d_current = abs(current_price - pos.price_open)
-            is_in_profit = (pos.type == mt5.ORDER_TYPE_BUY and current_price > pos.price_open) or \
-                           (pos.type == mt5.ORDER_TYPE_SELL and current_price < pos.price_open)
-                           
-            if not is_in_profit and d_current >= soft_stop_distance:
-                logger.warning(f"[MEMORY_SOFT_STOP] {symbol} #{pos.ticket} exceeded {soft_stop_distance:.5f} (2.0x ATR). Liquidating before Hard Anchor.")
-                info = mt5.symbol_info(symbol)
-                if safe_scale_out(pos, ps, 1.0, "MEMORY_SOFT_STOP", info, tick):
+            # ENFORCED POSITION LIFE-CYCLE INVARIANT SCHEMA
+            
+            # 1. Read static broker side conditions natively
+            hard_stop_loss = pos.sl
+            hard_take_profit = pos.tp
+            
+            # 2. Hard Invariant Assertions: Structural check against explicit execution parameters
+            if ps.is_buy():
+                if current_price <= hard_stop_loss and hard_stop_loss > 0:
+                    logger.warning(f"[MACRO_EXIT] {symbol} #{pos.ticket}: PHYSICAL_STOP_LOSS_BROKEN")
+                    push_exit_signal(pos, "PHYSICAL_STOP_LOSS_BROKEN")
+                    market_close(pos, "PHYSICAL_STOP_LOSS_BROKEN")
                     continue
-
-            # ── Profit Locking ────────────────────────────────────────────────
-            self._apply_profit_locks(
-                pos, ps, macro_atr, sl_mult, tp_mult, current_price, drawdown
-            )
-
-            # ── Event Horizon Protection (shielded secondary module) ──────────
-            self._event_horizon_protection(pos, ps)
-
-            # ── Divergence Scale-Out (runs outside profit lock to use live conviction) ──
-            info = mt5.symbol_info(symbol)
-            delta = ps.profit_delta(current_price)
-            if (not ps.divergence_done and
-                    delta >= 2.5 * macro_atr and
-                    thesis_p < 0.65 and tick and info):
-                if safe_scale_out(pos, ps, 0.50, "DIVERGENCE_SCALE_50PCT", info, tick):
-                    ps.divergence_done = True
-
-            # ── Exit Scoring ──────────────────────────────────────────────────
-            if not data_sparse:
-                exit_sig = compute_exit_score(
-                    ps=ps, oracle=oracle, current_price=current_price,
-                    macro_atr=macro_atr, sl_mult=sl_mult, live_p=live_p,
-                    config=config, sentiment=sentiment,
-                    broker_now=broker_now, h1_candles=h1_candles,
-                    is_weekend_pause=is_weekend,
-                )
+                if current_price >= hard_take_profit and hard_take_profit > 0:
+                    logger.warning(f"[MACRO_EXIT] {symbol} #{pos.ticket}: PHYSICAL_TAKE_PROFIT_HIT")
+                    push_exit_signal(pos, "PHYSICAL_TAKE_PROFIT_HIT")
+                    market_close(pos, "PHYSICAL_TAKE_PROFIT_HIT")
+                    continue
             else:
-                logger.info(
-                    f"[DATA_GRACE] {symbol} #{pos.ticket}: "
-                    f"{trade_ticks} ticks < 100 in first 10 min — exits suppressed."
-                )
-                exit_sig = ExitSignal()
-
-            should_exit = exit_sig.hard_exit or (exit_sig.score >= EXIT_SCORE_THRESHOLD)
-
-            if should_exit:
-                reason = (
-                    f"{exit_sig.reason_primary} | "
-                    f"{' | '.join(exit_sig.reasons)} | "
-                    f"R={profit_r_now:.2f} | peak_R={ps.peak_profit_r:.2f} | "
-                    f"PnL={pos.profit:+.2f}"
-                )
-                logger.warning(f"[SRE_EXIT] {symbol} #{pos.ticket}: {reason}")
-
-                # Execution deduplication [ARCH FIX]
-                ps.liquidation_sent    = True
-                ps.last_liquidation_ts = now
-
-                push_exit_signal(pos, reason)
-                success = market_close(pos, "SRE_LIQUIDATION")
-
-                if not success:
-                    ps.liquidation_sent = False   # Reset for retry next cycle
-                else:
-                    # Diagnostic ticket
-                    diag = {
-                        "event":        exit_sig.reason_primary,
-                        "symbol":       symbol,
-                        "ticket":       pos.ticket,
-                        "direction":    "BUY" if ps.is_buy() else "SELL",
-                        "hmm_state":    hmm_state,
-                        "live_p":       live_p,
-                        "exit_score":   round(exit_sig.score, 4),
-                        "pnl":          round(pos.profit, 2),
-                        "r_multiple":   round(profit_r_now, 3),
-                        "peak_r":       round(ps.peak_profit_r, 3),
-                        "timestamp":    int(now),
-                        "version":      "v25.0",
-                    }
-                    diag_path = DIAG_DIR / f"exit_{symbol}_{int(now)}.json"
-                    try:
-                        from filelock import FileLock
-                        with FileLock(str(diag_path) + ".lock"):
-                            with open(diag_path, "w") as fh:
-                                json.dump(diag, fh, indent=2)
-                    except Exception as e:
-                        logger.warning(f"[DIAG_WRITE_ERR] {e}")
-            else:
-                logger.debug(
-                    f"[OK] {symbol} #{pos.ticket}: score={exit_sig.score:.2f} | "
-                    f"R={profit_r_now:.2f} | HMM={hmm_state} | thesis_p={thesis_p:.3f}"
-                )
+                if current_price >= hard_stop_loss and hard_stop_loss > 0:
+                    logger.warning(f"[MACRO_EXIT] {symbol} #{pos.ticket}: PHYSICAL_STOP_LOSS_BROKEN")
+                    push_exit_signal(pos, "PHYSICAL_STOP_LOSS_BROKEN")
+                    market_close(pos, "PHYSICAL_STOP_LOSS_BROKEN")
+                    continue
+                if current_price <= hard_take_profit and hard_take_profit > 0:
+                    logger.warning(f"[MACRO_EXIT] {symbol} #{pos.ticket}: PHYSICAL_TAKE_PROFIT_HIT")
+                    push_exit_signal(pos, "PHYSICAL_TAKE_PROFIT_HIT")
+                    market_close(pos, "PHYSICAL_TAKE_PROFIT_HIT")
+                    continue
+            
+            # 3. Macro Oracle Check: Evaluated formally by the HMM Regime state
+            if hmm_state == "STRUCTURAL_REGIME_INVERSION":
+                logger.warning(f"[MACRO_EXIT] {symbol} #{pos.ticket}: ORACLE_REGIME_INVERSION_VERIFIED")
+                push_exit_signal(pos, "ORACLE_REGIME_INVERSION_VERIFIED")
+                market_close(pos, "ORACLE_REGIME_INVERSION_VERIFIED")
+                continue
+                
+            # 4. Total Trailing/Velocity Blindness: 
+            # No other conditional paths are permitted. Position holds steady.
+            logger.debug(f"[OK] {symbol} #{pos.ticket}: HOLDING STRUCTURAL TRAJECTORY | HMM={hmm_state}")
 
     # ── Monitor Loop ──────────────────────────────────────────────────────────
     def monitor_loop(self):
@@ -1710,9 +1306,22 @@ class SentinelProfitManager:
                     self.audit_performance()
                     last_audit = time.time()
 
+                scan_interval = 10
+                closed_deals = get_trailing_closed_positions(limit=50)
+                if closed_deals:
+                    one_hour_ago = time.time() - 3600
+                    recent_closed = [c for c in closed_deals if c.get("exit_time", 0) > one_hour_ago]
+                    if recent_closed:
+                        wins = sum(1 for c in recent_closed if c.get("profit", 0) > 0)
+                        win_rate = wins / len(recent_closed)
+                        if win_rate < 0.25:
+                            logger.info(f"[THROTTLING] Win rate {win_rate:.0%} < 25% over last hour. Throttling scan to 30s.")
+                            scan_interval = 30
+
                 sentinel_pos  = mt5.positions_get(magic=MAGIC_NUMBER)  or []
                 legacy_pos    = mt5.positions_get(magic=MAGIC_LEGACY)  or []
-                all_positions = list(sentinel_pos) + list(legacy_pos)
+                top5_pos      = mt5.positions_get(magic=MAGIC_TOP5)    or []
+                all_positions = list(sentinel_pos) + list(legacy_pos) + list(top5_pos)
                 
                 # Naked Kill Switch disabled: We want physical stops.
                 
@@ -1736,7 +1345,7 @@ class SentinelProfitManager:
                 if active_audit_positions:
                     self._audit_positions(active_audit_positions, config)
 
-                time.sleep(1)
+                time.sleep(scan_interval)
 
             except Exception as e:
                 import traceback

@@ -1,0 +1,196 @@
+{
+  "entry_metrics": {
+    "probability_vector": [
+      0.3078453242778778,
+      0.7534223080520754
+    ],
+    "adjusted_conviction": 0.6520533848312453,
+    "information_activity_ratio": 1.1134098175661913,
+    "order_flow_bocpd_probability": 0.0,
+    "wasserstein_cluster_index": 2,
+    "volatility_ratio": 1.1134098175661913,
+    "ofi_velocity": 0.0
+  },
+  "trajectory": [
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.09,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.7689,
+      "sl": 6.74241,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.08,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76892,
+      "sl": 6.76828,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.08,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76893,
+      "sl": 6.7683,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.06,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.7691,
+      "sl": 6.76831,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.07,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76905,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.06,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76909,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.07,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76903,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.07,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76899,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.07,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.769,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.08,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76897,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -180,
+      "floating_unrealized_pnl": -0.1,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76881,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -179,
+      "floating_unrealized_pnl": -0.09,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76886,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -179,
+      "floating_unrealized_pnl": -0.1,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.7688,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -179,
+      "floating_unrealized_pnl": -0.1,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.7688,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -179,
+      "floating_unrealized_pnl": -0.11,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76877,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -179,
+      "floating_unrealized_pnl": -0.1,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 6.76879,
+      "sl": 6.76848,
+      "tp": 6.79657,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    }
+  ],
+  "exit_metrics": {
+    "exit_mechanism": "TERMINAL_AMNESIA_SYNC",
+    "mt5_return_code": 10009
+  }
+}
