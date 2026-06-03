@@ -28,3 +28,10 @@
 - **Order Transaction Loop:** `Go-to-Python IPC Architecture Configured`
 - **Text Ingestion Layout:** `String Telemetry Compression Implemented`
 - **SRE Workspace Gates:** `Sub-agent Task Isolation Wired`
+
+## 7. Autonomous Optimization Protocol
+| System Component | Current State | Active Metric / Ticket |
+| :--- | :--- | :--- |
+| **SRE Loop Diagnostics** | LEAP Feedback Loops Active | [Verified 3-Iteration Sandbox Re-entrancy Cap] |
+| **Prompt Optimization** | Microsoft SkillOpt RIG ENGAGED | Training Sweep Initialized (Epoch 0/5) |
+| **Harness Hyperparameters** | Batch Size: 16 \| LR Budget: 4-8 Diffs | Target Weights: ~/.hermes/skills/best_skill.md |
