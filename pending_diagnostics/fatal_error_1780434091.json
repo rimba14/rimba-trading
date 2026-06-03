@@ -1,0 +1,8 @@
+{
+    "timestamp": 1780434091,
+    "symbol": "ETHUSD",
+    "error_type": "UnboundLocalError",
+    "message": "cannot access local variable 'ddqn_p' where it is not associated with a value",
+    "traceback": "Traceback (most recent call last):\n  File \"C:\\Sentinel_Project\\sentinel_slow_loop.py\", line 2030, in run_inference_for_symbol\n    \"ddqn_p\": float(ddqn_p),\n                    ^^^^^^\nUnboundLocalError: cannot access local variable 'ddqn_p' where it is not associated with a value\n",
+    "halt_required": true
+}

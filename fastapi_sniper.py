@@ -42,6 +42,67 @@ from sentinel_config import (
     MAGIC_NUMBER, HARD_RISK_CAP, AC_LARGE_ORDER_THRESHOLD
 )
 
+GO_CLI_BINARY = r"C:\Sentinel_Project\go_engine\mt5-pp-cli.exe"
+
+class CachedAccountInfo:
+    def __init__(self, data):
+        self.balance = data.get('balance', 0.0)
+        self.equity = data.get('equity', 0.0)
+        self.margin = data.get('current_margin', 0.0)
+        self.margin_free = self.equity - self.margin
+        self.margin_level = (self.equity / self.margin * 100.0) if self.margin > 0 else 999.0
+        self.profit = data.get('floating_pnl', 0.0)
+
+def get_cached_account_info():
+    """
+    Pattern 2: Local Account Replication.
+    Queries the SQLite state DB first to avoid locking MT5 COM.
+    """
+    db_path = os.path.expanduser('~/.hermes/state.db')
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM account_telemetry WHERE id=1")
+            row = cursor.fetchone()
+            conn.close()
+            if row: 
+                return CachedAccountInfo(dict(row))
+        except:
+            pass
+    return mt5.account_info()
+
+def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float = 0.0, tp: float = 0.0, ticket: int = 0) -> str:
+    """
+    Pattern 1: Out-of-GIL Go Order Transaction Layer
+    Routes payloads to the compiled Go CLI out-of-band to prevent Python GIL blocking.
+    """
+    if not os.path.exists(GO_CLI_BINARY):
+        logger.warning(f"Go binary not found at {GO_CLI_BINARY}. Falling back to native MT5.")
+        return "FALLBACK_NATIVE"
+    
+    cmd = [
+        GO_CLI_BINARY,
+        command,
+        "--symbol", symbol,
+        "--size", str(size),
+        "--sl", str(sl),
+        "--tp", str(tp),
+        "--ticket", str(ticket)
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            logger.info(f"[GO_CLI] {res.stdout.strip()}")
+            return res.stdout.strip()
+        else:
+            logger.error(f"[GO_CLI_ERROR] {res.stderr.strip()}")
+            return f"ERROR: {res.stderr.strip()}"
+    except Exception as e:
+        logger.error(f"[GO_CLI_CRASH] {str(e)}")
+        return f"CRASH: {str(e)}"
+
 load_dotenv()
 
 # Configure Logging â€” v27.0: Centralized via logger_config.py
@@ -509,7 +570,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
     all_positions = mt5.positions_get()
     if all_positions:
-        account_info = mt5.account_info()
+        account_info = get_cached_account_info()
         for p in all_positions:
             if signal.symbol in p.symbol and p.magic == MAGIC_NUMBER:
                 p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
@@ -685,7 +746,7 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
         return False
 
     # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if acc:
         if acc.margin_level > 0 and acc.margin_level < 200.0:
             logger.warning(f"[{symbol}] Signal REJECTED: Margin Level too low ({acc.margin_level})")
@@ -815,7 +876,7 @@ def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
 
 def get_daily_drawdown() -> float:
     """Calculate daily drawdown relative to starting balance and peak equity of the day (Rule 7.1)."""
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if not acc:
         return 0.0
     try:
@@ -906,7 +967,7 @@ async def run_composite_preflight_checklist(
         return False, "Point 1 Fail: Sizing <= 0 (Zero-Sizing Veto)"
 
     # Point 2: Affordability Check
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     info = mt5.symbol_info(symbol)
     if acc is None or info is None:
         return False, "Point 2 Fail: Failed to fetch account/symbol info"
@@ -1155,7 +1216,7 @@ def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float
 def calculate_kelly_lot(symbol, conviction):
     info = mt5.symbol_info(symbol)
     tick = mt5.symbol_info_tick(symbol)
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if not info or not tick or not acc: return 0.0
 
     # â”€â”€ v23.1: Micro-Price Baseline â”€â”€
@@ -1552,7 +1613,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         
         # --- NEW LOGIC: Recalculate Lot Size based on Final SL & Enforce TP Floor ---
         # Sizing Recalculation
-        acc = mt5.account_info()
+        acc = get_cached_account_info()
         sl_dist_points = final_sl_dist / (info.point + 1e-12)
         point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
         max_dollar_risk = acc.balance * 0.02
