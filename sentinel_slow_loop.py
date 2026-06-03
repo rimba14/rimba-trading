@@ -764,6 +764,9 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
         if "cold_start_quarantine" in reasoning_text.lower() or reasoning_conf == 0.0:
             p_final = 0.0
             logging.warning(f"[{symbol}] [COLD_START_QUARANTINE] Meta-model Veto active -> Forced 0.0")
+        elif reasoning_decision == "HOLD" and "rejection" not in reasoning_text.lower():
+            p_final = 0.500
+            logging.info(f"[{symbol}] Neutral/Range State detected by Meta-Model -> Assigned Neutral 0.500")
         else:
             p_final = 0.500
             logging.warning(f"[{symbol}] MoE Gate Hard Rejection engaged -> Forced Neutral 0.500")

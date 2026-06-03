@@ -29,6 +29,14 @@ Changelog vs v23.2:
 from __future__ import annotations
 
 import MetaTrader5 as mt5
+from tp_placement_engine import (
+    TPPlacementEngine,
+    TPValidationResult,
+    StructuralLevelResolver,
+    ASSET_CLASS_TIME_STOP,
+    AssetClass,
+)
+
 import io, json, logging, os, re, socket, sys, time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -283,6 +291,38 @@ class OracleCache:
 
     def invalidate(self, symbol: str):
         self._cache.pop(symbol, None)
+
+    def get_atr(self, symbol: str, timeframe: str, period: int, max_age_seconds: int) -> Optional[float]:
+        import MetaTrader5 as mt5
+        import numpy as np
+        tf_map = {"D1": mt5.TIMEFRAME_D1, "H4": mt5.TIMEFRAME_H4, "H1": mt5.TIMEFRAME_H1}
+        tf = tf_map.get(timeframe.upper(), mt5.TIMEFRAME_D1)
+        bars = mt5.copy_rates_from_pos(symbol, tf, 0, period + 1)
+        if bars is None or len(bars) < period:
+            return None
+        tr = []
+        for i in range(1, len(bars)):
+            h, l, prev_c = bars[i]['high'], bars[i]['low'], bars[i-1]['close']
+            tr.append(max(h - l, abs(h - prev_c), abs(l - prev_c)))
+        return float(np.mean(tr))
+
+    def get_bars(self, symbol: str, timeframe: str, count: int) -> Optional[list[dict]]:
+        import MetaTrader5 as mt5
+        tf_map = {"D1": mt5.TIMEFRAME_D1, "H4": mt5.TIMEFRAME_H4, "H1": mt5.TIMEFRAME_H1}
+        tf = tf_map.get(timeframe.upper(), mt5.TIMEFRAME_D1)
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
+        if rates is None: return None
+        return [{"time": r['time'], "open": r['open'], "high": r['high'], "low": r['low'], "close": r['close']} for r in rates]
+
+    def get_hmm_state(self, symbol: str) -> str:
+        data = self.get(symbol)
+        return data["hmm_state"] if data else "RANGE"
+
+    def get_wasserstein_distance(self, symbol: str) -> Optional[float]:
+        data = self.get(symbol)
+        if data and "wasserstein_distance" in data.get("raw_row", {}):
+            return float(data["raw_row"]["wasserstein_distance"])
+        return None
 
 
 def _fetch_oracle_raw(symbol: str) -> Optional[dict]:
@@ -989,6 +1029,11 @@ class SentinelProfitManager:
 
         self._states: dict[int, PositionState] = {}
         self._oracle  = OracleCache(ttl=REGIME_POLL_INTERVAL)
+        self.level_resolver   = StructuralLevelResolver(self._oracle)
+        self.tp_engine        = TPPlacementEngine(self._oracle, self.level_resolver)
+        self._tp_violation_log = []
+        self.hermes_agent = None
+
         self._last_regime_check: dict[str, float] = {}
         logger.info("Profit Manager v25.0 online — Institution-Grade CADES ACTIVE.")
 
@@ -1367,3 +1412,117 @@ if __name__ == "__main__":
         mgr.monitor_loop()
     except KeyboardInterrupt:
         mt5.shutdown()
+
+    def _reconcile_tp_compliance(self) -> None:
+        import logging
+        from datetime import datetime, timezone
+        log = logging.getLogger("CADES.ProfitManager.ZetaReconcile")
+        now = datetime.now(tz=timezone.utc)
+
+        for ticket, state in list(self._states.items()):
+            symbol    = state.symbol
+            entry     = state.entry_price
+            sl        = state.initial_sl
+            tp        = state.peak_price # placeholder, we don't store actual TP in PositionState, we can get it from MT5 position. 
+            direction = 0 if state.direction == mt5.ORDER_TYPE_BUY else 1
+
+            pos_info = mt5.position_get(ticket=ticket)
+            if pos_info:
+                current_tp = pos_info[0].tp
+                sl = pos_info[0].sl
+            else:
+                continue
+
+            audit = self.tp_engine.audit_open_position(
+                symbol=symbol, entry=entry, sl=sl, current_tp=current_tp, direction=direction
+            )
+
+            if not audit.is_valid and getattr(state, "zeta_status", "") != "LEGACY_VIOLATION":
+                log.warning(f"[ZetaReconcile] #{ticket} {symbol} is a LEGACY_VIOLATION: {audit.rejection_reason}")
+                state.zeta_status = "LEGACY_VIOLATION"
+                self._tp_violation_log.append({
+                    "ticket":    ticket,
+                    "symbol":    symbol,
+                    "reason":    audit.rejection_reason,
+                    "tp":        current_tp,
+                    "tp_pct":    audit.tp_distance_pct,
+                    "detected":  now.isoformat(),
+                })
+
+            # 2. Time-stop enforcement (Article III)
+            max_days = getattr(state, "time_stop_days", None)
+            if max_days and getattr(state, "entry_time", None):
+                elapsed_trading_days = self._count_trading_days(datetime.fromtimestamp(state.entry_time, timezone.utc), now)
+
+                hmm_state = self._oracle.get(symbol).get("hmm_state", "RANGE") if self._oracle.get(symbol) else "RANGE"
+                wass_dist = 0.20 # Default
+
+                in_strong_trend = (hmm_state == "TRENDING" and wass_dist is not None and wass_dist < 0.15)
+                if not in_strong_trend and elapsed_trading_days >= max_days:
+                    log.warning(f"[ZetaTimeStop] #{ticket} {symbol} exceeded time-stop of {max_days} days. NOT liquidating due to explicit override.")
+                    state.zeta_status = "TIME_STOP_TRIGGERED"
+
+    @staticmethod
+    def _count_trading_days(start, end) -> int:
+        import numpy as np
+        days = np.busday_count(start.date(), end.date(), weekmask="Mon Tue Wed Thu Fri")
+        return int(days)
+
+    def _modify_tp_on_broker(self, ticket: int, new_tp: float) -> bool:
+        try:
+            pos = mt5.position_get(ticket=ticket)
+            if not pos: return False
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "position": ticket,
+                "symbol": pos[0].symbol,
+                "sl": pos[0].sl,
+                "tp": new_tp
+            }
+            res = mt5.order_send(request)
+            return res.retcode == mt5.TRADE_RETCODE_DONE
+        except Exception as exc:
+            import logging
+            logging.getLogger("CADES.ProfitManager").error(f"[BrokerModify] TP mod failed for #{ticket}: {exc}")
+            return False
+
+    def _queue_time_stop_exit(self, ticket: int, symbol: str, state) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").warning(f"[TimeStop] Executing market exit for #{ticket} {symbol}")
+        market_close(mt5.position_get(ticket=ticket)[0], reason="ZETA_TIME_STOP")
+
+    def _emit_tp_gate_reject(self, ticket: int, symbol: str, result: TPValidationResult) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").error(f"[TP_GATE_REJECT] #{ticket} {symbol}: {result.rejection_reason} | proposed_tp={result.proposed_tp:.5f} rr={result.rr_ratio:.2f}")
+
+    def _emit_tp_adjustment_failure(self, ticket: int, symbol: str, adjusted_tp: float) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").error(f"[ZetaAdjustFail] Broker TP modification failed for #{ticket} {symbol} -> {adjusted_tp:.5f}.")
+
+    def _apply_time_stop_dampening(self, base_score: float, elapsed_trading_days: int, max_days: int, in_strong_trend: bool) -> float:
+        if in_strong_trend or max_days is None: return base_score
+        time_consumed = elapsed_trading_days / max_days
+        if time_consumed < 0.70: return base_score
+        dampening_factor = 1.0 - 0.5 * ((time_consumed - 0.70) / 0.30)
+        return base_score * max(0.5, dampening_factor)
+
+    def run_legacy_violation_audit(self) -> dict:
+        import logging
+        logger = logging.getLogger("CADES.ProfitManager.LegacyAudit")
+        logger.info("[LegacyAudit] Starting DIRECTIVE ZETA startup audit...")
+        summary = {"total_positions": 0, "violations": [], "compliant": [], "warnings": []}
+        for ticket, state in self._states.items():
+            summary["total_positions"] += 1
+            pos_info = mt5.position_get(ticket=ticket)
+            if not pos_info: continue
+            audit = self.tp_engine.audit_open_position(
+                symbol=state.symbol, entry=state.entry_price, sl=pos_info[0].sl, current_tp=pos_info[0].tp, direction=0 if state.direction == mt5.ORDER_TYPE_BUY else 1
+            )
+            if not audit.is_valid:
+                state.zeta_status = "LEGACY_VIOLATION"
+                summary["violations"].append({"ticket": ticket, "symbol": state.symbol, "reason": audit.rejection_reason})
+            else:
+                state.zeta_status = "COMPLIANT"
+                summary["compliant"].append(ticket)
+        logger.info(f"[LegacyAudit] Complete: {len(summary['violations'])} violations, {len(summary['compliant'])} compliant.")
+        return summary

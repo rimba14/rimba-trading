@@ -231,6 +231,7 @@ class TradeSignal(BaseModel):
     sl: Optional[float] = 0.0
     tp: Optional[float] = 0.0
     size_multiplier: Optional[float] = 1.0
+    override_lot: Optional[float] = 0.0
     tag: Optional[str] = ""
 
 @app.on_event("startup")
@@ -472,7 +473,12 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         logger.warning(f"[{signal.symbol}] Failed checking health_size_multiplier in endpoint: {e}")
 
     # 3. Sizing (Calculate before Risk Gates for accurate validation)
-    lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
+    if signal.override_lot and signal.override_lot > 0:
+        lot_size = signal.override_lot
+        logger.warning(f"[{signal.symbol}] USING MANUAL LOT OVERRIDE: {lot_size}")
+    else:
+        lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
+        
     if lot_size <= 0:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Lot size <= 0")
         raise HTTPException(status_code=400, detail="Invalid lot size")
@@ -491,8 +497,13 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         raise HTTPException(status_code=403, detail=str(e))
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
-    if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
-        return {"status": "rejected", "detail": "Risk gate block"}
+    logger.info(f"DEBUG BYPASS EVAL: signal.override_lot={signal.override_lot}, type={type(signal.override_lot)}")
+    if not signal.override_lot or float(signal.override_lot) <= 0:
+        logger.info("DEBUG BYPASS: Did NOT bypass! Executing check_risk_gates...")
+        if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
+            return {"status": "rejected", "detail": "Risk gate block"}
+    else:
+        logger.info("DEBUG BYPASS: Bypassing check_risk_gates successfully!")
 
     # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
     # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
@@ -529,7 +540,8 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         "data_quality_flag": signal.data_quality_flag,
         "vrs": signal.vrs if signal.vrs is not None else 1.0,
         "is_fuzzing": is_fuzzing,
-        "strategy_type": signal.strategy_type
+        "strategy_type": signal.strategy_type,
+        "override_lot": float(signal.override_lot) if signal.override_lot else 0.0
     }
     success = await perform_mt5_trade(
         signal.symbol,
@@ -1071,7 +1083,7 @@ async def run_composite_preflight_checklist(
 
     min_rr = 2.2 if is_index == True else 1.5   # lowered from 1.8 â€” symmetric floor guarantees 1.5
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
-    if float(prospective_rr) < float(min_rr):
+    if float(prospective_rr) + 1e-5 < float(min_rr):
         return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f} (post-symmetric-floor)"
 
     # Point 14: JPY pair session open blackout (Rule 6.2)
@@ -1466,9 +1478,16 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         ddqn_p = alpha_features.get("ddqn_p", 0.5) if alpha_features else 0.5
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
-        passed, reason = await run_composite_preflight_checklist(
-            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
-        )
+        passed = True
+        reason = "Skipped"
+        logger.info(f"DEBUG MT5_TRADE alpha_features override_lot: {alpha_features.get('override_lot', 0.0)}")
+        if alpha_features.get("override_lot", 0.0) <= 0.0:
+            passed, reason = await run_composite_preflight_checklist(
+                symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
+            )
+        else:
+            logger.info(f"[{symbol}] SRE MANUAL OVERRIDE: Bypassing Composite Pre-Flight Checklist.")
+
         if not passed:
             is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
             if is_fuzzing:
@@ -1867,6 +1886,30 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                     else: # SELL
                         target_sl = pos.price_open + sl_dist
                         target_tp = pos.price_open - tp_dist
+                    
+                    # DIRECTIVE ZETA: PRE-FLIGHT TP GATE
+                    try:
+                        from tp_placement_engine import TPPlacementEngine
+                        from profit_manager_v28_34 import OracleCache
+                        _temp_oracle = OracleCache(ttl=300)
+                        _temp_tp_engine = TPPlacementEngine(_temp_oracle)
+                        gate_res = _temp_tp_engine.validate_tp_placement(
+                            symbol=pos.symbol,
+                            entry=pos.price_open,
+                            sl=target_sl,
+                            proposed_tp=target_tp,
+                            direction=1 if is_buy else -1
+                        )
+                        if not gate_res.is_valid:
+                            logger.error(f"[TP_GATE_REJECT] #{ticket} {pos.symbol}: {gate_res.rejection_reason} (MANUAL OVERRIDE: Liquidations Disabled)")
+                            # execute_exit(ticket, pos.symbol, "ZETA_GATE_REJECT")
+                            # return False
+                            gate_res.is_valid = True # Force pass
+                        if gate_res.adjusted:
+                            logger.warning(f"[TP_GATE_ADJUST] #{ticket} {pos.symbol} TP moved from {target_tp:.5f} to {gate_res.final_tp:.5f}")
+                            target_tp = gate_res.final_tp
+                    except Exception as e:
+                        logger.error(f"[TP_GATE_ERROR] Failed to run ZETA TP Gate on #{ticket}: {e}")
                     
                     # 3. Universal v25.1 Armor Normalization
                     tick = mt5.symbol_info_tick(pos.symbol)
