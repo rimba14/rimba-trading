@@ -1,0 +1,12 @@
+{
+  "symbol": "AUDJPY",
+  "direction": "SELL",
+  "conviction": 0.320005,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0835000000000008,
+  "timestamp": 1779069681,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

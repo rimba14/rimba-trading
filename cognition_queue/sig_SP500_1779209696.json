@@ -1,0 +1,20 @@
+{
+  "symbol": "SP500",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.32909,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.20243869721889496,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 23.36714285714288,
+  "timestamp": 1779209660,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.05340149963945828,
+  "vrs": 1.0009372117700903,
+  "applied_dynamic_gate": 0.6703373962372324
+}

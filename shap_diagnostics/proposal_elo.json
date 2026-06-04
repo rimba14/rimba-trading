@@ -1,0 +1,1297 @@
+{
+  "ratings": {
+    "ACCURACY_WEIGHTED": 1200.0,
+    "MAX_CONVICTION": 1200.0,
+    "SHAP_FILTERED": 1200.0
+  },
+  "history": [
+    {
+      "timestamp": 1779729967.9547114,
+      "symbol": "BCHUSD",
+      "entry_price": 0.5882352941176471,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.34902769264935807,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.34902769264935807
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729967.9987204,
+      "symbol": "SOLUSD",
+      "entry_price": 0.47058823529411764,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4623506507977093,
+        "MAX_CONVICTION": 0.282794713973999,
+        "SHAP_FILTERED": 0.4623506507977093
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729969.8355174,
+      "symbol": "XRPUSD",
+      "entry_price": 0.35294117647058826,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5183736113930967,
+        "MAX_CONVICTION": 0.29122647643089294,
+        "SHAP_FILTERED": 0.5183736113930967
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729971.3474357,
+      "symbol": "DOTUSD",
+      "entry_price": 0.11764705882352941,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5514007063116431,
+        "MAX_CONVICTION": 0.669283043837562,
+        "SHAP_FILTERED": 0.5514007063116431
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729971.3692627,
+      "symbol": "ADAUSD",
+      "entry_price": 0.6470588235294118,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.48771374222190966,
+        "MAX_CONVICTION": 0.26700180768966675,
+        "SHAP_FILTERED": 0.48771374222190966
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729975.8914168,
+      "symbol": "UNIUSD",
+      "entry_price": 0.8235294117647058,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4771476540292285,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.4771476540292285
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729975.9358432,
+      "symbol": "TRXUSD",
+      "entry_price": 0.7647058823529411,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.34604052930759244,
+        "MAX_CONVICTION": 0.2364996373653412,
+        "SHAP_FILTERED": 0.34604052930759244
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729980.3994827,
+      "symbol": "NZDJPY",
+      "entry_price": 0.5294117647058824,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5342976677514661,
+        "MAX_CONVICTION": 0.7361152270605871,
+        "SHAP_FILTERED": 0.5342976677514661
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729983.7102773,
+      "symbol": "USDHKD",
+      "entry_price": 0.7058823529411765,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.45223696350253795,
+        "MAX_CONVICTION": 0.2687796950340271,
+        "SHAP_FILTERED": 0.45223696350253795
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729984.2517507,
+      "symbol": "SP500",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.38258403426326604,
+        "MAX_CONVICTION": 0.21189230680465698,
+        "SHAP_FILTERED": 0.38258403426326604
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729984.2771986,
+      "symbol": "USDCNH",
+      "entry_price": 0.29411764705882354,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6088840192252449,
+        "MAX_CONVICTION": 0.7857979978089122,
+        "SHAP_FILTERED": 0.6088840192252449
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729984.3598945,
+      "symbol": "USDSGD",
+      "entry_price": 0.4117647058823529,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5016834042245395,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.5016834042245395
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729987.9107127,
+      "symbol": "GER40",
+      "entry_price": 0.058823529411764705,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6396926186018757,
+        "MAX_CONVICTION": 0.7738423966053872,
+        "SHAP_FILTERED": 0.6396926186018757
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729988.137681,
+      "symbol": "HK50",
+      "entry_price": 0.17647058823529413,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5940870989946131,
+        "MAX_CONVICTION": 0.7820789080637998,
+        "SHAP_FILTERED": 0.5940870989946131
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729988.1618447,
+      "symbol": "US2000",
+      "entry_price": 0.8823529411764706,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3949405239668731,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.3949405239668731
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779729991.2722144,
+      "symbol": "FRA40",
+      "entry_price": 0.23529411764705882,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6003551084773726,
+        "MAX_CONVICTION": 0.7799982178419556,
+        "SHAP_FILTERED": 0.6003551084773726
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730045.7990386,
+      "symbol": "SOLUSD",
+      "entry_price": 0.8571428571428571,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4860932016043817,
+        "MAX_CONVICTION": 0.23253744840621948,
+        "SHAP_FILTERED": 0.4860932016043817
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730046.0991642,
+      "symbol": "XRPUSD",
+      "entry_price": 0.5,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.49217218977386445,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.49217218977386445
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730046.3055894,
+      "symbol": "DOTUSD",
+      "entry_price": 0.2857142857142857,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3568438818191107,
+        "MAX_CONVICTION": 0.3544684676066614,
+        "SHAP_FILTERED": 0.3568438818191107
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730049.2172794,
+      "symbol": "TRXUSD",
+      "entry_price": 0.5714285714285714,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3106718747189525,
+        "MAX_CONVICTION": 0.27849578857421875,
+        "SHAP_FILTERED": 0.3106718747189525
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730052.523385,
+      "symbol": "NZDJPY",
+      "entry_price": 0.35714285714285715,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3980479318520034,
+        "MAX_CONVICTION": 0.29122647643089294,
+        "SHAP_FILTERED": 0.3980479318520034
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730057.2549243,
+      "symbol": "EURPLN",
+      "entry_price": 0.7142857142857143,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5056866529211603,
+        "MAX_CONVICTION": 0.2687796950340271,
+        "SHAP_FILTERED": 0.5056866529211603
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730057.695152,
+      "symbol": "USDSGD",
+      "entry_price": 0.42857142857142855,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.650570151504779,
+        "MAX_CONVICTION": 0.9056744901037038,
+        "SHAP_FILTERED": 0.650570151504779
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730057.701109,
+      "symbol": "USDHKD",
+      "entry_price": 0.21428571428571427,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6263807816282427,
+        "MAX_CONVICTION": 0.8164173320141586,
+        "SHAP_FILTERED": 0.6263807816282427
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730057.7340624,
+      "symbol": "SP500",
+      "entry_price": 0.9285714285714286,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3925114963862939,
+        "MAX_CONVICTION": 0.22621427476406097,
+        "SHAP_FILTERED": 0.3925114963862939
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730057.7386115,
+      "symbol": "GER40",
+      "entry_price": 0.07142857142857142,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6722319667810327,
+        "MAX_CONVICTION": 0.8436263704528132,
+        "SHAP_FILTERED": 0.6722319667810327
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730062.0662093,
+      "symbol": "HK50",
+      "entry_price": 0.14285714285714285,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6080106597752225,
+        "MAX_CONVICTION": 0.8064451394298662,
+        "SHAP_FILTERED": 0.6080106597752225
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730062.3704634,
+      "symbol": "US2000",
+      "entry_price": 0.7857142857142857,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.40050017995827797,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.40050017995827797
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730125.2906466,
+      "symbol": "SOLUSD",
+      "entry_price": 0.8571428571428571,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4603055634648786,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.4603055634648786
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730126.4226396,
+      "symbol": "DOTUSD",
+      "entry_price": 0.07142857142857142,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6386223564621262,
+        "MAX_CONVICTION": 0.7848095523947268,
+        "SHAP_FILTERED": 0.6386223564621262
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730126.6717746,
+      "symbol": "UNIUSD",
+      "entry_price": 0.7857142857142857,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.485849767172401,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.485849767172401
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730126.8791249,
+      "symbol": "XRPUSD",
+      "entry_price": 0.5,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4919700566448949,
+        "MAX_CONVICTION": 0.27849578857421875,
+        "SHAP_FILTERED": 0.4919700566448949
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730126.9794023,
+      "symbol": "ADAUSD",
+      "entry_price": 0.7142857142857143,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4567862219134502,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.4567862219134502
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730131.581966,
+      "symbol": "TRXUSD",
+      "entry_price": 0.5714285714285714,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5125095676133293,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.5125095676133293
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730139.8547516,
+      "symbol": "USDSGD",
+      "entry_price": 0.42857142857142855,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6405620924142675,
+        "MAX_CONVICTION": 0.9189501568812563,
+        "SHAP_FILTERED": 0.6405620924142675
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730140.3558445,
+      "symbol": "SP500",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.382661425080015,
+        "MAX_CONVICTION": 0.21189230680465698,
+        "SHAP_FILTERED": 0.382661425080015
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730140.4437828,
+      "symbol": "USDCNH",
+      "entry_price": 0.35714285714285715,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.587309162379258,
+        "MAX_CONVICTION": 0.8093711768405317,
+        "SHAP_FILTERED": 0.587309162379258
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730140.4929402,
+      "symbol": "EURPLN",
+      "entry_price": 0.6428571428571429,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5345929644013331,
+        "MAX_CONVICTION": 0.7366319961978542,
+        "SHAP_FILTERED": 0.5345929644013331
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730140.596385,
+      "symbol": "USDHKD",
+      "entry_price": 0.21428571428571427,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5309176885704302,
+        "MAX_CONVICTION": 0.6493569191629867,
+        "SHAP_FILTERED": 0.5309176885704302
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730146.244704,
+      "symbol": "GER40",
+      "entry_price": 0.14285714285714285,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6130717940479212,
+        "MAX_CONVICTION": 0.7908920554182889,
+        "SHAP_FILTERED": 0.6130717940479212
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730146.9632895,
+      "symbol": "HK50",
+      "entry_price": 0.2857142857142857,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5594485712599103,
+        "MAX_CONVICTION": 0.7214614845280699,
+        "SHAP_FILTERED": 0.5594485712599103
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730146.9685879,
+      "symbol": "US2000",
+      "entry_price": 0.9285714285714286,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.39304946303245625,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.39304946303245625
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730208.7709782,
+      "symbol": "DOTUSD",
+      "entry_price": 0.14285714285714285,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3539168052307735,
+        "MAX_CONVICTION": 0.3396053733185875,
+        "SHAP_FILTERED": 0.3539168052307735
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730209.1340003,
+      "symbol": "UNIUSD",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.21589246064439396,
+        "MAX_CONVICTION": 0.21083125270929148,
+        "SHAP_FILTERED": 0.21589246064439396
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730209.1611147,
+      "symbol": "SOLUSD",
+      "entry_price": 0.8571428571428571,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5227530503506024,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.5227530503506024
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730209.1930332,
+      "symbol": "ADAUSD",
+      "entry_price": 0.6428571428571429,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4963739503247555,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.4963739503247555
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730214.3150353,
+      "symbol": "TRXUSD",
+      "entry_price": 0.42857142857142855,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.33693543567505285,
+        "MAX_CONVICTION": 0.27849578857421875,
+        "SHAP_FILTERED": 0.33693543567505285
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730219.738395,
+      "symbol": "USDTRY",
+      "entry_price": 0.7857142857142857,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.38809345834805026,
+        "MAX_CONVICTION": 0.2364996373653412,
+        "SHAP_FILTERED": 0.38809345834805026
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730225.9976776,
+      "symbol": "EURPLN",
+      "entry_price": 0.5714285714285714,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5087534827312497,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.5087534827312497
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730226.9280891,
+      "symbol": "USDSGD",
+      "entry_price": 0.35714285714285715,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6216407769662486,
+        "MAX_CONVICTION": 0.8419851679652042,
+        "SHAP_FILTERED": 0.6216407769662486
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730227.0362458,
+      "symbol": "USDHKD",
+      "entry_price": 0.21428571428571427,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5007623133993551,
+        "MAX_CONVICTION": 0.36001110076904297,
+        "SHAP_FILTERED": 0.5007623133993551
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730227.3420403,
+      "symbol": "SP500",
+      "entry_price": 0.9285714285714286,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3925579630292068,
+        "MAX_CONVICTION": 0.22621427476406097,
+        "SHAP_FILTERED": 0.3925579630292068
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730232.9736252,
+      "symbol": "HK50",
+      "entry_price": 0.07142857142857142,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6432890055122579,
+        "MAX_CONVICTION": 0.8063783149619457,
+        "SHAP_FILTERED": 0.6432890055122579
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730233.4263408,
+      "symbol": "US2000",
+      "entry_price": 0.7142857142857143,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.40350955573966263,
+        "MAX_CONVICTION": 0.26700180768966675,
+        "SHAP_FILTERED": 0.40350955573966263
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730291.061064,
+      "symbol": "SOLUSD",
+      "entry_price": 0.8,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.40714852696181775,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.40714852696181775
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730291.5689669,
+      "symbol": "DOTUSD",
+      "entry_price": 0.6,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5751508510555783,
+        "MAX_CONVICTION": 0.8076082978427833,
+        "SHAP_FILTERED": 0.5751508510555783
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730291.665582,
+      "symbol": "ADAUSD",
+      "entry_price": 0.9333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5098291070430694,
+        "MAX_CONVICTION": 0.23747029900550842,
+        "SHAP_FILTERED": 0.5098291070430694
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730291.7260702,
+      "symbol": "UNIUSD",
+      "entry_price": 0.6666666666666666,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.28748756165231704,
+        "MAX_CONVICTION": 0.2722192396831464,
+        "SHAP_FILTERED": 0.28748756165231704
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730291.8030434,
+      "symbol": "XRPUSD",
+      "entry_price": 0.5333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5200182943536499,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.5200182943536499
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730294.6144948,
+      "symbol": "TRXUSD",
+      "entry_price": 0.4666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3827987237162374,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.3827987237162374
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730297.054268,
+      "symbol": "EURGBP",
+      "entry_price": 0.13333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.35574508853255143,
+        "MAX_CONVICTION": 0.3268857127241517,
+        "SHAP_FILTERED": 0.35574508853255143
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730299.4994006,
+      "symbol": "USDTRY",
+      "entry_price": 0.8666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3382167420594781,
+        "MAX_CONVICTION": 0.21894066035747528,
+        "SHAP_FILTERED": 0.3382167420594781
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730305.1908789,
+      "symbol": "EURPLN",
+      "entry_price": 0.3333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4481944143987512,
+        "MAX_CONVICTION": 0.27756452560424805,
+        "SHAP_FILTERED": 0.4481944143987512
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730306.0170038,
+      "symbol": "USDSGD",
+      "entry_price": 0.26666666666666666,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6086282673230679,
+        "MAX_CONVICTION": 0.7853504319801025,
+        "SHAP_FILTERED": 0.6086282673230679
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730306.0690348,
+      "symbol": "USDHKD",
+      "entry_price": 0.4,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4565411602228784,
+        "MAX_CONVICTION": 0.2910255193710327,
+        "SHAP_FILTERED": 0.4565411602228784
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730306.1585348,
+      "symbol": "SP500",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.36902993512742593,
+        "MAX_CONVICTION": 0.18011248111724854,
+        "SHAP_FILTERED": 0.36902993512742593
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730306.1760526,
+      "symbol": "GER40",
+      "entry_price": 0.2,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6075329318512892,
+        "MAX_CONVICTION": 0.7834335949044898,
+        "SHAP_FILTERED": 0.6075329318512892
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730310.253025,
+      "symbol": "HK50",
+      "entry_price": 0.06666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6505038584506938,
+        "MAX_CONVICTION": 0.8066356583599001,
+        "SHAP_FILTERED": 0.6505038584506938
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730310.4864216,
+      "symbol": "US2000",
+      "entry_price": 0.7333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3964783573025664,
+        "MAX_CONVICTION": 0.2523604929447174,
+        "SHAP_FILTERED": 0.3964783573025664
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730367.2225847,
+      "symbol": "SOLUSD",
+      "entry_price": 0.9333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5461583778115123,
+        "MAX_CONVICTION": 0.7801413539539791,
+        "SHAP_FILTERED": 0.5461583778115123
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730367.649894,
+      "symbol": "ADAUSD",
+      "entry_price": 0.6666666666666666,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5273627462775999,
+        "MAX_CONVICTION": 0.2687796950340271,
+        "SHAP_FILTERED": 0.5273627462775999
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730367.7563539,
+      "symbol": "XRPUSD",
+      "entry_price": 0.7333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5184825559269698,
+        "MAX_CONVICTION": 0.2523604929447174,
+        "SHAP_FILTERED": 0.5184825559269698
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730371.6515448,
+      "symbol": "TRXUSD",
+      "entry_price": 0.4666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.43715284434544666,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.43715284434544666
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730375.588779,
+      "symbol": "EURGBP",
+      "entry_price": 0.13333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.541862493559266,
+        "MAX_CONVICTION": 0.6525911715209021,
+        "SHAP_FILTERED": 0.541862493559266
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730377.9996204,
+      "symbol": "USDTRY",
+      "entry_price": 0.8666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.35871058186315136,
+        "MAX_CONVICTION": 0.25628426671028137,
+        "SHAP_FILTERED": 0.35871058186315136
+      },
+      "resolved": true
+    },
+    {
+      "timestamp": 1779730381.1801422,
+      "symbol": "EURPLN",
+      "entry_price": 0.26666666666666666,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5373682543055766,
+        "MAX_CONVICTION": 0.6828209298579858,
+        "SHAP_FILTERED": 0.5373682543055766
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730381.4820793,
+      "symbol": "USDSGD",
+      "entry_price": 0.3333333333333333,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5923779190030257,
+        "MAX_CONVICTION": 0.7805008978427926,
+        "SHAP_FILTERED": 0.5923779190030257
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730381.5202055,
+      "symbol": "SP500",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3690031196792203,
+        "MAX_CONVICTION": 0.18011248111724854,
+        "SHAP_FILTERED": 0.3690031196792203
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730381.5865421,
+      "symbol": "USDHKD",
+      "entry_price": 0.4,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4590373396149443,
+        "MAX_CONVICTION": 0.27849578857421875,
+        "SHAP_FILTERED": 0.4590373396149443
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730381.6278813,
+      "symbol": "GER40",
+      "entry_price": 0.2,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5927772751746583,
+        "MAX_CONVICTION": 0.76494457868452,
+        "SHAP_FILTERED": 0.5927772751746583
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730384.3824117,
+      "symbol": "HK50",
+      "entry_price": 0.06666666666666667,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6480795006342697,
+        "MAX_CONVICTION": 0.8147616814254665,
+        "SHAP_FILTERED": 0.6480795006342697
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730384.6764054,
+      "symbol": "US2000",
+      "entry_price": 0.8,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.39988228720384056,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.39988228720384056
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730458.3755083,
+      "symbol": "SOLUSD",
+      "entry_price": 0.5625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.25839820266417396,
+        "MAX_CONVICTION": 0.24332501323164032,
+        "SHAP_FILTERED": 0.25839820266417396
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730459.0009804,
+      "symbol": "DOTUSD",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.23635140081035017,
+        "MAX_CONVICTION": 0.21561668813228607,
+        "SHAP_FILTERED": 0.23635140081035017
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730459.048146,
+      "symbol": "XRPUSD",
+      "entry_price": 0.25,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3142879269002617,
+        "MAX_CONVICTION": 0.29243035689868485,
+        "SHAP_FILTERED": 0.3142879269002617
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730459.179745,
+      "symbol": "ADAUSD",
+      "entry_price": 0.3125,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5363502789932351,
+        "MAX_CONVICTION": 0.6810394730613882,
+        "SHAP_FILTERED": 0.5363502789932351
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730462.1762571,
+      "symbol": "TRXUSD",
+      "entry_price": 0.4375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.2896696287519123,
+        "MAX_CONVICTION": 0.288652710787572,
+        "SHAP_FILTERED": 0.2896696287519123
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730465.162547,
+      "symbol": "USDCHF",
+      "entry_price": 0.75,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6264245312122075,
+        "MAX_CONVICTION": 0.9147071007627491,
+        "SHAP_FILTERED": 0.6264245312122075
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730465.3130667,
+      "symbol": "EURGBP",
+      "entry_price": 0.1875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5676595108756182,
+        "MAX_CONVICTION": 0.7209884911611997,
+        "SHAP_FILTERED": 0.5676595108756182
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730468.7235096,
+      "symbol": "USDTRY",
+      "entry_price": 0.8125,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3795110221664587,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.3795110221664587
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730473.4436004,
+      "symbol": "USDSGD",
+      "entry_price": 0.6875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6026764469821413,
+        "MAX_CONVICTION": 0.8554262519467402,
+        "SHAP_FILTERED": 0.6026764469821413
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730474.0511634,
+      "symbol": "EURPLN",
+      "entry_price": 0.5,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.45720978022324454,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.45720978022324454
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730474.18739,
+      "symbol": "SP500",
+      "entry_price": 0.9375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3776252443399005,
+        "MAX_CONVICTION": 0.19281195104122162,
+        "SHAP_FILTERED": 0.3776252443399005
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730474.388843,
+      "symbol": "USDHKD",
+      "entry_price": 0.375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4603732330471071,
+        "MAX_CONVICTION": 0.270511269569397,
+        "SHAP_FILTERED": 0.4603732330471071
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730474.4149683,
+      "symbol": "GER40",
+      "entry_price": 0.625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5207114005149964,
+        "MAX_CONVICTION": 0.27849578857421875,
+        "SHAP_FILTERED": 0.5207114005149964
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730477.3834445,
+      "symbol": "HK50",
+      "entry_price": 0.0625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6366349220446113,
+        "MAX_CONVICTION": 0.7783561453521137,
+        "SHAP_FILTERED": 0.6366349220446113
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730477.8987443,
+      "symbol": "US2000",
+      "entry_price": 0.875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3951832274431875,
+        "MAX_CONVICTION": 0.23418107628822327,
+        "SHAP_FILTERED": 0.3951832274431875
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730571.4689045,
+      "symbol": "SOLUSD",
+      "entry_price": 0.8125,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4940939042463912,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.4940939042463912
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730572.0497882,
+      "symbol": "DOTUSD",
+      "entry_price": 0.75,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4647850855975426,
+        "MAX_CONVICTION": 0.2381625771522522,
+        "SHAP_FILTERED": 0.4647850855975426
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730572.1727693,
+      "symbol": "LTCUSD",
+      "entry_price": 0.625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4192866134342006,
+        "MAX_CONVICTION": 0.2948058247566223,
+        "SHAP_FILTERED": 0.4192866134342006
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730572.2441568,
+      "symbol": "ADAUSD",
+      "entry_price": 0.125,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4047424357805315,
+        "MAX_CONVICTION": 0.3975495994091034,
+        "SHAP_FILTERED": 0.4047424357805315
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730572.2747722,
+      "symbol": "XRPUSD",
+      "entry_price": 0.4375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.31117028799591084,
+        "MAX_CONVICTION": 0.2910255193710327,
+        "SHAP_FILTERED": 0.31117028799591084
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730575.687784,
+      "symbol": "UNIUSD",
+      "entry_price": 0.875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5548591378598148,
+        "MAX_CONVICTION": 0.7401194980462674,
+        "SHAP_FILTERED": 0.5548591378598148
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730575.7593353,
+      "symbol": "TRXUSD",
+      "entry_price": 0.3125,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5487721051532317,
+        "MAX_CONVICTION": 0.7027776688413823,
+        "SHAP_FILTERED": 0.5487721051532317
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730579.9910262,
+      "symbol": "EURGBP",
+      "entry_price": 0.1875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.32017059759094013,
+        "MAX_CONVICTION": 0.2902902202073629,
+        "SHAP_FILTERED": 0.32017059759094013
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730582.9646451,
+      "symbol": "USDTRY",
+      "entry_price": 0.6875,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3405984641894412,
+        "MAX_CONVICTION": 0.26700180768966675,
+        "SHAP_FILTERED": 0.3405984641894412
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730587.5863817,
+      "symbol": "USDHKD",
+      "entry_price": 0.375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.46877317958848186,
+        "MAX_CONVICTION": 0.2839624881744385,
+        "SHAP_FILTERED": 0.46877317958848186
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730587.6497903,
+      "symbol": "SP500",
+      "entry_price": 1.0,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.36899478793372004,
+        "MAX_CONVICTION": 0.18011248111724854,
+        "SHAP_FILTERED": 0.36899478793372004
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730588.0420427,
+      "symbol": "USDSGD",
+      "entry_price": 0.5,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.643016042554155,
+        "MAX_CONVICTION": 0.9263723829652927,
+        "SHAP_FILTERED": 0.643016042554155
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730588.1177049,
+      "symbol": "GER40",
+      "entry_price": 0.5625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5859720800491611,
+        "MAX_CONVICTION": 0.8265454485815534,
+        "SHAP_FILTERED": 0.5859720800491611
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730592.802625,
+      "symbol": "HK50",
+      "entry_price": 0.0625,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.6483330134631182,
+        "MAX_CONVICTION": 0.8115941144170088,
+        "SHAP_FILTERED": 0.6483330134631182
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730592.8391273,
+      "symbol": "US2000",
+      "entry_price": 0.9375,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.3920273581292337,
+        "MAX_CONVICTION": 0.23253744840621948,
+        "SHAP_FILTERED": 0.3920273581292337
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730673.2619078,
+      "symbol": "LTCUSD",
+      "entry_price": 0.9444444444444444,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.21288021218375308,
+        "MAX_CONVICTION": 0.18603919243110115,
+        "SHAP_FILTERED": 0.21288021218375308
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730673.6443126,
+      "symbol": "XRPUSD",
+      "entry_price": 0.6666666666666666,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4246225328254568,
+        "MAX_CONVICTION": 0.26520758867263794,
+        "SHAP_FILTERED": 0.4246225328254568
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730673.7443898,
+      "symbol": "ADAUSD",
+      "entry_price": 0.05555555555555555,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.4290737608547205,
+        "MAX_CONVICTION": 0.40771330387210736,
+        "SHAP_FILTERED": 0.4290737608547205
+      },
+      "resolved": false
+    },
+    {
+      "timestamp": 1779730678.4926121,
+      "symbol": "UNIUSD",
+      "entry_price": 0.3888888888888889,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5775310127512133,
+        "MAX_CONVICTION": 0.799045694371775,
+        "SHAP_FILTERED": 0.5775310127512133
+      },
+      "resolved": false
+    }
+  ]
+} {
+      "timestamp": 1779730678.5515695,
+      "symbol": "TRXUSD",
+      "entry_price": 0.2777777777777778,
+      "predictions": {
+        "ACCURACY_WEIGHTED": 0.5437227197653605,
+        "MAX_CONVICTION": 0.6815064340125986,
+        "SHAP_FILTERED": 0.5437227197653605
+      },
+      "resolved": false
+    }
+  ]
+}

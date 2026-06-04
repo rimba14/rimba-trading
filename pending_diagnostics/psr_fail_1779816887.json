@@ -1,0 +1,7 @@
+{
+  "error_type": "PSR_DEGRADATION",
+  "psr_value": 0.001241,
+  "timestamp": 1779816887,
+  "status": "HALTED",
+  "reason": "Live PSR 0.0012 below 0.8"
+}

@@ -1,0 +1,20 @@
+{
+  "symbol": "EURGBP",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.309049,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.12559959292411804,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0006264285714285833,
+  "timestamp": 1779207418,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.14267982634266313,
+  "vrs": 0.6922850219398278,
+  "applied_dynamic_gate": 0.6
+}

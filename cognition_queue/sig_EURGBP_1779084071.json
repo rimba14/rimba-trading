@@ -1,0 +1,12 @@
+{
+  "symbol": "EURGBP",
+  "direction": "SELL",
+  "conviction": 0.32849,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0003535714285714293,
+  "timestamp": 1779084039,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

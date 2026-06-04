@@ -1,0 +1,12 @@
+{
+  "symbol": "NAS100",
+  "direction": "BUY",
+  "conviction": 0.630335,
+  "xgb_p": 0.6799035668373108,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 118.16285714285706,
+  "timestamp": 1779103182,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

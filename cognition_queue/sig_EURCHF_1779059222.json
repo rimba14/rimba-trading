@@ -1,0 +1,12 @@
+{
+  "symbol": "EURCHF",
+  "direction": "SELL",
+  "conviction": 0.359196,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.00021357142857142408,
+  "timestamp": 1779059201,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

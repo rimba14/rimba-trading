@@ -1,0 +1,20 @@
+{
+  "symbol": "USDCNH",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.280937,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.14337223768234253,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.003032857142857091,
+  "timestamp": 1779217246,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.04674784232413559,
+  "vrs": 0.5068104426787726,
+  "applied_dynamic_gate": 0.6
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "ETHUSD",
+  "direction": "SELL",
+  "conviction": 0.355412,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 15.539285714285663,
+  "timestamp": 1779066008,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

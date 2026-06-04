@@ -1,0 +1,12 @@
+{
+  "symbol": "ETHUSD",
+  "direction": "SELL",
+  "conviction": 0.392456,
+  "xgb_p": 0.2742822766304016,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 15.214285714285714,
+  "timestamp": 1779117529,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

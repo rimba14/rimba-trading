@@ -1,0 +1,12 @@
+{
+  "symbol": "XRPUSD",
+  "direction": "SELL",
+  "conviction": 0.336456,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.010164285714285673,
+  "timestamp": 1779069627,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

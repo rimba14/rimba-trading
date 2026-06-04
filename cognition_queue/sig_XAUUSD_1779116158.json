@@ -1,0 +1,12 @@
+{
+  "symbol": "XAUUSD",
+  "direction": "BUY",
+  "conviction": 0.620258,
+  "xgb_p": 0.7077879905700684,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 24.270714285714348,
+  "timestamp": 1779115865,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

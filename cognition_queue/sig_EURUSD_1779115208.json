@@ -1,0 +1,12 @@
+{
+  "symbol": "EURUSD",
+  "direction": "SELL",
+  "conviction": 0.363134,
+  "xgb_p": 0.2327364683151245,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0011392857142856919,
+  "timestamp": 1779115072,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

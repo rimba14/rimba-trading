@@ -1,0 +1,97 @@
+{
+  "entry_metrics": {
+    "probability_vector": [
+      0.22634796798229218,
+      0.3307681477819942
+    ],
+    "adjusted_conviction": 0.3716099852921303,
+    "information_activity_ratio": 1.4024390243900073,
+    "order_flow_bocpd_probability": 0.0,
+    "wasserstein_cluster_index": 2,
+    "volatility_ratio": 1.4024390243900073,
+    "ofi_velocity": 0.0
+  },
+  "trajectory": [
+    {
+      "step_bar_idx": 287,
+      "floating_unrealized_pnl": -0.79,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27568,
+      "sl": 1.2613699999999999,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 287,
+      "floating_unrealized_pnl": -0.79,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27568,
+      "sl": 1.27508,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 288,
+      "floating_unrealized_pnl": -0.79,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27568,
+      "sl": 1.27508,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 288,
+      "floating_unrealized_pnl": -0.79,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27568,
+      "sl": 1.27508,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 288,
+      "floating_unrealized_pnl": -0.79,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27568,
+      "sl": 1.27509,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 288,
+      "floating_unrealized_pnl": -0.65,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27586,
+      "sl": 1.27509,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": 288,
+      "floating_unrealized_pnl": -0.8,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.27567,
+      "sl": 1.27566,
+      "tp": 1.3073299999999999,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    }
+  ],
+  "exit_metrics": {
+    "exit_mechanism": "TERMINAL_AMNESIA_SYNC",
+    "mt5_return_code": 10009
+  }
+}

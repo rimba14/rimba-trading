@@ -1,0 +1,20 @@
+{
+  "symbol": "NAS100",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.333575,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.23330751061439514,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 106.70714285714374,
+  "timestamp": 1779196398,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.025433175553090326,
+  "vrs": 0.6527441525440563,
+  "applied_dynamic_gate": 0.6
+}

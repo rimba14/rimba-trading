@@ -1,0 +1,12 @@
+{
+  "symbol": "USDJPY",
+  "direction": "SELL",
+  "conviction": 0.353446,
+  "xgb_p": 0.22338254749774933,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.14871428571427917,
+  "timestamp": 1779115072,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

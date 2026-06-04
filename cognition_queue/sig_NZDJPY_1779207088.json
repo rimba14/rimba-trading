@@ -1,0 +1,20 @@
+{
+  "symbol": "NZDJPY",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.32378,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.20011545717716217,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.14828571428571483,
+  "timestamp": 1779207040,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.04889609134045242,
+  "vrs": 0.6323873422276722,
+  "applied_dynamic_gate": 0.6
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "USDHKD",
+  "direction": "BUY",
+  "conviction": 0.653878,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.00019142857142855668,
+  "timestamp": 1779062520,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

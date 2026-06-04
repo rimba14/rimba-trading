@@ -1,0 +1,12 @@
+{
+  "symbol": "DOTUSD",
+  "direction": "BUY",
+  "conviction": 0.672858,
+  "xgb_p": 0.8781641125679016,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.012214285714285717,
+  "timestamp": 1779110768,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

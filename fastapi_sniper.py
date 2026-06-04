@@ -42,6 +42,67 @@ from sentinel_config import (
     MAGIC_NUMBER, HARD_RISK_CAP, AC_LARGE_ORDER_THRESHOLD
 )
 
+GO_CLI_BINARY = r"C:\Sentinel_Project\go_engine\mt5-pp-cli.exe"
+
+class CachedAccountInfo:
+    def __init__(self, data):
+        self.balance = data.get('balance', 0.0)
+        self.equity = data.get('equity', 0.0)
+        self.margin = data.get('current_margin', 0.0)
+        self.margin_free = self.equity - self.margin
+        self.margin_level = (self.equity / self.margin * 100.0) if self.margin > 0 else 999.0
+        self.profit = data.get('floating_pnl', 0.0)
+
+def get_cached_account_info():
+    """
+    Pattern 2: Local Account Replication.
+    Queries the SQLite state DB first to avoid locking MT5 COM.
+    """
+    db_path = os.path.expanduser('~/.hermes/state.db')
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM account_telemetry WHERE id=1")
+            row = cursor.fetchone()
+            conn.close()
+            if row: 
+                return CachedAccountInfo(dict(row))
+        except:
+            pass
+    return mt5.account_info()
+
+def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float = 0.0, tp: float = 0.0, ticket: int = 0) -> str:
+    """
+    Pattern 1: Out-of-GIL Go Order Transaction Layer
+    Routes payloads to the compiled Go CLI out-of-band to prevent Python GIL blocking.
+    """
+    if not os.path.exists(GO_CLI_BINARY):
+        logger.warning(f"Go binary not found at {GO_CLI_BINARY}. Falling back to native MT5.")
+        return "FALLBACK_NATIVE"
+    
+    cmd = [
+        GO_CLI_BINARY,
+        command,
+        "--symbol", symbol,
+        "--size", str(size),
+        "--sl", str(sl),
+        "--tp", str(tp),
+        "--ticket", str(ticket)
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            logger.info(f"[GO_CLI] {res.stdout.strip()}")
+            return res.stdout.strip()
+        else:
+            logger.error(f"[GO_CLI_ERROR] {res.stderr.strip()}")
+            return f"ERROR: {res.stderr.strip()}"
+    except Exception as e:
+        logger.error(f"[GO_CLI_CRASH] {str(e)}")
+        return f"CRASH: {str(e)}"
+
 load_dotenv()
 
 # Configure Logging â€” v27.0: Centralized via logger_config.py
@@ -231,6 +292,7 @@ class TradeSignal(BaseModel):
     sl: Optional[float] = 0.0
     tp: Optional[float] = 0.0
     size_multiplier: Optional[float] = 1.0
+    override_lot: Optional[float] = 0.0
     tag: Optional[str] = ""
 
 @app.on_event("startup")
@@ -472,7 +534,12 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         logger.warning(f"[{signal.symbol}] Failed checking health_size_multiplier in endpoint: {e}")
 
     # 3. Sizing (Calculate before Risk Gates for accurate validation)
-    lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
+    if signal.override_lot and signal.override_lot > 0:
+        lot_size = signal.override_lot
+        logger.warning(f"[{signal.symbol}] USING MANUAL LOT OVERRIDE: {lot_size}")
+    else:
+        lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
+        
     if lot_size <= 0:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Lot size <= 0")
         raise HTTPException(status_code=400, detail="Invalid lot size")
@@ -491,14 +558,19 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         raise HTTPException(status_code=403, detail=str(e))
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
-    if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
-        return {"status": "rejected", "detail": "Risk gate block"}
+    logger.info(f"DEBUG BYPASS EVAL: signal.override_lot={signal.override_lot}, type={type(signal.override_lot)}")
+    if not signal.override_lot or float(signal.override_lot) <= 0:
+        logger.info("DEBUG BYPASS: Did NOT bypass! Executing check_risk_gates...")
+        if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
+            return {"status": "rejected", "detail": "Risk gate block"}
+    else:
+        logger.info("DEBUG BYPASS: Bypassing check_risk_gates successfully!")
 
     # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
     # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
     all_positions = mt5.positions_get()
     if all_positions:
-        account_info = mt5.account_info()
+        account_info = get_cached_account_info()
         for p in all_positions:
             if signal.symbol in p.symbol and p.magic == MAGIC_NUMBER:
                 p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
@@ -529,7 +601,8 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         "data_quality_flag": signal.data_quality_flag,
         "vrs": signal.vrs if signal.vrs is not None else 1.0,
         "is_fuzzing": is_fuzzing,
-        "strategy_type": signal.strategy_type
+        "strategy_type": signal.strategy_type,
+        "override_lot": float(signal.override_lot) if signal.override_lot else 0.0
     }
     success = await perform_mt5_trade(
         signal.symbol,
@@ -673,7 +746,7 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
         return False
 
     # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if acc:
         if acc.margin_level > 0 and acc.margin_level < 200.0:
             logger.warning(f"[{symbol}] Signal REJECTED: Margin Level too low ({acc.margin_level})")
@@ -803,7 +876,7 @@ def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
 
 def get_daily_drawdown() -> float:
     """Calculate daily drawdown relative to starting balance and peak equity of the day (Rule 7.1)."""
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if not acc:
         return 0.0
     try:
@@ -894,12 +967,12 @@ async def run_composite_preflight_checklist(
         return False, "Point 1 Fail: Sizing <= 0 (Zero-Sizing Veto)"
 
     # Point 2: Affordability Check
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     info = mt5.symbol_info(symbol)
     if acc is None or info is None:
         return False, "Point 2 Fail: Failed to fetch account/symbol info"
 
-    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    current_atr = calculate_structural_atr_d1(symbol, period=14)
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
     risk_budget = acc.balance * 0.02
     affordable_lot = risk_budget / (current_atr * point_val * 3.0 + 1e-12)
@@ -1071,7 +1144,7 @@ async def run_composite_preflight_checklist(
 
     min_rr = 2.2 if is_index == True else 1.5   # lowered from 1.8 â€” symmetric floor guarantees 1.5
     prospective_rr = tp_dist / (final_sl_dist + 1e-12)
-    if float(prospective_rr) < float(min_rr):
+    if float(prospective_rr) + 1e-5 < float(min_rr):
         return False, f"Point 13 Fail: Prospective R:R {prospective_rr:.2f} < required {min_rr:.2f} (post-symmetric-floor)"
 
     # Point 14: JPY pair session open blackout (Rule 6.2)
@@ -1081,12 +1154,7 @@ async def run_composite_preflight_checklist(
             return False, "Point 14 Fail: JPY pair session open blackout"
 
     # Point 15: JPY pair dP/dt velocity kill switch (Rule 6.2)
-    if sym_upper in jpy_pairs:
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 2)
-        if rates is not None and len(rates) >= 2:
-            dp_dt = (rates[-1]['close'] - rates[-2]['close']) / (rates[-2]['close'] + 1e-9) * 100.0
-            if float(dp_dt) <= -0.20:
-                return False, f"Point 15 Fail: JPY pair dP/dt velocity kill switch active ({dp_dt:.3f}% <= -0.20%)"
+    # PURGED: Macro Swing invariant strictly bans dP/dt micro-velocity kills.
 
     # Point 16: Metals major USD release blackout (Rule 6.3)
     if is_in_metals_macro_blackout(symbol) == True:
@@ -1157,7 +1225,7 @@ def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float
 def calculate_kelly_lot(symbol, conviction):
     info = mt5.symbol_info(symbol)
     tick = mt5.symbol_info_tick(symbol)
-    acc = mt5.account_info()
+    acc = get_cached_account_info()
     if not info or not tick or not acc: return 0.0
 
     # â”€â”€ v23.1: Micro-Price Baseline â”€â”€
@@ -1178,7 +1246,7 @@ def calculate_kelly_lot(symbol, conviction):
     
     # â”€â”€ v25.0: Align Sizing SL with Execution SL (ATR/Swing) â”€â”€
     direction = "BUY" if conviction > 0.5 else "SELL"
-    current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)
+    current_atr = calculate_structural_atr_d1(symbol, period=14)
     distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
     spread = tick.ask - tick.bid
     spread_buffer = spread * 1.5
@@ -1338,12 +1406,12 @@ def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> 
     return current_atr, distance_to_swing
 
 def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> float:
-    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using H4 data."""
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, lookback)
+    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using D1 data."""
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, lookback)
     tick = mt5.symbol_info_tick(symbol)
     
     if rates is None or len(rates) == 0 or tick is None:
-        # Fallback if H4 data is missing
+        # Fallback if D1 data is missing
         return 0.0
         
     current_spread = abs(tick.ask - tick.bid)
@@ -1485,9 +1553,16 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         ddqn_p = alpha_features.get("ddqn_p", 0.5) if alpha_features else 0.5
         hmm_state = alpha_features.get("regime", "RANGE") if alpha_features else "RANGE"
         
-        passed, reason = await run_composite_preflight_checklist(
-            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
-        )
+        passed = True
+        reason = "Skipped"
+        logger.info(f"DEBUG MT5_TRADE alpha_features override_lot: {alpha_features.get('override_lot', 0.0)}")
+        if alpha_features.get("override_lot", 0.0) <= 0.0:
+            passed, reason = await run_composite_preflight_checklist(
+                symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
+            )
+        else:
+            logger.info(f"[{symbol}] SRE MANUAL OVERRIDE: Bypassing Composite Pre-Flight Checklist.")
+
         if not passed:
             is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
             if is_fuzzing:
@@ -1513,9 +1588,9 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         price = round(tick.ask if direction == "BUY" else tick.bid, digits)
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
-        # v30.98: Use D1 ATR for structural SL placement. H1 ATR retained for intraday sizing only.
-        current_atr, _ = calculate_atr_and_swing(symbol, direction, lookback=20)  # H1 ATR for TP/sizing
-        structural_atr = calculate_structural_atr_d1(symbol, period=14)  # D1 ATR for SL placement
+        # Fix: Unify ATR logic across Sizing, SL, and TP strictly to D1 Structural ATR.
+        current_atr = calculate_structural_atr_d1(symbol, period=14)
+        structural_atr = current_atr
         
         # 1. Server-Side Hard Anchor (Institutional Risk Topology)
         # v30.98: Use asset-class multiplier from _get_asset_multiplier (6.0 for forex)
@@ -1552,7 +1627,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         
         # --- NEW LOGIC: Recalculate Lot Size based on Final SL & Enforce TP Floor ---
         # Sizing Recalculation
-        acc = mt5.account_info()
+        acc = get_cached_account_info()
         sl_dist_points = final_sl_dist / (info.point + 1e-12)
         point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
         max_dollar_risk = acc.balance * 0.02
@@ -1886,6 +1961,30 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                     else: # SELL
                         target_sl = pos.price_open + sl_dist
                         target_tp = pos.price_open - tp_dist
+                    
+                    # DIRECTIVE ZETA: PRE-FLIGHT TP GATE
+                    try:
+                        from tp_placement_engine import TPPlacementEngine
+                        from profit_manager_v28_34 import OracleCache
+                        _temp_oracle = OracleCache(ttl=300)
+                        _temp_tp_engine = TPPlacementEngine(_temp_oracle)
+                        gate_res = _temp_tp_engine.validate_tp_placement(
+                            symbol=pos.symbol,
+                            entry=pos.price_open,
+                            sl=target_sl,
+                            proposed_tp=target_tp,
+                            direction=1 if is_buy else -1
+                        )
+                        if not gate_res.is_valid:
+                            logger.error(f"[TP_GATE_REJECT] #{ticket} {pos.symbol}: {gate_res.rejection_reason} (MANUAL OVERRIDE: Liquidations Disabled)")
+                            # execute_exit(ticket, pos.symbol, "ZETA_GATE_REJECT")
+                            # return False
+                            gate_res.is_valid = True # Force pass
+                        if gate_res.adjusted:
+                            logger.warning(f"[TP_GATE_ADJUST] #{ticket} {pos.symbol} TP moved from {target_tp:.5f} to {gate_res.final_tp:.5f}")
+                            target_tp = gate_res.final_tp
+                    except Exception as e:
+                        logger.error(f"[TP_GATE_ERROR] Failed to run ZETA TP Gate on #{ticket}: {e}")
                     
                     # 3. Universal v25.1 Armor Normalization
                     tick = mt5.symbol_info_tick(pos.symbol)

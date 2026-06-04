@@ -1,0 +1,20 @@
+{
+  "symbol": "USDZAR",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.291292,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.17792709171772003,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.03859571428571407,
+  "timestamp": 1779197437,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.023332662234502394,
+  "vrs": 1.0265743944635948,
+  "applied_dynamic_gate": 0.6390352941176223
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "EURCHF",
+  "direction": "SELL",
+  "conviction": 0.24494,
+  "xgb_p": 0.22949306666851044,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0005107142857143009,
+  "timestamp": 1779116375,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

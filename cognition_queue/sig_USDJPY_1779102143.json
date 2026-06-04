@@ -1,0 +1,12 @@
+{
+  "symbol": "USDJPY",
+  "direction": "BUY",
+  "conviction": 0.729682,
+  "xgb_p": 0.7114090323448181,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.12814285714285387,
+  "timestamp": 1779102030,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

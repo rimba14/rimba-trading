@@ -1,0 +1,12 @@
+{
+  "symbol": "BCHUSD",
+  "direction": "BUY",
+  "conviction": 0.664296,
+  "xgb_p": 0.7610174417495728,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 7.450000000000001,
+  "timestamp": 1779102013,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

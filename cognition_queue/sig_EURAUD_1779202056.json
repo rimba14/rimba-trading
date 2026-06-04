@@ -1,0 +1,20 @@
+{
+  "symbol": "EURAUD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.309942,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.20594023168087006,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0019500000000000231,
+  "timestamp": 1779201987,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.016698605584415493,
+  "vrs": 1.1655846573056976,
+  "applied_dynamic_gate": 0.6862987834839372
+}

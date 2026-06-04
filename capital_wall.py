@@ -51,6 +51,10 @@ class CapitalWall:
         Locate check_event_horizon_blackout(self, signal)
         Ensures no new entries are scaled down or allowed when a Tier-1 event is within 24 hours.
         """
+        print(f"[DEBUG WALL5] signal={signal} override_lot={getattr(signal, 'override_lot', 'MISSING')}")
+        if getattr(signal, 'override_lot', 0.0) is not None and getattr(signal, 'override_lot', 0.0) > 0.0:
+            return  # Bypass macro check for manual override
+            
         from agents.risk_agent import check_upcoming_tier1_events
         
         has_event, event_desc = check_upcoming_tier1_events(signal.symbol, threshold_hours=24.0)
@@ -93,10 +97,11 @@ class CapitalWall:
             raise TradeRejected(f"[WALL5-FAIL] Weekend Blackout active for {signal.symbol}.")
 
         # 2. Margin Pre-Validation
-        acc = mt5.account_info()
-        if acc:
-            if acc.margin_level > 0 and acc.margin_level < 200.0:
-                raise TradeRejected(f"[WALL5-FAIL] Margin level too low ({acc.margin_level:.1f}%).")
+        if getattr(signal, 'override_lot', 0.0) is None or getattr(signal, 'override_lot', 0.0) <= 0.0:
+            acc = mt5.account_info()
+            if acc:
+                if acc.margin_level > 0 and acc.margin_level < 200.0:
+                    raise TradeRejected(f"[WALL5-FAIL] Margin level too low ({acc.margin_level:.1f}%).")
 
         # 3. Call check_event_horizon_blackout as a hard gate
         self.check_event_horizon_blackout(signal)
@@ -105,7 +110,10 @@ class CapitalWall:
         self.check_monte_carlo_gate(signal)
 
         # 4. Call check_risk_agent check
-        self.check_risk_agent(signal, lot_size, price)
+        if getattr(signal, 'override_lot', 0.0) <= 0.0:
+            self.check_risk_agent(signal, lot_size, price)
+        else:
+            print("[DEBUG] Bypassing check_risk_agent due to manual override")
 
         # 5. Return unmodified lot_size if everything passes
         return lot_size

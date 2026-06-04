@@ -1,0 +1,12 @@
+{
+  "symbol": "EURPLN",
+  "direction": "SELL",
+  "conviction": 0.262065,
+  "xgb_p": 0.1988765299320221,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.0028357142857142748,
+  "timestamp": 1779114761,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

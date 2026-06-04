@@ -1,0 +1,12 @@
+{
+  "symbol": "EURNOK",
+  "direction": "BUY",
+  "conviction": 0.625188,
+  "xgb_p": 0.7477403879165649,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.017793571428571426,
+  "timestamp": 1779114757,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

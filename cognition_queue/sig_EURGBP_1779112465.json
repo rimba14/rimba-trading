@@ -1,0 +1,12 @@
+{
+  "symbol": "EURGBP",
+  "direction": "BUY",
+  "conviction": 0.672723,
+  "xgb_p": 0.6915151476860046,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0006571428571428403,
+  "timestamp": 1779112343,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

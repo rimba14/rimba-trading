@@ -1,0 +1,8 @@
+{
+    "timestamp": 1780249009,
+    "symbol": "USDCHF",
+    "error_type": "NameError",
+    "message": "name 'math' is not defined",
+    "traceback": "Traceback (most recent call last):\n  File \"C:\\Sentinel_Project\\sentinel_slow_loop.py\", line 1643, in run_inference_for_symbol\n    W_time = math.exp(-decay_lambda * delta_t)\n             ^^^^\nNameError: name 'math' is not defined. Did you mean: 'match'? Or did you forget to import 'math'?\n",
+    "halt_required": true
+}

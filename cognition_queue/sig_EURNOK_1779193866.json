@@ -1,0 +1,20 @@
+{
+  "symbol": "EURNOK",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.261047,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.20594023168087006,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.013885000000000527,
+  "timestamp": 1779193814,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.13071551662016329,
+  "vrs": 0.9631273997201268,
+  "applied_dynamic_gate": 0.6174633159048432
+}

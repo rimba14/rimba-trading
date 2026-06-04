@@ -1,0 +1,12 @@
+{
+  "symbol": "GBPUSD",
+  "direction": "SELL",
+  "conviction": 0.37135,
+  "xgb_p": 0.2474261373281479,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0019942857142856945,
+  "timestamp": 1779117009,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

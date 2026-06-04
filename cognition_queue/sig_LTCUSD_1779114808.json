@@ -1,0 +1,12 @@
+{
+  "symbol": "LTCUSD",
+  "direction": "SELL",
+  "conviction": 0.327964,
+  "xgb_p": 0.2617897093296051,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.39642857142857074,
+  "timestamp": 1779114714,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

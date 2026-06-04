@@ -1,0 +1,12 @@
+{
+  "symbol": "AUDUSD",
+  "direction": "BUY",
+  "conviction": 0.613747,
+  "xgb_p": 0.7587297558784485,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0013735714285714343,
+  "timestamp": 1779118508,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

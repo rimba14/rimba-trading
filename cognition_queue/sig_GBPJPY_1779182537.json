@@ -1,0 +1,20 @@
+{
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.289338,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.126275435090065,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.17649999999999824,
+  "timestamp": 1779182459,
+  "version": "v28.27-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.08859042665886385,
+  "vrs": 0.7096696575963878,
+  "applied_dynamic_gate": 0.6
+}

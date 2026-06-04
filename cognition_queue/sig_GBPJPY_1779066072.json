@@ -1,0 +1,12 @@
+{
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "conviction": 0.380474,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.07992857142857344,
+  "timestamp": 1779066056,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

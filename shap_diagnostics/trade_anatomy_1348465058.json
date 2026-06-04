@@ -1,0 +1,337 @@
+{
+  "entry_metrics": {
+    "probability_vector": [
+      0.5,
+      0.5
+    ],
+    "adjusted_conviction": 0.8,
+    "information_activity_ratio": 1.0,
+    "order_flow_bocpd_probability": 0.2,
+    "wasserstein_cluster_index": 1
+  },
+  "trajectory": [
+    {
+      "step_bar_idx": -159,
+      "floating_unrealized_pnl": -0.47,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34606,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -157,
+      "floating_unrealized_pnl": -0.42,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34611,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -157,
+      "floating_unrealized_pnl": -0.48,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34605,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -157,
+      "floating_unrealized_pnl": -0.49,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34604,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -157,
+      "floating_unrealized_pnl": -0.47,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34606,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.34,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34619,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.36,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3461699999999999,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.35,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34618,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.32,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3462100000000001,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.3,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34623,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.37,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34616,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.39,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3461400000000001,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.36,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3461699999999999,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -156,
+      "floating_unrealized_pnl": -0.37,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34616,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.34,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34619,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.35,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34618,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.32,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3462100000000001,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.3,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34623,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.32,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3462100000000001,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.31,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34622,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.32,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3462100000000001,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.31,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34622,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.28,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34625,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -155,
+      "floating_unrealized_pnl": -0.28,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34625,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -154,
+      "floating_unrealized_pnl": -0.28,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34625,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -154,
+      "floating_unrealized_pnl": -0.25,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34628,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -154,
+      "floating_unrealized_pnl": -0.27,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34626,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -154,
+      "floating_unrealized_pnl": -0.36,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.3461699999999999,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -154,
+      "floating_unrealized_pnl": -0.4,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 1.34613,
+      "sl": 1.34115,
+      "tp": 1.37885,
+      "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+      "conviction": 0.5
+    }
+  ],
+  "exit_metrics": {
+    "exit_mechanism": "TERMINAL_AMNESIA_SYNC",
+    "mt5_return_code": 10009
+  }
+}

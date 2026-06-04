@@ -1,0 +1,12 @@
+{
+  "symbol": "GBPUSD",
+  "direction": "BUY",
+  "conviction": 0.649594,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0003921428571428409,
+  "timestamp": 1779066048,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

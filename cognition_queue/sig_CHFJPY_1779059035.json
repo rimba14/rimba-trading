@@ -1,0 +1,12 @@
+{
+  "symbol": "CHFJPY",
+  "direction": "BUY",
+  "conviction": 0.677592,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.06778571428571516,
+  "timestamp": 1779059008,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

@@ -1,0 +1,20 @@
+{
+  "symbol": "AUDJPY",
+  "direction": "BUY",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.660167,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.7587297558784485,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.19121428571428417,
+  "timestamp": 1779227810,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.028093094339442515,
+  "vrs": 0.5336074648110007,
+  "applied_dynamic_gate": 0.6
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "GBPAUD",
+  "direction": "BUY",
+  "conviction": 0.664189,
+  "xgb_p": 0.7613608241081238,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0021228571428571407,
+  "timestamp": 1779114104,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

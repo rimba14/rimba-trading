@@ -1,0 +1,12 @@
+{
+  "symbol": "HK50",
+  "direction": "SELL",
+  "conviction": 0.320857,
+  "xgb_p": 0.2796890437602997,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 66.92857142857143,
+  "timestamp": 1779099100,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

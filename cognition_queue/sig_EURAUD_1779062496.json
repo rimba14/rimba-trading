@@ -1,0 +1,12 @@
+{
+  "symbol": "EURAUD",
+  "direction": "BUY",
+  "conviction": 0.650403,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0007100000000000042,
+  "timestamp": 1779062480,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

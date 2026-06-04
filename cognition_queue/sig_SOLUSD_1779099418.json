@@ -1,0 +1,12 @@
+{
+  "symbol": "SOLUSD",
+  "direction": "BUY",
+  "conviction": 0.654926,
+  "xgb_p": 0.7859529852867126,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.7857142857142877,
+  "timestamp": 1779099343,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

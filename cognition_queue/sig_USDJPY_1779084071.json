@@ -1,0 +1,12 @@
+{
+  "symbol": "USDJPY",
+  "direction": "SELL",
+  "conviction": 0.324387,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.10485714285714412,
+  "timestamp": 1779084034,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

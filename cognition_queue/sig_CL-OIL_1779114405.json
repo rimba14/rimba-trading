@@ -1,0 +1,12 @@
+{
+  "symbol": "CL-OIL",
+  "direction": "BUY",
+  "conviction": 0.626416,
+  "xgb_p": 0.7358810305595398,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 1.1687857142857163,
+  "timestamp": 1779114138,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

@@ -1,0 +1,12 @@
+{
+  "symbol": "SP500",
+  "direction": "SELL",
+  "conviction": 0.312434,
+  "xgb_p": 0.1981276124715805,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 20.866428571428514,
+  "timestamp": 1779109287,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

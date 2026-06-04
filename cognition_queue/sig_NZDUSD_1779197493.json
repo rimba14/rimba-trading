@@ -1,0 +1,20 @@
+{
+  "symbol": "NZDUSD",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.343894,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.34089693427085876,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.0008514285714285427,
+  "timestamp": 1779197426,
+  "version": "v28.29-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.14056556033840298,
+  "vrs": 0.9124438299342101,
+  "applied_dynamic_gate": 0.6002309021776314
+}

@@ -1,0 +1,20 @@
+{
+  "symbol": "HK50",
+  "direction": "SELL",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.351007,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.22949306666851044,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 60.785714285714285,
+  "timestamp": 1779183483,
+  "version": "v28.27-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.06342263883150417,
+  "vrs": 0.7674853553531604,
+  "applied_dynamic_gate": 0.6
+}

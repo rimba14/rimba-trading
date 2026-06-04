@@ -1,0 +1,20 @@
+{
+  "symbol": "XAUUSD",
+  "direction": "BUY",
+  "strategy_type": "MOMENTUM",
+  "conviction": 0.653266,
+  "sl": 0.0,
+  "tp": 0.0,
+  "size_multiplier": 1.0,
+  "tag": "MOMENTUM_TREND",
+  "xgb_p": 0.6698010563850403,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 21.061428571428614,
+  "timestamp": 1779227728,
+  "version": "v28.30-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM",
+  "model_divergence": 0.10678719477815679,
+  "vrs": 0.723137361357375,
+  "applied_dynamic_gate": 0.6
+}

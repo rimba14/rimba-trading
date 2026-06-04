@@ -1,0 +1,12 @@
+{
+  "symbol": "CHFJPY",
+  "direction": "BUY",
+  "conviction": 0.610051,
+  "xgb_p": 0.6790175437927246,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.18664285714285914,
+  "timestamp": 1779110790,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

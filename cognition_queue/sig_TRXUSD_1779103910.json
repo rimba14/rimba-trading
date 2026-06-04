@@ -1,0 +1,12 @@
+{
+  "symbol": "TRXUSD",
+  "direction": "BUY",
+  "conviction": 0.697205,
+  "xgb_p": 0.8904740214347839,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 0.0011285714285714271,
+  "timestamp": 1779103799,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

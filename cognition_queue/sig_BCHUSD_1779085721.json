@@ -1,0 +1,12 @@
+{
+  "symbol": "BCHUSD",
+  "direction": "BUY",
+  "conviction": 0.637498,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 6.250714285714289,
+  "timestamp": 1779085700,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

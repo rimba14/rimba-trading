@@ -1,0 +1,12 @@
+{
+  "symbol": "GER40",
+  "direction": "SELL",
+  "conviction": 0.26011,
+  "xgb_p": 0.22949306666851044,
+  "ddqn_p": 0.5,
+  "hmm_state": "BULL",
+  "atr": 83.415714285714,
+  "timestamp": 1779102665,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

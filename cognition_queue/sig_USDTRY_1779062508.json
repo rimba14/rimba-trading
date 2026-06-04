@@ -1,0 +1,12 @@
+{
+  "symbol": "USDTRY",
+  "direction": "SELL",
+  "conviction": 0.378376,
+  "xgb_p": 0.5,
+  "ddqn_p": 0.5,
+  "hmm_state": "BEAR",
+  "atr": 0.010702142857142962,
+  "timestamp": 1779062492,
+  "version": "v28.0-TRADE-QUALITY",
+  "signal_type": "MOMENTUM"
+}

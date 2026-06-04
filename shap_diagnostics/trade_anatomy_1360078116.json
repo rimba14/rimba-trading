@@ -1,0 +1,42 @@
+{
+  "entry_metrics": {
+    "probability_vector": [
+      0.36001110076904297,
+      0.6297890892955563
+    ],
+    "adjusted_conviction": 0.5,
+    "information_activity_ratio": 0.669743765076834,
+    "order_flow_bocpd_probability": 0.0,
+    "wasserstein_cluster_index": 2,
+    "volatility_ratio": 0.669743765076834,
+    "ofi_velocity": 0.0
+  },
+  "trajectory": [
+    {
+      "step_bar_idx": -164,
+      "floating_unrealized_pnl": -0.72,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 8161.99,
+      "sl": 8090.68,
+      "tp": 8366.07,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    },
+    {
+      "step_bar_idx": -164,
+      "floating_unrealized_pnl": -0.61,
+      "matrix_condition_number": 0.0,
+      "feature_shap_importance": {},
+      "price": 8162.99,
+      "sl": 0.0,
+      "tp": 0.0,
+      "hmm_state": "CRISIS TAIL",
+      "conviction": 0.5
+    }
+  ],
+  "exit_metrics": {
+    "exit_mechanism": "TERMINAL_AMNESIA_SYNC",
+    "mt5_return_code": 10009
+  }
+}

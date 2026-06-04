@@ -1,0 +1,12 @@
+{
+  "symbol": "AUDJPY",
+  "direction": "SELL",
+  "conviction": 0.256473,
+  "xgb_p": 0.26010945439338684,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.19235714285714473,
+  "timestamp": 1779104821,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

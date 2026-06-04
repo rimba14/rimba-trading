@@ -1,0 +1,12 @@
+{
+  "symbol": "XAGUSD",
+  "direction": "BUY",
+  "conviction": 0.602285,
+  "xgb_p": 0.7254747748374939,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 1.098714285714289,
+  "timestamp": 1779111893,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}

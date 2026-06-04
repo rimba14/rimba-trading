@@ -1,0 +1,12 @@
+{
+  "symbol": "NZDJPY",
+  "direction": "SELL",
+  "conviction": 0.296007,
+  "xgb_p": 0.24547725915908813,
+  "ddqn_p": 0.5,
+  "hmm_state": "RANGE",
+  "atr": 0.12921428571428756,
+  "timestamp": 1779107711,
+  "version": "v28.11-IRONCLAD-CADES",
+  "signal_type": "MOMENTUM"
+}
