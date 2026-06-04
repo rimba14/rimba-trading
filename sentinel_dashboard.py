@@ -78,6 +78,35 @@ def _arc_read(lib, key: str):
         except Exception:
             return None
 
+
+def _arc_read_batch(lib, keys: list):
+    """Parallel ArcticDB read with 300 ms hard cap per read."""
+    if lib is None or not keys:
+        return {}
+    results = {}
+    # Use a pool size capped at 20 to avoid over-allocation on large watchlists
+    pool_size = min(len(keys), 20)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=pool_size) as ex:
+        fut_to_key = {ex.submit(lib.read, k): k for k in keys}
+        try:
+            for fut in concurrent.futures.as_completed(fut_to_key, timeout=ARCTIC_TIMEOUT + 0.1):
+                key = fut_to_key[fut]
+                try:
+                    results[key] = fut.result()
+                except Exception:
+                    results[key] = None
+        except concurrent.futures.TimeoutError:
+            # If batch timeout is hit, we still return whatever we gathered
+            pass
+        except Exception:
+            pass
+    # Ensure all keys are in results
+    for k in keys:
+        if k not in results:
+            results[k] = None
+    return results
+
+
 # ── Header ─────────────────────────────────────────────────────────────────────
 col_title, col_clock = st.columns([4, 1])
 with col_title:
@@ -118,8 +147,11 @@ col_l, col_r = st.columns(2)
 with col_l:
     st.subheader("📡 Slow Loop — HMM Radar")
     hmm_rows = []
+    hmm_keys = [f"{sym}_hmm" for sym in SAMPLE_WATCHLIST]
+    hmm_data = _arc_read_batch(lib, hmm_keys)
+
     for sym in SAMPLE_WATCHLIST:
-        item = _arc_read(lib, f"{sym}_hmm")
+        item = hmm_data.get(f"{sym}_hmm")
         if item is not None:
             row = item.data.iloc[-1]
             age = time.time() - float(row.get("timestamp", 0))
@@ -140,8 +172,11 @@ with col_l:
 with col_r:
     st.subheader("⚡ Fast Loop — Meta-Conviction Matrix")
     meta_rows = []
+    meta_keys = [f"{sym}_meta" for sym in SAMPLE_WATCHLIST]
+    meta_data = _arc_read_batch(lib, meta_keys)
+
     for sym in SAMPLE_WATCHLIST:
-        item = _arc_read(lib, f"{sym}_meta")
+        item = meta_data.get(f"{sym}_meta")
         if item is not None:
             row   = item.data.iloc[-1]
             p     = float(row.get("meta_conviction", 0.5))
