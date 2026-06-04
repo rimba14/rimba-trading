@@ -139,45 +139,86 @@ class MathMetaModel:
         and Wasserstein Epistemic Gate logic.
         Returns a dict of conformal interval, width, calibration, and gate status.
         """
-        import math
-        
         # 1. Wasserstein State Gate Check
+        failed, wasserstein_val = self._check_epistemic_gate(features)
+        if failed:
+            return self._gate_failure_result()
+
+        # 2. Extract and Validate Features
+        model_input = self._extract_and_validate_features(symbol, features, wasserstein_val)
+        if model_input is None:
+            return self._gate_failure_result()
+
+        # 3. MoE Routing weights
+        weights = self._calculate_moe_routing_weights(features)
+
+        # Individual Expert Inference and Dot product
+        p_raw = self._perform_moe_inference(weights, model_input)
+
+        # 4. Temporal Isotonic Calibration
+        p_calibrated = self._apply_isotonic_calibration(p_raw)
+
+        # 5. Conformal Prediction Interval calculation
+        prediction_interval, uncertainty_width = self._calculate_conformal_interval(p_calibrated)
+
+        return {
+            "prediction_interval": prediction_interval,
+            "uncertainty_width": uncertainty_width,
+            "trust_gate_failed": False,
+            "p_calibrated": p_calibrated
+        }
+
+    def _gate_failure_result(self) -> dict:
+        """Standard return dict for when a gate or validation fails."""
+        return {
+            "prediction_interval": [0.5, 0.5],
+            "uncertainty_width": 0.0,
+            "trust_gate_failed": True,
+            "p_calibrated": 0.5
+        }
+
+    def _check_epistemic_gate(self, features: dict) -> tuple[bool, float]:
+        """Checks if the Wasserstein value is within the acceptable threshold."""
         try:
             wasserstein_val = float(features.get("wasserstein_state", 0.0))
         except (ValueError, TypeError):
             wasserstein_val = 0.0
 
         if wasserstein_val > self.WASSERSTEIN_MAX_THRESHOLD:
-            self.logger.warning(f"[EPISTEMIC_GATE_TRIGGERED]: Live distribution has drifted into an unverifiable regime ({wasserstein_val:.4f} > {self.WASSERSTEIN_MAX_THRESHOLD})")
-            return {
-                "prediction_interval": [0.5, 0.5],
-                "uncertainty_width": 0.0,
-                "trust_gate_failed": True,
-                "p_calibrated": 0.5
-            }
+            self.logger.warning(
+                f"[EPISTEMIC_GATE_TRIGGERED]: Live distribution has drifted into "
+                f"an unverifiable regime ({wasserstein_val:.4f} > {self.WASSERSTEIN_MAX_THRESHOLD})"
+            )
+            return True, wasserstein_val
+        return False, wasserstein_val
 
-        # 2. Extract Features
+    def _extract_and_validate_features(self, symbol: str, features: dict, wasserstein_val: float) -> list:
+        """Extracts and validates features, returning a feature list or None if invalid."""
         xgb_p = float(features.get("xgb_p", features.get("xgboost_prob", 0.5)))
         kronos_p = float(features.get("kronos_p", features.get("kronos_prob", 0.5)))
         faiss_sim = float(features.get("faiss_sim", features.get("faiss_similarity", 0.0)))
         volatility_ratio = float(features.get("volatility_ratio", 1.0))
         ofi_velocity = float(features.get("ofi_velocity", 0.0))
-        
-        # Cross-Asset Sentiment Divergence Delta feature
         sentiment_divergence_delta = float(features.get("sentiment_divergence_delta", 0.0))
 
         # Check for NaN/Infs in critical inputs
         for val, name in [(xgb_p, "xgb_p"), (kronos_p, "kronos_p"), (faiss_sim, "faiss_sim")]:
             if np.isnan(val) or np.isinf(val):
                 self.logger.critical(f"[MATRIX_CORRUPTION] NaN/Inf in {name} for {symbol}. Vetoing inference.")
-                return {
-                    "prediction_interval": [0.5, 0.5],
-                    "uncertainty_width": 0.0,
-                    "trust_gate_failed": True,
-                    "p_calibrated": 0.5
-                }
+                return None
 
-        # 3. MoE Routing weights
+        return [
+            xgb_p,
+            kronos_p,
+            wasserstein_val,
+            faiss_sim,
+            sentiment_divergence_delta,
+            volatility_ratio,
+            ofi_velocity
+        ]
+
+    def _calculate_moe_routing_weights(self, features: dict) -> tuple[float, float, float]:
+        """Calculates normalized weights for MoE experts based on the current regime."""
         routing_probs = features.get("wasserstein_routing_probs", None)
         if not routing_probs:
             # Fallback based on regime string
@@ -194,47 +235,38 @@ class MathMetaModel:
         w_high_vol = float(routing_probs.get("CRISIS TAIL", 0.33))
         
         total_w = w_trending + w_mean_rev + w_high_vol + 1e-9
-        w_trending /= total_w
-        w_mean_rev /= total_w
-        w_high_vol /= total_w
+        return w_trending / total_w, w_mean_rev / total_w, w_high_vol / total_w
 
-        # Feature Vector (7 Features)
-        model_input = [
-            xgb_p,
-            kronos_p,
-            wasserstein_val,
-            faiss_sim,
-            sentiment_divergence_delta,
-            volatility_ratio,
-            ofi_velocity
-        ]
-
-        # Individual Expert Inference
+    def _perform_moe_inference(self, weights: tuple[float, float, float], model_input: list) -> float:
+        """Calculates the weighted average prediction from all experts."""
+        w_trending, w_mean_rev, w_high_vol = weights
         p_trending = float(self.expert_trending.predict([model_input])[0])
         p_mean_rev = float(self.expert_mean_reverting.predict([model_input])[0])
         p_high_vol = float(self.expert_high_vol.predict([model_input])[0])
 
-        # Dot product
-        p_raw = w_trending * p_trending + w_mean_rev * p_mean_rev + w_high_vol * p_high_vol
+        return w_trending * p_trending + w_mean_rev * p_mean_rev + w_high_vol * p_high_vol
 
-        # 4. Temporal Isotonic Calibration
-        p_calibrated = p_raw
-        if len(self.calibration_queue) >= 10:
-            try:
-                from sklearn.isotonic import IsotonicRegression
-                X_cal = [item[0] for item in self.calibration_queue]
-                y_cal = [item[1] for item in self.calibration_queue]
-                
-                iso = IsotonicRegression(out_of_bounds='clip')
-                iso.fit(X_cal, y_cal)
-                p_calibrated = float(iso.predict([p_raw])[0])
-            except Exception as e:
-                self.logger.warning(f"[META-MODEL] Isotonic Regression failed: {e}. Using raw score.")
-                p_calibrated = p_raw
+    def _apply_isotonic_calibration(self, p_raw: float) -> float:
+        """Applies isotonic regression calibration if enough samples are available."""
+        if len(self.calibration_queue) < 10:
+            return p_raw
 
-        # 5. Conformal Prediction Interval calculation (Coverage 1 - alpha = 0.90)
+        try:
+            from sklearn.isotonic import IsotonicRegression
+            X_cal = [item[0] for item in self.calibration_queue]
+            y_cal = [item[1] for item in self.calibration_queue]
+
+            iso = IsotonicRegression(out_of_bounds='clip')
+            iso.fit(X_cal, y_cal)
+            return float(iso.predict([p_raw])[0])
+        except Exception as e:
+            self.logger.warning(f"[META-MODEL] Isotonic Regression failed: {e}. Using raw score.")
+            return p_raw
+
+    def _calculate_conformal_interval(self, p_calibrated: float) -> tuple[list[float], float]:
+        """Calculates the conformal prediction interval and uncertainty width."""
         alpha = 0.10
-        q = 0.15 # Fallback margin
+        q = 0.15  # Fallback margin
         if len(self.calibration_queue) >= 10:
             try:
                 non_conformity_scores = [abs(item[0] - item[1]) for item in self.calibration_queue]
@@ -244,14 +276,7 @@ class MathMetaModel:
 
         p_lower = float(np.clip(p_calibrated - q, 0.0, 1.0))
         p_upper = float(np.clip(p_calibrated + q, 0.0, 1.0))
-        uncertainty_width = p_upper - p_lower
-
-        return {
-            "prediction_interval": [p_lower, p_upper],
-            "uncertainty_width": uncertainty_width,
-            "trust_gate_failed": False,
-            "p_calibrated": p_calibrated
-        }
+        return [p_lower, p_upper], p_upper - p_lower
 
     def optimize_hyperparameters(self, price_history: pd.Series, atr_series: pd.Series, n_bars: int = 500):
         """Unused hyperparameter optimizer placeholder for compatibility."""
