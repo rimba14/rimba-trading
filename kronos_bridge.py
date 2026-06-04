@@ -184,155 +184,140 @@ class KronosBridge:
         except Exception as e:
             logging.error(f"Failed to commit cache for {symbol}: {e}")
 
-    def run_inference(self, symbol: str, ohlcv_df: pd.DataFrame):
-        """Main execution pipeline."""
-        
-        # 0. Data Integrity Check
+    def _check_preconditions(self, symbol: str, ohlcv_df: pd.DataFrame) -> bool:
+        """Data integrity and wake-up gate verification."""
         if ohlcv_df is None or ohlcv_df.empty or ohlcv_df.isna().any().any():
-            logging.warning("Data fetch returned empty or NaN tensor. Aborting inference for this tick.")
-            return
+            logging.warning(f"[{symbol}] Data fetch returned empty or NaN tensor. Aborting inference.")
+            return False
 
-        # 1. Lazy Wake-Up Gate
         if not self.get_wake_up_gate(symbol):
-            return
+            return False
 
-        # 2. Ensemble Execution (Passed Gate)
         if self.model is None:
             logging.error(f"CRITICAL: Inference requested for {symbol} but Model is OFFLINE.")
+            return False
+
+        return True
+
+    def _prepare_inputs(self, df: pd.DataFrame):
+        """Prepares OHLCV and Timestamp tensors for the model."""
+        price_cols = ['open', 'high', 'low', 'close']
+        vol_col = 'tick_volume'
+        amt_col = 'real_volume'
+
+        # 1. Map for model input
+        x_raw_cols = price_cols + [vol_col, amt_col]
+        x_raw = df[x_raw_cols].tail(512).values.astype(np.float32)
+
+        if amt_col in df.columns and (df[amt_col] == 0).all():
+            x_raw[:, 5] = x_raw[:, 3] * x_raw[:, 4] # Proxy: close * volume
+
+        if len(x_raw) < 512:
+            x_raw = np.pad(x_raw, ((512 - len(x_raw), 0), (0, 0)), mode='edge')
+
+        # 2. Z-Score Normalization
+        x_mean = np.mean(x_raw, axis=0)
+        x_std = np.std(x_raw, axis=0) + 1e-9
+        x_norm = np.clip((x_raw - x_mean) / x_std, -5.0, 5.0)
+        x_tensor = torch.from_numpy(x_norm[np.newaxis, :]).float()
+
+        # 3. Tokenization
+        if self.tokenizer:
+            with torch.no_grad():
+                z_indices = self.tokenizer.encode(x_tensor, half=True)
+            s1_ids, s2_ids = z_indices[0].long(), z_indices[1].long()
+        else:
+            s1_ids = torch.zeros((1, 512), dtype=torch.long)
+            s2_ids = torch.zeros((1, 512), dtype=torch.long)
+
+        # 4. Timestamps
+        time_df = calc_time_stamps(df['time'].tail(512))
+        time_df['minute'] /= 59.0
+        time_df['hour'] /= 23.0
+        time_df['weekday'] /= 6.0
+        time_df['day'] /= 31.0
+        time_df['month'] /= 12.0
+
+        stamp = time_df.values.astype(np.float32)
+        if len(stamp) < 512:
+            stamp = np.pad(stamp, ((512 - len(stamp), 0), (0, 0)), mode='edge')
+        stamp_tensor = torch.from_numpy(stamp[np.newaxis, :]).float()
+
+        return s1_ids, s2_ids, stamp_tensor, x_mean, x_std
+
+    def _calculate_signal(self, s1_ids, s2_ids, stamp_tensor, x_mean, x_std, ohlcv_df):
+        """Executes inference and calculates volatility-adjusted signal."""
+        with torch.no_grad():
+            outputs = self.model(s1_ids, s2_ids, stamp_tensor)
+
+        s1_logits, s2_logits = outputs[0][:, -1, :], outputs[1][:, -1, :]
+        next_s1, next_s2 = torch.argmax(s1_logits, dim=-1, keepdim=True), torch.argmax(s2_logits, dim=-1, keepdim=True)
+
+        base_atr, mu, signal, kronos_raw = 0.0, 0.0, 0.0, 0.5
+
+        if self.tokenizer:
+            with torch.no_grad():
+                pred_tensor = self.tokenizer.decode([next_s1, next_s2], half=True)
+                predicted_close = float(pred_tensor[0, 0, 3])
+
+                # Reverse Z-score
+                pred_close_raw = predicted_close * x_std[3] + x_mean[3]
+                curr_close_raw = ohlcv_df['close'].iloc[-1]
+                mu = (pred_close_raw - curr_close_raw) / (curr_close_raw + 1e-9)
+
+                # ATR (14-period)
+                highs, lows, closes = ohlcv_df['high'].tail(100).values, ohlcv_df['low'].tail(100).values, ohlcv_df['close'].tail(100).values
+                tr = np.maximum(highs[1:] - lows[1:], np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])))
+                base_atr = float(np.mean(tr[-14:]))
+
+                # Scaled Signal
+                signal = (pred_close_raw - curr_close_raw) / (base_atr + 1e-9)
+                kronos_raw = np.clip(1 / (1 + np.exp(-signal / TEMPERATURE)), 0.01, 0.99)
+
+        return kronos_raw, base_atr, mu, signal
+
+    def _get_aux_metrics(self, symbol: str, ohlcv_df: pd.DataFrame):
+        """Retrieves volume percentile and XGBoost baseline."""
+        vol_col = 'tick_volume'
+        volumes = ohlcv_df[vol_col].tail(512).values
+        current_vol = volumes[-1]
+        vol_pct = float(np.sum(volumes < current_vol) / len(volumes))
+
+        if vol_pct == 0.0 and current_vol > 0:
+            vol_pct = 0.21 # Sanity nudge
+
+        existing_xgb = 0.50
+        try:
+            lib = self.store[CACHE_LIB]
+            if f"{symbol}_kronos" in lib.list_symbols():
+                existing_xgb = lib.read(f"{symbol}_kronos").data.iloc[-1].get('xgboost_prob', 0.50)
+        except: pass
+
+        return vol_pct, existing_xgb
+
+    def run_inference(self, symbol: str, ohlcv_df: pd.DataFrame):
+        """Main execution pipeline (Orchestrator)."""
+        if not self._check_preconditions(symbol, ohlcv_df):
             return
 
         try:
-            # 3. Prepare Inputs
-            price_cols = ['open', 'high', 'low', 'close']
-            vol_col = 'tick_volume' # MT5 specific
-            amt_col = 'real_volume'
-            
+            # Ensure tick_volume exists for metrics (consistent with original logic)
             df = ohlcv_df.copy()
-            if vol_col not in df.columns: df[vol_col] = 0.0
-            
-            # Map for model input
-            x_raw_cols = price_cols + [vol_col, amt_col]
-            x_raw = df[x_raw_cols].tail(512).values.astype(np.float32)
-            
-            # If real_volume is missing or 0, use a proxy for amount
-            if amt_col in df.columns and (df[amt_col] == 0).all():
-                # amount = close * tick_volume
-                x_raw[:, 5] = x_raw[:, 3] * x_raw[:, 4]
-            
-            if len(x_raw) < 512:
-                x_raw = np.pad(x_raw, ((512 - len(x_raw), 0), (0, 0)), mode='edge')
-            
-            # Directive 2: Robust Z-Score Normalization (Manual)
-            x_mean = np.mean(x_raw, axis=0)
-            x_std = np.std(x_raw, axis=0) + 1e-9 # Prevent div by zero
-            x_norm = (x_raw - x_mean) / x_std
-            
-            # Clamp outliers to ensure stable gradients and prevent Q4.12 fixed-point clipping
-            x_norm = np.clip(x_norm, -5.0, 5.0)
-            
-            x_tensor = torch.from_numpy(x_norm[np.newaxis, :]).float()
-            if self.tokenizer:
-                with torch.no_grad():
-                    z_indices = self.tokenizer.encode(x_tensor, half=True)
-                s1_ids = z_indices[0].long()
-                s2_ids = z_indices[1].long()
-            else:
-                s1_ids = torch.zeros((1, 512), dtype=torch.long)
-                s2_ids = torch.zeros((1, 512), dtype=torch.long)
-            
-            # Directive 2: Normalize Time-Stamps (Prevent 0.50 Collapse)
-            time_df = calc_time_stamps(df['time'].tail(512))
-            # Scale to [0, 1] range for transformer stability
-            time_df['minute'] /= 59.0
-            time_df['hour'] /= 23.0
-            time_df['weekday'] /= 6.0
-            time_df['day'] /= 31.0
-            time_df['month'] /= 12.0
-            
-            stamp = time_df.values.astype(np.float32)
-            if len(stamp) < 512:
-                stamp = np.pad(stamp, ((512 - len(stamp), 0), (0, 0)), mode='edge')
-            stamp_tensor = torch.from_numpy(stamp[np.newaxis, :]).float()
-            
-            # Inference
-            with torch.no_grad():
-                outputs = self.model(s1_ids, s2_ids, stamp_tensor)
-            
-            # 4. Extract Meaningful Probability
-            # Get logits for the LAST step (prediction for next step)
-            s1_logits = outputs[0][:, -1, :]
-            s2_logits = outputs[1][:, -1, :]
-            
-            # Greedy decode next token
-            next_s1 = torch.argmax(s1_logits, dim=-1, keepdim=True)
-            next_s2 = torch.argmax(s2_logits, dim=-1, keepdim=True)
-            
-            # Initialize defaults
-            base_atr = 0.0
-            mu = 0.0
-            signal = 0.0
-            kronos_raw = 0.5
+            if 'tick_volume' not in df.columns:
+                df['tick_volume'] = 0.0
 
-            if self.tokenizer:
-                with torch.no_grad():
-                    # Decode tokens back to normalized space
-                    pred_tensor = self.tokenizer.decode([next_s1, next_s2], half=True)
-                    # pred_tensor shape: [1, 1, 6] (OHLCV + extra)
-                    predicted_close = float(pred_tensor[0, 0, 3])
-                    
-                    # Directive 2: Volatility-Adjusted Temperature Scaling
-                    # 1. Calculate Predicted Return (mu)
-                    # Reverse Z-score to get raw price prediction: price = z * std + mean
-                    # x_mean[3] and x_std[3] correspond to 'close' price
-                    pred_close_raw = predicted_close * x_std[3] + x_mean[3]
-                    curr_close_raw = df['close'].iloc[-1]
-                    mu = (pred_close_raw - curr_close_raw) / (curr_close_raw + 1e-9)
-                    
-                    # 2. Calculate Recent Volatility (ATR)
-                    highs = df['high'].tail(100).values
-                    lows = df['low'].tail(100).values
-                    closes = df['close'].tail(100).values
-                    tr = np.maximum(highs[1:] - lows[1:], 
-                                    np.maximum(np.abs(highs[1:] - closes[:-1]), 
-                                               np.abs(lows[1:] - closes[:-1])))
-                    base_atr = float(np.mean(tr[-14:]))
-                    
-                    # 3. Compute Unconstrained Signal (Normalized against ATR)
-                    # signal = (Predicted Price Change) / ATR
-                    epsilon = 1e-9
-                    price_change = pred_close_raw - curr_close_raw
-                    signal = price_change / (base_atr + epsilon)
-                    
-                    # 4. Apply Temperature-Scaled Sigmoid (Phase 2 Rule)
-                    # TEMPERATURE scaling constant to soften conviction (divide raw logits by T = 2.5)
-                    kronos_raw = 1 / (1 + np.exp(-signal / TEMPERATURE))
-                    
-                    # Clamp output to [0.01, 0.99] to maintain resolution
-                    kronos_raw = np.clip(kronos_raw, 0.01, 0.99)
-
-            # ATR already calculated above as base_atr
-            # (Redundant block removed)
+            # 1. Prepare Inputs
+            s1_ids, s2_ids, stamp_tensor, x_mean, x_std = self._prepare_inputs(df)
             
-            volumes = df[vol_col].tail(512).values
-            current_vol = volumes[-1]
-            vol_pct = float(np.sum(volumes < current_vol) / len(volumes))
+            # 2. Execute Inference & Calculate Signal
+            kronos_raw, base_atr, mu, signal = self._calculate_signal(
+                s1_ids, s2_ids, stamp_tensor, x_mean, x_std, df
+            )
             
-            # Sanity nudge: ensure we don't block just because of exactly zero volume history 
-            # if the current volume is at least 1.
-            if vol_pct == 0.0 and current_vol > 0:
-                vol_pct = 0.21 
-
-            # Retrieve existing XGBoost probability, but update with dynamic prediction if available
-            existing_xgb = 0.50
-            try:
-                lib = self.store[CACHE_LIB]
-                if f"{symbol}_kronos" in lib.list_symbols():
-                    k_item = lib.read(f"{symbol}_kronos")
-                    existing_xgb = k_item.data.iloc[-1].get('xgboost_prob', 0.50)
-            except: pass
+            # 3. Auxiliary Metrics
+            vol_pct, existing_xgb = self._get_aux_metrics(symbol, df)
 
             print(f"[SLOW LOOP RAW] {symbol} | Kronos: {kronos_raw:.4f} | Mu: {mu:.6f} | Sig: {signal:.2f} | ATR: {base_atr:.5f} | Vol%: {vol_pct:.2f}")
-            
             self.commit_to_cache(symbol, kronos_raw, xgboost_prob=existing_xgb, base_atr=base_atr, vol_pct=vol_pct, is_bypass=False)
             
         except Exception as e:
