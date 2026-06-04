@@ -3,15 +3,114 @@ from arcticdb import Arctic
 import math
 import sys
 
-def main():
-    if not mt5.initialize():
-        print("MT5 initialization failed")
-        sys.exit(1)
+def get_atr_multiplier(sym):
+    """Returns the ATR multiplier based on the symbol."""
+    multiplier = 6.0
+    if "BTC" in sym or "ETH" in sym:
+        multiplier = 4.0
+    elif "US30" in sym or "NAS100" in sym or "US2000" in sym or "SPX500" in sym:
+        multiplier = 4.0
+    elif "XAU" in sym or "XAG" in sym:
+        multiplier = 4.0
+    return multiplier
 
-    print("Retrieving candidate trades from oracle cache...")
-    store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
-    lib = store["oracle_cache"]
+def calculate_atr_from_rates(rates):
+    """Calculates Average True Range (ATR) from MT5 rates."""
+    if rates is None or len(rates) < 2:
+        return None
+    highs = [r[2] for r in rates]
+    lows = [r[3] for r in rates]
+    closes = [r[4] for r in rates]
+    atr = sum([max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(rates))]) / (len(rates) - 1)
+    return atr
 
+def calculate_trade_parameters(sym, direction, tick, info, acc, atr, multiplier):
+    """Calculates SL, TP and lot size for the trade."""
+    sl_dist = atr * multiplier
+    tp_dist = sl_dist * 1.5
+
+    price = tick.ask if direction == "BUY" else tick.bid
+    digits = info.digits
+
+    # Calculate base SL and TP
+    sl = price - sl_dist if direction == "BUY" else price + sl_dist
+    tp = price + tp_dist if direction == "BUY" else price - tp_dist
+
+    # Dynamic spread-based protection
+    spread = tick.ask - tick.bid
+    min_sl_dist = spread * 1.5
+
+    actual_sl_dist = abs(price - sl)
+    if actual_sl_dist < min_sl_dist:
+        if direction == "BUY":
+            sl = price - min_sl_dist
+            # Keep R:R aligned (pad TP accordingly)
+            tp = price + (min_sl_dist * 1.5)
+        else:
+            sl = price + min_sl_dist
+            tp = price - (min_sl_dist * 1.5)
+
+    sl = round(sl, digits)
+    tp = round(tp, digits)
+
+    # Position sizing
+    sl_dist_points = abs(price - sl) / (info.point + 1e-12)
+    point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
+
+    risk_usd = acc.balance * 0.02 * 0.5  # 2% risk with 0.5 multiplier -> 1% total risk
+    raw_lot = risk_usd / (sl_dist_points * point_val + 1e-12)
+    lot = math.floor(raw_lot / info.volume_step) * info.volume_step
+    if lot <= 0:
+        lot = info.volume_min
+
+    # Extra safeguards on lot sizing
+    if lot > info.volume_max:
+        lot = info.volume_max
+
+    return price, sl, tp, lot
+
+def execute_mt5_order(sym, lot, action_type, price, sl, tp):
+    """Sends order to MT5 and handles retries for fill modes."""
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": sym,
+        "volume": lot,
+        "type": action_type,
+        "price": price,
+        "sl": sl,
+        "tp": tp,
+        "deviation": 20,
+        "magic": 777777,
+        "comment": "Sentinel Force Trade",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    print(" -> Sending order to MT5...")
+    result = mt5.order_send(request)
+
+    if result is None:
+        print(" -> Error: mt5.order_send returned None")
+        return False
+
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f" -> Execution failed: {result.retcode} - {result.comment}")
+        # If filling mode issue, try standard fill types
+        if result.retcode in [10030, 10022]:  # Invalid fill mode/parameters
+            for alt_filling in [mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]:
+                print(f" -> Retrying with alternative fill mode: {alt_filling}")
+                request["type_filling"] = alt_filling
+                result = mt5.order_send(request)
+                if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                    print(f" -> SUCCESS on retry: Executed {sym} at {price:.5f} with fill mode {alt_filling}")
+                    return True
+        return False
+    else:
+        print(f" -> SUCCESS: Executed {sym} at {price:.5f}")
+        return True
+
+def get_candidate_trades(lib):
+    """Retrieves candidate trades from the oracle cache library."""
     assets = []
     for sym in lib.list_symbols():
         if sym.endswith("_meta"):
@@ -34,7 +133,18 @@ def main():
                     })
 
     # Sort by conviction descending
-    assets = sorted(assets, key=lambda x: x["conviction"], reverse=True)
+    return sorted(assets, key=lambda x: x["conviction"], reverse=True)
+
+def main():
+    if not mt5.initialize():
+        print("MT5 initialization failed")
+        sys.exit(1)
+
+    print("Retrieving candidate trades from oracle cache...")
+    store = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+    lib = store["oracle_cache"]
+
+    assets = get_candidate_trades(lib)
     
     print(f"Found {len(assets)} potential trade candidates. Evaluating for execution...")
     
@@ -78,110 +188,20 @@ def main():
             
         # Calculate ATR
         rates = mt5.copy_rates_from_pos(sym, mt5.TIMEFRAME_H1, 0, 20)
-        if rates is None or len(rates) < 2:
-            print(f" -> Failed to get hourly rates for ATR calculation on {sym}. Skipping.")
+        atr = calculate_atr_from_rates(rates)
+        if atr is None:
+            print(f" -> Failed to calculate ATR for {sym}. Skipping.")
             continue
-            
-        highs = [r[2] for r in rates]
-        lows = [r[3] for r in rates]
-        closes = [r[4] for r in rates]
-        atr = sum([max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(rates))]) / (len(rates) - 1)
         
-        multiplier = 6.0
-        if "BTC" in sym or "ETH" in sym: multiplier = 4.0
-        elif "US30" in sym or "NAS100" in sym or "US2000" in sym or "SPX500" in sym: multiplier = 4.0
-        elif "XAU" in sym or "XAG" in sym: multiplier = 4.0
+        multiplier = get_atr_multiplier(sym)
         
-        sl_dist = atr * multiplier
-        tp_dist = sl_dist * 1.5
-        
-        price = tick.ask if direction == "BUY" else tick.bid
-        digits = info.digits
-        
-        # Calculate base SL and TP
-        sl = price - sl_dist if direction == "BUY" else price + sl_dist
-        tp = price + tp_dist if direction == "BUY" else price - tp_dist
-        
-        # Dynamic spread-based protection
-        spread = tick.ask - tick.bid
-        min_sl_dist = spread * 1.5
-        
-        actual_sl_dist = abs(price - sl)
-        if actual_sl_dist < min_sl_dist:
-            print(f" -> Warning: Calculated SL dist ({actual_sl_dist:.5f}) is less than 1.5x spread ({min_sl_dist:.5f}). Padding SL.")
-            if direction == "BUY":
-                sl = price - min_sl_dist
-                # Keep R:R aligned (pad TP accordingly)
-                tp = price + (min_sl_dist * 1.5)
-            else:
-                sl = price + min_sl_dist
-                tp = price - (min_sl_dist * 1.5)
-        else:
-            print(f" -> Calculated SL dist ({actual_sl_dist:.5f}) is safe against spread ({spread:.5f}).")
-            
-        sl = round(sl, digits)
-        tp = round(tp, digits)
-        
-        # Position sizing
-        sl_dist_points = abs(price - sl) / (info.point + 1e-12)
-        point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
-        
-        risk_usd = acc.balance * 0.02 * 0.5  # 2% risk with 0.5 multiplier -> 1% total risk
-        raw_lot = risk_usd / (sl_dist_points * point_val + 1e-12)
-        lot = math.floor(raw_lot / info.volume_step) * info.volume_step
-        if lot <= 0:
-            lot = info.volume_min
-            
-        # Extra safeguards on lot sizing
-        if lot > info.volume_max:
-            lot = info.volume_max
+        price, sl, tp, lot = calculate_trade_parameters(sym, direction, tick, info, acc, atr, multiplier)
             
         print(f" -> Prepared order: {direction} {lot} lots at {price:.5f} | SL: {sl} | TP: {tp}")
         
         action_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
         
-        # Fill mode check
-        filling = mt5.ORDER_FILLING_IOC
-
-            
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": sym,
-            "volume": lot,
-            "type": action_type,
-            "price": price,
-            "sl": sl,
-            "tp": tp,
-            "deviation": 20,
-            "magic": 777777,
-            "comment": "Sentinel Force Trade",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": filling,
-        }
-        
-        print(" -> Sending order to MT5...")
-        result = mt5.order_send(request)
-        
-        if result is None:
-            print(" -> Error: mt5.order_send returned None")
-            continue
-            
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            print(f" -> Execution failed: {result.retcode} - {result.comment}")
-            # If filling mode issue, try standard fill types
-            if result.retcode in [10030, 10022]:  # Invalid fill mode/parameters
-                for alt_filling in [mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]:
-                    print(f" -> Retrying with alternative fill mode: {alt_filling}")
-                    request["type_filling"] = alt_filling
-                    result = mt5.order_send(request)
-                    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                        print(f" -> SUCCESS on retry: Executed {sym} {direction} at {price:.5f} with fill mode {alt_filling}")
-                        executed_any = True
-                        break
-            if executed_any:
-                break
-        else:
-            print(f" -> SUCCESS: Executed {sym} {direction} at {price:.5f}")
+        if execute_mt5_order(sym, lot, action_type, price, sl, tp):
             executed_any = True
             break
             
