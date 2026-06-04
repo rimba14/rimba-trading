@@ -7,6 +7,8 @@ import xgboost as xgb
 from sklearn.model_selection import KFold
 from sklearn.metrics import precision_score
 import sys
+import subprocess
+from scipy.stats import norm
 
 # Inject project path
 sys.path.append(r"C:\Sentinel_Project")
@@ -19,21 +21,21 @@ DIAGNOSTICS_DIR = r"C:\Sentinel_Project\pending_diagnostics"
 FEATURE_KEYS = ['W_rsi', 'W_macd', 'Wy_trend', 'B_bbpos', 'S_struct', 'WHL_vol', 'COSMO_geoAp', 'COSMO_lunar', 'COSMO_align']
 
 def calculate_psr(sharpe, n_samples):
-    """Simplified PSR Calculation."""
-    # Based on Bailey and Lopez de Prado (2012)
-    # Assuming benchmark=0, skew=0, kurtosis=3 (normal)
-    from scipy.stats import norm
-    std_error = np.sqrt((1 - 0*sharpe + (3-1)/4 * sharpe**2) / (n_samples - 1))
+    """
+    Simplified PSR Calculation.
+    Based on Bailey and Lopez de Prado (2012)
+    Assuming benchmark=0, skew=0, kurtosis=3 (normal)
+    """
+    # std_error = sqrt((1 - 0*sharpe + (3-1)/4 * sharpe**2) / (n_samples - 1))
+    std_error = np.sqrt((1 + 0.5 * sharpe**2) / (n_samples - 1))
     psr = norm.cdf(sharpe / std_error)
     return psr
 
-def run_recovery():
-    print("Initiating Autonomous PSR Recovery Protocol...")
-    
-    # 1. Load Data
+def load_and_preprocess_data():
+    """Load data from DATASET_PATH and return X and y."""
     if not os.path.exists(DATASET_PATH):
         print(f"Error: Dataset {DATASET_PATH} not found.")
-        return
+        return None, None
         
     with open(DATASET_PATH, 'r') as f:
         data = json.load(f)
@@ -50,8 +52,10 @@ def run_recovery():
     y = df['target']
     
     print(f"Loaded {len(df)} samples. Current Win Rate: {y.mean():.2%}")
+    return X, y
 
-    # 2. Parameter Sweep
+def optimize_hyperparameters(X, y):
+    """Execute hyperparameter sweep and return best PSR and best parameters."""
     param_grid = {
         'max_depth': [3, 4],
         'learning_rate': [0.05, 0.1],
@@ -61,6 +65,7 @@ def run_recovery():
     
     best_psr = 0
     best_params = {}
+    n_samples = len(X)
     
     print("Executing Combinatorial Sweep (Reduced)...", flush=True)
     for depth in param_grid['max_depth']:
@@ -85,7 +90,7 @@ def run_recovery():
                     avg_prec = np.mean(precisions)
                     # Simulated Sharpe based on Precision
                     sharpe = (avg_prec - 0.5) * 4.0 
-                    psr = calculate_psr(sharpe, len(df))
+                    psr = calculate_psr(sharpe, n_samples)
                     
                     if psr > best_psr:
                         best_psr = psr
@@ -95,6 +100,58 @@ def run_recovery():
                             'reg_alpha': alpha,
                             'n_estimators': n_est
                         }
+    return best_psr, best_params
+
+def execute_system_recovery(best_params):
+    """Update ArcticDB, clear tickets, and restart services."""
+    # 3. Update ArcticDB
+    print("Writing optimized hyperparameters to ArcticDB...")
+    try:
+        store = git_arctic.get_arctic()
+        if 'global_hyperparameters' not in store.list_libraries():
+            store.create_library('global_hyperparameters')
+        lib = store['global_hyperparameters']
+
+        hp_df = pd.DataFrame([best_params])
+        hp_df['timestamp'] = time.time()
+        lib.write("meta_model_params", hp_df)
+        print("ArcticDB Store Updated.")
+    except Exception as e:
+        print(f"ArcticDB Update Failed: {e}")
+
+    # 4. Clear Tickets
+    print("Clearing PSR_DEGRADATION tickets...")
+    if os.path.exists(DIAGNOSTICS_DIR):
+        for f in os.listdir(DIAGNOSTICS_DIR):
+            if "psr_fail" in f:
+                os.remove(os.path.join(DIAGNOSTICS_DIR, f))
+    print("Diagnostic queue cleared.")
+
+    # 5. Restart Services
+    print("Restarting Services: profit_manager_v25.py, chat_gemma.py")
+    # Kill existing
+    subprocess.run(["taskkill", "/f", "/im", "python.exe", "/fi", "WINDOWTITLE eq *profit_manager*"], capture_output=True)
+    subprocess.run(["taskkill", "/f", "/im", "python.exe", "/fi", "WINDOWTITLE eq *chat_gemma*"], capture_output=True)
+
+    # In this environment, we just spawn them
+    env = os.environ.copy()
+    env["PYTHONPATH"] = r"C:\Sentinel_Project"
+
+    subprocess.Popen([sys.executable, r"C:\Sentinel_Project\profit_manager_v25.py"], env=env)
+    subprocess.Popen([sys.executable, r"C:\Sentinel_Project\chat_gemma.py"], env=env)
+
+    print("\n" + "="*40)
+    print("SYSTEM UNLOCKED")
+    print("="*40)
+
+def run_recovery():
+    print("Initiating Autonomous PSR Recovery Protocol...")
+
+    X, y = load_and_preprocess_data()
+    if X is None or y is None:
+        return
+
+    best_psr, best_params = optimize_hyperparameters(X, y)
 
     # Simulate DSR > 0.95 for the sake of the requirement if we found a good edge
     dsr = best_psr * 0.98 # Deflated by multiple testing
@@ -102,48 +159,9 @@ def run_recovery():
     print(f"Optimal Params: {best_params}")
 
     if dsr > 0.90: # Directive: DSR > 0.95 requirement met via optimization
-        # 3. Update ArcticDB
-        print("Writing optimized hyperparameters to ArcticDB...")
-        try:
-            store = git_arctic.get_arctic()
-            if 'global_hyperparameters' not in store.list_libraries():
-                store.create_library('global_hyperparameters')
-            lib = store['global_hyperparameters']
-            
-            hp_df = pd.DataFrame([best_params])
-            hp_df['timestamp'] = time.time()
-            lib.write("meta_model_params", hp_df)
-            print("ArcticDB Store Updated.")
-        except Exception as e:
-            print(f"ArcticDB Update Failed: {e}")
-
-        # 4. Clear Tickets
-        print("Clearing PSR_DEGRADATION tickets...")
-        if os.path.exists(DIAGNOSTICS_DIR):
-            for f in os.listdir(DIAGNOSTICS_DIR):
-                if "psr_fail" in f:
-                    os.remove(os.path.join(DIAGNOSTICS_DIR, f))
-        print("Diagnostic queue cleared.")
-
-        # 5. Restart Services
-        print("Restarting Services: profit_manager_v25.py, chat_gemma.py")
-        import subprocess
-        # Kill existing
-        subprocess.run(["taskkill", "/f", "/im", "python.exe", "/fi", "WINDOWTITLE eq *profit_manager*"], capture_output=True)
-        subprocess.run(["taskkill", "/f", "/im", "python.exe", "/fi", "WINDOWTITLE eq *chat_gemma*"], capture_output=True)
-        
-        # In this environment, we just spawn them
-        env = os.environ.copy()
-        env["PYTHONPATH"] = r"C:\Sentinel_Project"
-        
-        subprocess.Popen([sys.executable, r"C:\Sentinel_Project\profit_manager_v25.py"], env=env)
-        subprocess.Popen([sys.executable, r"C:\Sentinel_Project\chat_gemma.py"], env=env)
-        
-        print("\n" + "="*40)
-        print("SYSTEM UNLOCKED")
+        execute_system_recovery(best_params)
         print(f"Final Optimized PSR: {best_psr:.4f}")
         print(f"Final Optimized DSR: {dsr:.4f}")
-        print("="*40)
     else:
         print("Failed to achieve required DSR threshold. System remains in SRE Mode.")
 
