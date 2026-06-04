@@ -28,6 +28,9 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+import MetaTrader5 as mt5
+import dynamic_instrument_router as router
+from fastapi_sniper import calculate_structural_atr_d1
 
 # Global dicts for Regime Hysteresis (v20.4)
 _WASSERSTEIN_HISTORY = defaultdict(list)
@@ -215,7 +218,6 @@ import xgboost as xgb
 import shap
 
 from pre_execution_gate import run_all_gates
-import MetaTrader5 as mt5
 import requests
 import copy
 from statsmodels.tsa.stattools import adfuller
@@ -868,7 +870,6 @@ def push_to_orchestrator(payload: Dict[str, Any]):
 
     try:
         # --- PHASE 4 PRE-EXECUTION GATE ---
-        import MetaTrader5 as mt5
         symbol = payload.get('symbol', '')
         direction = payload.get('direction', '')
         regime_key = payload.get('wasserstein_state', 'NORMAL')
@@ -2274,6 +2275,90 @@ def execute_historical_backfill(watchlist: list):
     logging.info(f"[SRE] Cache-based backfill verification ({len(watchlist)} assets)...")
     pass
 
+def _initialize_atrs(watchlist: list):
+    """Pre-fetch ATRs for Cycle 0 routing."""
+    global _LAST_CYCLE_ATRs
+    if not _LAST_CYCLE_ATRs:
+        logging.info("[ROUTER] Pre-fetching ATRs for Cycle 0 routing...")
+        for sym in watchlist:
+            try:
+                atr = calculate_structural_atr_d1(sym, period=14)
+                _LAST_CYCLE_ATRs[sym] = atr
+            except Exception:
+                _LAST_CYCLE_ATRs[sym] = 0.0
+
+def _update_last_cycle_metrics(watchlist: list):
+    """Store initial prices and ATRs after an evaluation cycle."""
+    global _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs
+    for symbol in watchlist:
+        try:
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
+                # Emit standardized Event Schema (Constraint 4)
+                tick_event = {
+                    "event_type": "TICK",
+                    "symbol": symbol,
+                    "timestamp_ms": tick.time_msc,
+                    "bid": tick.bid,
+                    "ask": tick.ask,
+                    "last": tick.last,
+                    "volume": tick.volume
+                }
+                # In future, route `tick_event` to standardized handlers matching NautilusTrader architecture
+
+            meta_item = _arctic_read(f"{symbol}_meta")
+            if meta_item is not None:
+                _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
+        except Exception as e:
+            logging.debug(f"[UPDATE_METRICS_ERR] {symbol}: {e}")
+
+async def _mock_mt5_tick_producer(queue: asyncio.Queue):
+    """Producer for simulated MT5 ticks."""
+    while True:
+        await asyncio.sleep(10)
+        await queue.put("TICK")
+
+async def mt5_event_loop(watchlist: list, last_run_hour: int, current_equity: float):
+    """Main event loop for processing MT5 events."""
+    global _TICK_STARVATION_DETECTED, _IS_STARTUP_OR_SHOCK
+    mt5_queue = asyncio.Queue()
+    asyncio.create_task(_mock_mt5_tick_producer(mt5_queue))
+
+    import sentinel_config as cfg
+
+    while True:
+        try:
+            event = await mt5_queue.get()
+            trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
+
+            # Post-exit / Equity change check
+            acc = mt5.account_info()
+            new_equity = acc.equity if acc else current_equity
+            if abs(new_equity - current_equity) > getattr(cfg, 'ROUTER_EQUITY_UPDATE_THRESHOLD', 50.0):
+                logging.info(f"[ROUTER] Equity changed from {current_equity} to {new_equity}. Re-evaluating universe...")
+                current_equity = new_equity
+                watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
+                trigger = True
+                reason = "EQUITY_CHANGE"
+
+            if trigger:
+                logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
+                _IS_STARTUP_OR_SHOCK = "VOLATILITY_SHOCK" in reason
+
+                await process_matrix_parallel(watchlist, force_refresh=True)
+                _pre_scan_watchlist(watchlist)
+
+                # Update loop states
+                last_run_hour = datetime.now().hour
+                _IS_STARTUP_OR_SHOCK = False
+
+                # Update metrics for the next cycle
+                _update_last_cycle_metrics(watchlist)
+        except Exception as e:
+            logging.error(f"[HEARTBEAT_ERROR] {e}")
+            await asyncio.sleep(10)
+
 def should_trigger_evaluation(watchlist: list, last_run_hour: int):
     global _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs
     now = datetime.now()
@@ -2284,7 +2369,6 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
         return True, "H1_CLOSE"
         
     # 2. Volatility Shock Check (> 0.5 ATR price movement)
-    import MetaTrader5 as mt5
     for symbol in watchlist:
         try:
             tick = mt5.symbol_info_tick(symbol)
@@ -2320,20 +2404,10 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
     return False, None
 
 def main():
-    global _LAST_CS_REFRESH, _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs, _IS_STARTUP_OR_SHOCK
+    global _LAST_CS_REFRESH, _IS_STARTUP_OR_SHOCK
     print("=" * 60)
-    import dynamic_instrument_router as router
-    import MetaTrader5 as mt5
-    from fastapi_sniper import calculate_structural_atr_d1
 
-    if not _LAST_CYCLE_ATRs:
-        logging.info("[ROUTER] Pre-fetching ATRs for Cycle 0 routing...")
-        for sym in WATCHLIST:
-            try:
-                atr = calculate_structural_atr_d1(sym, period=14)
-                _LAST_CYCLE_ATRs[sym] = atr
-            except Exception:
-                _LAST_CYCLE_ATRs[sym] = 0.0
+    _initialize_atrs(WATCHLIST)
 
     acc = mt5.account_info()
     current_equity = acc.equity if acc else 0.0
@@ -2356,95 +2430,14 @@ def main():
     _LAST_CS_REFRESH = time.time()
     
     # Store initial prices and ATRs after the first cycle
-    import MetaTrader5 as mt5
-    for symbol in watchlist:
-        try:
-            tick = mt5.symbol_info_tick(symbol)
-            if tick:
-                _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
-            meta_item = _arctic_read(f"{symbol}_meta")
-            if meta_item is not None:
-                _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
-        except Exception as e:
-            logging.debug(f"[INIT_PRICE_ERR] {symbol}: {e}")
+    _update_last_cycle_metrics(watchlist)
             
     last_run_hour = datetime.now().hour
     _IS_STARTUP_OR_SHOCK = False
     logging.info("[SYSTEM] Cycle 0 execution completed. Entering short-polling event loop.")
 
     # Directive 2: Information-Driven Awakening (Event-Driven asyncio.Queue)
-    async def mt5_event_loop():
-        nonlocal last_run_hour, watchlist, current_equity
-        mt5_queue = asyncio.Queue()
-        
-        async def mock_mt5_tick_producer():
-            while True:
-                await asyncio.sleep(10)
-                await mt5_queue.put("TICK")
-                
-        asyncio.create_task(mock_mt5_tick_producer())
-        
-        while True:
-            global _TICK_STARVATION_DETECTED, _IS_STARTUP_OR_SHOCK
-            try:
-                event = await mt5_queue.get()
-                
-                trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
-                
-                # Post-exit / Equity change check
-                acc = mt5.account_info()
-                new_equity = acc.equity if acc else current_equity
-                import sentinel_config as cfg
-                if abs(new_equity - current_equity) > getattr(cfg, 'ROUTER_EQUITY_UPDATE_THRESHOLD', 50.0):
-                    logging.info(f"[ROUTER] Equity changed from {current_equity} to {new_equity}. Re-evaluating universe...")
-                    current_equity = new_equity
-                    watchlist = router.compute_eligible_universe(current_equity, _LAST_CYCLE_ATRs)
-                    trigger = True
-                    reason = "EQUITY_CHANGE"
-                    
-                if trigger:
-                    logging.info(f"[HEARTBEAT] Starting Event-Driven Evaluation Cycle ({reason}) ({len(watchlist)} assets)...")
-                    if "VOLATILITY_SHOCK" in reason:
-                        _IS_STARTUP_OR_SHOCK = True
-                    else:
-                        _IS_STARTUP_OR_SHOCK = False
-                        
-                    await process_matrix_parallel(watchlist, force_refresh=True)
-                    _pre_scan_watchlist(watchlist)
-                    
-                    # Update loop states
-                    last_run_hour = datetime.now().hour
-                    _IS_STARTUP_OR_SHOCK = False
-                    
-                    # --- CONSTRAINT 4: EVENT-DRIVEN PARITY ARCHITECTURE ---
-                    # Ensure price data timestamping and queuing mirrors research-to-production semantics exactly
-                    # Transform live tick data stream into identical event schema as backtesting
-                    for symbol in watchlist:
-                        try:
-                            tick = mt5.symbol_info_tick(symbol)
-                            if tick:
-                                _LAST_CYCLE_PRICES[symbol] = (tick.bid + tick.ask) / 2
-                                # Emit standardized Event Schema
-                                tick_event = {
-                                    "event_type": "TICK",
-                                    "symbol": symbol,
-                                    "timestamp_ms": tick.time_msc,
-                                    "bid": tick.bid,
-                                    "ask": tick.ask,
-                                    "last": tick.last,
-                                    "volume": tick.volume
-                                }
-                                # In future, route `tick_event` to standardized handlers matching NautilusTrader architecture
-                            meta_item = _arctic_read(f"{symbol}_meta")
-                            if meta_item is not None:
-                                _LAST_CYCLE_ATRs[symbol] = float(meta_item.data.iloc[-1].get("atr", 0.0))
-                        except Exception as e:
-                            logging.debug(f"[UPDATE_PRICE_ERR] {symbol}: {e}")
-            except Exception as e:
-                logging.error(f"[HEARTBEAT_ERROR] {e}")
-                await asyncio.sleep(10)
-                
-    asyncio.run(mt5_event_loop())
+    asyncio.run(mt5_event_loop(watchlist, last_run_hour, current_equity))
 
 if __name__ == "__main__":
     main()
