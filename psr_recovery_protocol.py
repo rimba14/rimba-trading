@@ -18,14 +18,6 @@ DATASET_PATH = r"C:\Sentinel_Project\rsi_trade_dataset.json"
 DIAGNOSTICS_DIR = r"C:\Sentinel_Project\pending_diagnostics"
 FEATURE_KEYS = ['W_rsi', 'W_macd', 'Wy_trend', 'B_bbpos', 'S_struct', 'WHL_vol', 'COSMO_geoAp', 'COSMO_lunar', 'COSMO_align']
 
-def calculate_psr(sharpe, n_samples):
-    """Simplified PSR Calculation."""
-    # Based on Bailey and Lopez de Prado (2012)
-    # Assuming benchmark=0, skew=0, kurtosis=3 (normal)
-    from scipy.stats import norm
-    std_error = np.sqrt((1 - 0*sharpe + (3-1)/4 * sharpe**2) / (n_samples - 1))
-    psr = norm.cdf(sharpe / std_error)
-    return psr
 
 def run_recovery():
     print("Initiating Autonomous PSR Recovery Protocol...")
@@ -85,7 +77,7 @@ def run_recovery():
                     avg_prec = np.mean(precisions)
                     # Simulated Sharpe based on Precision
                     sharpe = (avg_prec - 0.5) * 4.0 
-                    psr = calculate_psr(sharpe, len(df))
+                    psr = utils.calculate_psr(sharpe=sharpe, n_samples=len(df))
                     
                     if psr > best_psr:
                         best_psr = psr

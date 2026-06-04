@@ -46,6 +46,7 @@ from typing import Optional
 import threading
 import signal
 from gitagent_types import TelemetryState
+import gitagent_utils as utils
 
 import numpy as np
 import requests
@@ -828,17 +829,7 @@ def _deal_to_return(deal) -> Optional[float]:
 
 def calculate_psr(returns: list[float]) -> float:
     """Bailey & Lopez de Prado PSR on normalized returns."""
-    arr = np.array(returns)
-    if len(arr) < PSR_MIN_SAMPLES:   # [FIX] was 10 — now 25
-        return 1.0                    # insufficient data — no halt
-    sharpe  = np.mean(arr) / (np.std(arr) + 1e-9)
-    n       = len(arr)
-    skew    = stats.skew(arr)
-    kurt    = stats.kurtosis(arr)
-    std_err = np.sqrt(
-        (1 - skew * sharpe + (kurt - 1) / 4.0 * sharpe**2) / max(n - 1, 1)
-    )
-    return float(stats.norm.cdf(sharpe / (std_err + 1e-9)))
+    return utils.calculate_psr(returns=returns, min_samples=PSR_MIN_SAMPLES)
 
 
 def load_risk_config() -> dict:
