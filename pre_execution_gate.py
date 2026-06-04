@@ -8,6 +8,10 @@ import sentinel_config as cfg
 
 logger = logging.getLogger("PreExecutionGate")
 
+# Module constants
+MAGIC_NUMBER = 142
+MAGIC_LEGACY = 17300
+
 class PriceUnit:
     def __init__(self, value: float):
         if not isinstance(value, (int, float)) or value <= 0:
@@ -77,14 +81,11 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
     if not mt5.initialize():
         mt5.initialize()
         
-    MAGIC_NUMBER = 142
-    MAGIC_LEGACY = 17300
-    
     positions = mt5.positions_get() or ()
-    open_positions = [p for p in positions if getattr(p, 'magic', 0) in (142, 17300)]
+    open_positions = [p for p in positions if getattr(p, 'magic', 0) in (MAGIC_NUMBER, MAGIC_LEGACY)]
     
     orders = mt5.orders_get() or ()
-    pending_orders = [o for o in orders if getattr(o, 'magic', 0) in (142, 17300)]
+    pending_orders = [o for o in orders if getattr(o, 'magic', 0) in (MAGIC_NUMBER, MAGIC_LEGACY)]
     
     all_active_exposure = open_positions + pending_orders
     
@@ -157,77 +158,78 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
             
     return GateResult(gate="GATE-0", status=ALLOW, message="Passed Correlation Cluster Limiter v30.98.")
 
-def run_all_gates(
-    symbol: str, 
-    direction: str, 
-    asset_class: str,
-    regime: str, 
-    ticket_ref: str,
-    kelly_lots: float, 
-    entry_price: float,
-    sl_distance: float, 
-    tp_distance: float,
-    risk_usd: float, 
-    equity: float,
-    current_heat_usd: float,
-    embargo_registry: dict
-) -> PreExecutionVerdict:
-    
-    # Helper to return rejection
-    def reject(reason: str) -> PreExecutionVerdict:
-        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: {reason}")
-
-    # GATE-0: Cross-Asset Correlation Cluster Limiter
-    gate0_res = gate0_correlation_cluster_limit(symbol, direction)
-    if gate0_res.status == BLOCK:
-        return reject(f"Gate 0 Failed ({gate0_res.gate}): {gate0_res.message}")
-
-    # Enforce strict parameter type-safety and dimension checking
-    try:
-        PriceUnit(entry_price)
-        PipDistance(sl_distance, entry_price)
-        PipDistance(tp_distance, entry_price)
-        LotVolume(kelly_lots)
-    except (TypeError, ValueError) as type_err:
-        logger.error(f"Type-Safety Gate Violation for {symbol}: {type_err}")
-        return reject(f"Type-Safety Violation: {type_err}")
-
-    # GATE-1: ECN Minimum Contract Conflict
+def gate1_ecn_conflict(symbol: str, kelly_lots: float, equity: float) -> GateResult:
     # Rule A: If equity < GATE_MIN_EQUITY[symbol], BLOCK
     min_equity = cfg.GATE_MIN_EQUITY.get(symbol, 0.0)
     if equity < min_equity:
-        return reject(f"Gate 1A Failed: Equity {equity} < Min Equity {min_equity} for {symbol}")
+        return GateResult(
+            gate="GATE-1A",
+            status=BLOCK,
+            message=f"Equity {equity} < Min Equity {min_equity} for {symbol}"
+        )
         
     # Rule B: If kelly_lots < GATE_ECN_MIN_LOTS[symbol], BLOCK
     min_lots = cfg.GATE_ECN_MIN_LOTS.get(symbol, 0.01) # Default 0.01 for forex
     if kelly_lots < min_lots:
-        return reject(f"Gate 1B Failed: Kelly Lots {kelly_lots} < ECN Min Lots {min_lots} for {symbol}")
+        return GateResult(
+            gate="GATE-1B",
+            status=BLOCK,
+            message=f"Kelly Lots {kelly_lots} < ECN Min Lots {min_lots} for {symbol}"
+        )
+    return GateResult(gate="GATE-1", status=ALLOW, message="Passed ECN conflict checks.")
 
-    # GATE-2: Leverage Wall
+def gate2_leverage_wall(symbol: str, kelly_lots: float, entry_price: float, equity: float) -> GateResult:
     symbol_info = mt5.symbol_info(symbol)
     contract_size = symbol_info.trade_contract_size if symbol_info else 1.0
     
     notional = kelly_lots * contract_size * entry_price
     leverage = notional / equity if equity > 0 else float('inf')
     if leverage > cfg.GATE_MAX_LEVERAGE:
-        return reject(f"Gate 2 Failed: Leverage {leverage:.2f}x > Max {cfg.GATE_MAX_LEVERAGE}x")
+        return GateResult(
+            gate="GATE-2",
+            status=BLOCK,
+            message=f"Leverage {leverage:.2f}x > Max {cfg.GATE_MAX_LEVERAGE}x"
+        )
+    return GateResult(gate="GATE-2", status=ALLOW, message="Passed leverage check.")
 
-    # GATE-3: RR Ratio Enforcement
+def gate3_rr_ratio(sl_distance: float, tp_distance: float, regime: str) -> GateResult:
     if sl_distance <= 0:
-        return reject("Gate 3 Failed: Invalid SL distance <= 0")
+        return GateResult(
+            gate="GATE-3",
+            status=BLOCK,
+            message="Invalid SL distance <= 0"
+        )
         
     rr_ratio = tp_distance / sl_distance
     min_rr = 2.0 if "BULL" in regime or "BEAR" in regime else 1.5
     if rr_ratio < min_rr:
-        return reject(f"Gate 3 Failed: RR Ratio {rr_ratio:.2f} < Min {min_rr} for regime {regime}")
+        return GateResult(
+            gate="GATE-3",
+            status=BLOCK,
+            message=f"RR Ratio {rr_ratio:.2f} < Min {min_rr} for regime {regime}"
+        )
+    return GateResult(gate="GATE-3", status=ALLOW, message="Passed RR ratio enforcement.")
 
-    # GATE-4: Physical Stop Contamination Check
+def gate4_contamination_check(symbol: str) -> GateResult:
     logger.debug(f"Gate 4: Contamination check setup passed for {symbol}")
+    return GateResult(gate="GATE-4", status=ALLOW, message="Passed contamination check.")
 
+def gate5_risk_cap_and_atr_floor(
+    symbol: str,
+    direction: str,
+    entry_price: float,
+    sl_distance: float,
+    risk_usd: float,
+    equity: float
+) -> GateResult:
     # GATE-5: Hard Risk Cap
     risk_pct = risk_usd / equity if equity > 0 else 1.0
     if risk_pct > cfg.GATE_MAX_RISK_PCT_PER_TRADE:
-        return reject(f"Gate 5 Failed: Risk Pct {risk_pct:.4f} > Max {cfg.GATE_MAX_RISK_PCT_PER_TRADE}")
+        return GateResult(
+            gate="GATE-5-RISK-CAP",
+            status=BLOCK,
+            message=f"Risk Pct {risk_pct:.4f} > Max {cfg.GATE_MAX_RISK_PCT_PER_TRADE}"
+        )
 
     # v30.98 Structural Risk Distance Floor Check (D1 ATR — H1/M15 PROHIBITED)
     stop_loss = entry_price - sl_distance if str(direction).upper() in ["BUY", "1", "LONG"] else entry_price + sl_distance
@@ -256,26 +258,90 @@ def run_all_gates(
         if sl_distance_price < minimum_allowed_distance:
             logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
                               f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
-            return reject(f"Gate 5 Failed: Stop Loss position ({stop_loss}) is non-compliant. "
-                          f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}).")
+            return GateResult(
+                gate="GATE-5-ATR-FLOOR",
+                status=BLOCK,
+                message=f"Stop Loss position ({stop_loss}) is non-compliant. D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance})."
+            )
 
-    # GATE-6: Portfolio Heat Ceiling
+    return GateResult(gate="GATE-5", status=ALLOW, message="Passed risk cap and ATR floor.")
+
+def gate6_portfolio_heat(risk_usd: float, current_heat_usd: float, equity: float) -> GateResult:
     heat_pct = (current_heat_usd + risk_usd) / equity if equity > 0 else 1.0
     if heat_pct > cfg.GATE_MAX_PORTFOLIO_HEAT:
-        return reject(f"Gate 6 Failed: Heat Pct {heat_pct:.4f} > Max {cfg.GATE_MAX_PORTFOLIO_HEAT}")
+        return GateResult(
+            gate="GATE-6",
+            status=BLOCK,
+            message=f"Heat Pct {heat_pct:.4f} > Max {cfg.GATE_MAX_PORTFOLIO_HEAT}"
+        )
+    return GateResult(gate="GATE-6", status=ALLOW, message="Passed portfolio heat ceiling.")
 
-    # GATE-7: Weekend Blackout
+def gate7_weekend_blackout(asset_class: str) -> GateResult:
     if asset_class.upper() != "CRYPTO":
         now_utc = datetime.now(pytz.utc)
         if now_utc.weekday() == 4 and (now_utc.hour > cfg.GATE_BLACKOUT_FRIDAY_HOUR or (now_utc.hour == cfg.GATE_BLACKOUT_FRIDAY_HOUR and now_utc.minute >= cfg.GATE_BLACKOUT_FRIDAY_MIN)):
-            return reject("Gate 7 Failed: Weekend Blackout (Friday)")
+            return GateResult(gate="GATE-7", status=BLOCK, message="Weekend Blackout (Friday)")
         elif now_utc.weekday() == 5 or (now_utc.weekday() == 6 and now_utc.hour < 22):
-            return reject("Gate 7 Failed: Weekend Blackout (Saturday/Sunday daytime)")
+            return GateResult(gate="GATE-7", status=BLOCK, message="Weekend Blackout (Saturday/Sunday daytime)")
         elif now_utc.weekday() == 0 and (now_utc.hour < cfg.GATE_BLACKOUT_MONDAY_HOUR or (now_utc.hour == cfg.GATE_BLACKOUT_MONDAY_HOUR and now_utc.minute < cfg.GATE_BLACKOUT_MONDAY_MIN)):
-            return reject("Gate 7 Failed: Weekend Blackout (Monday morning)")
+            return GateResult(gate="GATE-7", status=BLOCK, message="Weekend Blackout (Monday morning)")
+    return GateResult(gate="GATE-7", status=ALLOW, message="Passed weekend blackout.")
 
-    # GATE-8: Amnesia Lock
+def gate8_amnesia_lock(symbol: str, embargo_registry: dict) -> GateResult:
     if symbol in embargo_registry:
-        return reject(f"Gate 8 Failed: Symbol {symbol} is currently in amnesia lock registry")
+        return GateResult(gate="GATE-8", status=BLOCK, message=f"Symbol {symbol} is currently in amnesia lock registry")
+    return GateResult(gate="GATE-8", status=ALLOW, message="Passed amnesia lock.")
+
+def run_all_gates(
+    symbol: str,
+    direction: str,
+    asset_class: str,
+    regime: str,
+    ticket_ref: str,
+    kelly_lots: float,
+    entry_price: float,
+    sl_distance: float,
+    tp_distance: float,
+    risk_usd: float,
+    equity: float,
+    current_heat_usd: float,
+    embargo_registry: dict
+) -> PreExecutionVerdict:
+
+    # Helper to return rejection
+    def reject(gate_res: GateResult) -> PreExecutionVerdict:
+        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: Gate {gate_res.gate} Failed: {gate_res.message}")
+
+    # GATE-0: Cross-Asset Correlation Cluster Limiter
+    gate0_res = gate0_correlation_cluster_limit(symbol, direction)
+    if gate0_res.status == BLOCK:
+        return reject(gate0_res)
+
+    # Enforce strict parameter type-safety and dimension checking
+    try:
+        PriceUnit(entry_price)
+        PipDistance(sl_distance, entry_price)
+        PipDistance(tp_distance, entry_price)
+        LotVolume(kelly_lots)
+    except (TypeError, ValueError) as type_err:
+        logger.error(f"Type-Safety Gate Violation for {symbol}: {type_err}")
+        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: Type-Safety Violation: {type_err}")
+
+    # List of gates to run
+    gates = [
+        lambda: gate1_ecn_conflict(symbol, kelly_lots, equity),
+        lambda: gate2_leverage_wall(symbol, kelly_lots, entry_price, equity),
+        lambda: gate3_rr_ratio(sl_distance, tp_distance, regime),
+        lambda: gate4_contamination_check(symbol),
+        lambda: gate5_risk_cap_and_atr_floor(symbol, direction, entry_price, sl_distance, risk_usd, equity),
+        lambda: gate6_portfolio_heat(risk_usd, current_heat_usd, equity),
+        lambda: gate7_weekend_blackout(asset_class),
+        lambda: gate8_amnesia_lock(symbol, embargo_registry)
+    ]
+
+    for gate_func in gates:
+        res = gate_func()
+        if res.status == BLOCK:
+            return reject(res)
 
     return PreExecutionVerdict(approved=True, _summary="All 8 gates passed.")
