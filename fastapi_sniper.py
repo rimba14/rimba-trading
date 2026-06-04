@@ -1110,6 +1110,15 @@ async def run_composite_preflight_checklist(
     if is_index == True and float(acc.equity) < 2000.0:
         return False, f"Point 20 Fail: Equity ${acc.equity:.2f} < $2000 floor for indices"
 
+    # Point 21: Crypto Cluster Cap (v36.0 Triple-Barrier)
+    crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"]
+    if any(k in sym_upper for k in crypto_keywords):
+        all_positions = mt5.positions_get()
+        if all_positions:
+            crypto_positions = [p for p in all_positions if any(k in p.symbol.upper() for k in crypto_keywords) and p.magic == MAGIC_NUMBER]
+            if len(crypto_positions) >= 2:
+                return False, "Point 21 Fail: RISK_ON_CRYPTO cluster cap exceeded (Max 2 concurrent positions)"
+
     # Sandbox Fuzzing Block: Safely reject fuzzer signals to prevent real execution
     is_fuzzing = payload.get("is_fuzzing", False) if payload else False
     if is_fuzzing:
@@ -1159,7 +1168,12 @@ def calculate_kelly_lot(symbol, conviction):
     p = abs(conviction - 0.5) + 0.5
     q = 1.0 - p
     f_star = p - (q / 1.5)
-    f_final = min(max(0, f_star * KELLY_FRACTION), HARD_RISK_CAP) 
+    
+    crypto_keywords = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"]
+    is_crypto = any(k in symbol.upper() for k in crypto_keywords)
+    active_kelly_fraction = 0.15 if is_crypto else KELLY_FRACTION
+    
+    f_final = min(max(0, f_star * active_kelly_fraction), 0.02 if is_crypto else HARD_RISK_CAP) 
     risk_usd = acc.equity * f_final
     
     # â”€â”€ v25.0: Align Sizing SL with Execution SL (ATR/Swing) â”€â”€

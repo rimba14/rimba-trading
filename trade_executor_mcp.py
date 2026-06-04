@@ -138,6 +138,20 @@ def execute_trade(symbol, conviction, hmm_regime):
         
         # Market Order
         price = tick.ask if direction == mt5.ORDER_TYPE_BUY else tick.bid
+        
+        # Crypto Triple-Barrier Protocol
+        crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+        is_crypto = any(k in symbol.upper() for k in crypto_keywords)
+        
+        tp = 0.0
+        
+        if is_crypto:
+            p_blend = conviction
+            tp_dist = base_atr * (2.0 + 4.0 * ((max(p_blend, 0.60) - 0.60) / 0.40))
+            if tp_dist < sl_distance * 1.5:
+                tp_dist = sl_distance * 1.5
+            tp = price + tp_dist if direction == mt5.ORDER_TYPE_BUY else price - tp_dist
+            
         sl = price - sl_distance if direction == mt5.ORDER_TYPE_BUY else price + sl_distance
 
         # Shadow Ledger Writing (Directive: Flawless Logic Audit)
@@ -160,6 +174,7 @@ def execute_trade(symbol, conviction, hmm_regime):
             "type": direction,
             "price": price,
             "sl": sl,
+            "tp": tp,
             "deviation": DEVIATION,
             "magic": MAGIC_NUMBER,
             "comment": f"Sentinel_v15_Mkt_{hmm_regime}",
@@ -176,8 +191,11 @@ def execute_trade(symbol, conviction, hmm_regime):
             limit_price = price - pullback if direction == mt5.ORDER_TYPE_BUY else price + pullback
             limit_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_SELL_LIMIT
             
-            # Independent SL for each limit
+            # Independent SL & TP for each limit
             limit_sl = limit_price - sl_distance if direction == mt5.ORDER_TYPE_BUY else limit_price + sl_distance
+            limit_tp = 0.0
+            if is_crypto:
+                limit_tp = limit_price + tp_dist if direction == mt5.ORDER_TYPE_BUY else limit_price - tp_dist
             
             limit_request = {
                 "action": mt5.TRADE_ACTION_PENDING,
@@ -186,6 +204,7 @@ def execute_trade(symbol, conviction, hmm_regime):
                 "type": limit_type,
                 "price": limit_price,
                 "sl": limit_sl,
+                "tp": limit_tp,
                 "magic": MAGIC_NUMBER,
                 "comment": f"Sentinel_v15_Lim{i}_{hmm_regime}",
                 "type_time": mt5.ORDER_TIME_GTC,

@@ -57,6 +57,24 @@ class CapitalWall:
         if has_event:
             raise TradeRejected(f"[WALL5-FAIL] Tier-1 event within 24h. Ex-Ante Blackout active. (Event: {event_desc})")
 
+    def check_monte_carlo_gate(self, signal):
+        """
+        CONSTRAINT 3: MANDATORY PRE-DEPLOYMENT MONTE CARLO TESTING
+        """
+        import json
+        from pathlib import Path
+        mc_path = Path("C:/Sentinel_Project/data/monte_carlo_gate_status.json")
+        if mc_path.exists():
+            try:
+                with open(mc_path, "r") as f:
+                    mc_data = json.load(f)
+                if not mc_data.get("passed", False):
+                    raise TradeRejected(f"[MC-GATE-FAIL] Strategy failed Monte Carlo Stress Simulator: {mc_data}")
+            except TradeRejected:
+                raise
+            except Exception as e:
+                logger.warning(f"Failed to read MC gate status: {e}")
+
     def run(self, signal, lot_size, price):
         """
         Wall Run Pipeline: Evaluates all weekend, blackout, margin, and Risk Agent checks.
@@ -82,6 +100,9 @@ class CapitalWall:
 
         # 3. Call check_event_horizon_blackout as a hard gate
         self.check_event_horizon_blackout(signal)
+
+        # 3b. Call Monte Carlo Stress Simulator Gate
+        self.check_monte_carlo_gate(signal)
 
         # 4. Call check_risk_agent check
         self.check_risk_agent(signal, lot_size, price)

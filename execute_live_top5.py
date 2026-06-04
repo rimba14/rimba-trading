@@ -9,6 +9,33 @@ import os
 import MetaTrader5 as mt5
 from arcticdb import Arctic
 
+from tp_placement_engine import TPPlacementEngine, StructuralLevelResolver
+
+class MT5OracleWrapper:
+    def get_bars(self, symbol, timeframe, count):
+        import MetaTrader5 as mt5
+        tf = mt5.TIMEFRAME_D1 if timeframe == "D1" else mt5.TIMEFRAME_H4
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
+        if rates is None: return []
+        return [{"high": r[2], "low": r[3], "close": r[4]} for r in rates]
+
+    def get_atr(self, symbol, timeframe, period, max_age_seconds):
+        import MetaTrader5 as mt5
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, period + 1)
+        if rates is None or len(rates) < 2: return 0.0
+        highs = [r[2] for r in rates]
+        lows = [r[3] for r in rates]
+        closes = [r[4] for r in rates]
+        atr = sum([
+            max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+            for i in range(1, len(rates))
+        ]) / (len(rates) - 1)
+        return atr
+
+oracle_wrapper = MT5OracleWrapper()
+level_resolver = StructuralLevelResolver(oracle_wrapper)
+tp_engine = TPPlacementEngine(oracle_wrapper, level_resolver)
+
 def verify_code_coherence():
     import subprocess
     try:
@@ -156,6 +183,34 @@ for a in assets:
     elif direction == "SELL" and (sl - tick.bid) < spread * 1.5:
         sl = round(tick.bid + spread * 1.5, digits)
         tp = round(tick.bid - spread * 2.5, digits)
+
+    # --- DIRECTIVE ZETA TP Placement ---
+    dir_int = 1 if direction == "BUY" else -1
+    
+    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+    is_crypto = any(k in sym.upper() for k in crypto_keywords)
+    
+    if is_crypto:
+        p_blend = conviction
+        tp_dist_crypto = atr * (2.0 + 4.0 * ((max(p_blend, 0.60) - 0.60) / 0.40))
+        if tp_dist_crypto < sl_dist * 1.5:
+            tp_dist_crypto = sl_dist * 1.5
+        tp = round(price + tp_dist_crypto if direction == "BUY" else price - tp_dist_crypto, digits)
+        print(f"[ZETA OK] {sym} TP dynamically set to {tp} via Triple-Barrier")
+    else:
+        val_res = tp_engine.validate_tp_placement(
+            symbol=sym,
+            entry=price,
+            sl=sl,
+            proposed_tp=tp,
+            direction=dir_int
+        )
+        if not val_res.is_valid:
+            print(f"[ZETA REJECT] {sym} {direction} - {val_res.rejection_reason}")
+            continue
+        if val_res.final_tp is not None:
+            tp = round(val_res.final_tp, digits)
+            print(f"[ZETA OK] {sym} TP set structurally to {tp}")
 
     # Position sizing — 2% risk, 0.5 health multiplier
     sl_dist_points = sl_dist / (info.point + 1e-12)

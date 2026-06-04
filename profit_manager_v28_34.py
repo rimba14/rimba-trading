@@ -29,6 +29,14 @@ Changelog vs v23.2:
 from __future__ import annotations
 
 import MetaTrader5 as mt5
+from tp_placement_engine import (
+    TPPlacementEngine,
+    TPValidationResult,
+    StructuralLevelResolver,
+    ASSET_CLASS_TIME_STOP,
+    AssetClass,
+)
+
 import io, json, logging, os, re, socket, sys, time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -140,6 +148,43 @@ def check_correlation_shock() -> bool:
                     logger.warning(f"[SHOCK_DETECTOR] Canary shock detected on {resolved}: {change:.2%}")
                     return True
     return False
+
+# --- CONSTRAINT 5: POOR-PERFORMANCE REMOVAL (LowProfitPairs) ---
+_LOW_PROFIT_SUSPENDED_PAIRS = set()
+_COOLDOWN_LOCKS = {} # symbol -> timestamp until blocked
+
+def update_low_profit_pairs_tracker(closed_positions: list[dict]):
+    global _LOW_PROFIT_SUSPENDED_PAIRS
+    # Rolling metrics tracker over last 20 trades per pair
+    pair_trades = defaultdict(list)
+    for pos in closed_positions:
+        pair_trades[pos["symbol"]].append(pos)
+        
+    for symbol, trades in pair_trades.items():
+        if len(trades) < 5:
+            continue
+        recent = trades[:20]
+        wins = sum(1 for t in recent if t.get("profit", 0) > 0)
+        win_rate = wins / len(recent)
+        net_pnl = sum(t.get("profit", 0) for t in recent)
+        
+        # Threshold: win-rate < 30% or net_pnl severely negative
+        if win_rate < 0.30 or net_pnl < -100.0:
+            if symbol not in _LOW_PROFIT_SUSPENDED_PAIRS:
+                _LOW_PROFIT_SUSPENDED_PAIRS.add(symbol)
+                logger.critical(f"[LOW_PROFIT_PAIRS] {symbol} suspended due to poor performance! WinRate={win_rate:.2f}, NetPnl={net_pnl:.2f}. Alerting SRE registry.")
+                notify(f"**LOW PROFIT PAIRS ALERT**\n{symbol} suspended due to poor performance (WinRate={win_rate:.2f}, NetPnl={net_pnl:.2f}).")
+        else:
+            if symbol in _LOW_PROFIT_SUSPENDED_PAIRS and win_rate >= 0.40 and net_pnl > -50.0:
+                _LOW_PROFIT_SUSPENDED_PAIRS.remove(symbol)
+                logger.info(f"[LOW_PROFIT_PAIRS] {symbol} rehabilitated and restored to trading.")
+                
+    # Save to disk for capital_wall / sniper
+    try:
+        with open("C:/Sentinel_Project/data/low_profit_pairs.json", "w") as f:
+            json.dump(list(_LOW_PROFIT_SUSPENDED_PAIRS), f)
+    except Exception as e:
+        logger.warning(f"Failed to save low profit pairs: {e}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  INSTRUMENT CLASSIFICATION
@@ -359,31 +404,43 @@ def get_safe_atr(symbol: str, oracle_atr: float, pos_open: float) -> float:
 # ══════════════════════════════════════════════════════════════════════════════
 #  EQUITY-INCLUSIVE DRAWDOWN  [CRITICAL FIX] was closed-deals only
 # ══════════════════════════════════════════════════════════════════════════════
+_GLOBAL_PEAK_EQUITY = 0.0
+_PEAK_TO_TROUGH_HALT_ACTIVE = False
+MAX_DRAWDOWN_CEILING = 0.15 # 15% strict constitutional volatility ceiling
+
 def get_equity_drawdown() -> tuple[float, float]:
     """
     v25.0: Uses account.equity which includes all open unrealized P&L.
-    BUG FIX: Previous version used history_deals_get (closed only) →
-             10 positions each −2.9% open reported 0% drawdown.
-    Returns (drawdown_fraction, current_equity).
+    CONSTRAINT 6: PEAK-TO-TROUGH EQUITY CURVE DRAWDOWN GUARDIAN
     """
+    global _GLOBAL_PEAK_EQUITY, _PEAK_TO_TROUGH_HALT_ACTIVE
     acc = mt5.account_info()
     if not acc:
         return 0.0, 0.0
     try:
-        now_utc     = datetime.now(timezone.utc)
-        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-        deals       = mt5.history_deals_get(today_start, now_utc)
-        realized_today = sum(
-            d.profit for d in (deals or []) if d.entry == mt5.DEAL_ENTRY_OUT
-        )
-        # Approximate start-of-day equity (closed P&L removed, unrealized at start = 0)
-        start_equity = acc.balance - realized_today
-        peak         = max(start_equity if start_equity > 0 else acc.balance, acc.equity)
-        drawdown     = (peak - acc.equity) / peak if peak > 0 else 0.0
-        return max(0.0, drawdown), float(acc.equity)
+        current_equity = float(acc.equity)
+        
+        # Track global maximum peak equity
+        if current_equity > _GLOBAL_PEAK_EQUITY:
+            _GLOBAL_PEAK_EQUITY = current_equity
+            
+        if _GLOBAL_PEAK_EQUITY > 0:
+            drawdown = (_GLOBAL_PEAK_EQUITY - current_equity) / _GLOBAL_PEAK_EQUITY
+        else:
+            drawdown = 0.0
+            
+        # Peak-to-Trough Drawdown Guardian Logic
+        if drawdown >= MAX_DRAWDOWN_CEILING and not _PEAK_TO_TROUGH_HALT_ACTIVE:
+            _PEAK_TO_TROUGH_HALT_ACTIVE = True
+            logger.critical(f"[DRAWDOWN_GUARDIAN] Peak-to-Trough DD crossed {drawdown:.2%} >= {MAX_DRAWDOWN_CEILING:.2%}! Executing fail-closed sequence. Halting position originations.")
+            notify(f"**DRAWDOWN GUARDIAN TRIGGERED**\nGlobal DD: {drawdown:.2%}. Fail-closed sequence activated.")
+        elif drawdown < (MAX_DRAWDOWN_CEILING * 0.8) and _PEAK_TO_TROUGH_HALT_ACTIVE:
+            _PEAK_TO_TROUGH_HALT_ACTIVE = False
+            logger.info(f"[DRAWDOWN_GUARDIAN] Equity recovered. DD: {drawdown:.2%}. Normal operations resuming.")
+            
+        return max(0.0, drawdown), current_equity
     except Exception:
         return 0.0, float(getattr(acc, "equity", 0.0))
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  BROKER STOP ARMOR  (unified — all SL/TP paths go through this)
@@ -460,6 +517,37 @@ def compute_exit_score(
 
     profit_r = ps.profit_r(current_price, macro_atr, sl_mult)
     elapsed  = broker_now - ps.entry_time
+
+    # ── Crypto Triple-Barrier Rules (v36.0) ──────────────────────────────────
+    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+    is_crypto = any(k in symbol.upper() for k in crypto_keywords)
+    
+    if is_crypto:
+        # Stagnation Exit (Barrier 3)
+        if h1_candles > 120 and not ps.zone2_done:
+            sig.hard_exit = True
+            sig.reason_primary = "[STAGNATION LIQUIDATION]"
+            sig.reasons.append(f"Crypto open > 120 bars ({h1_candles}) without hitting Zone 2")
+            return sig
+            
+        # Thesis Decay
+        thesis_p_crypto = live_p if is_buy else (1.0 - live_p)
+        if thesis_p_crypto < 0.55:
+            sig.hard_exit = True
+            sig.reason_primary = "[THESIS DECAY] Conviction < 0.55"
+            sig.reasons.append(f"Kronos Conviction {thesis_p_crypto:.3f} < 0.55")
+            return sig
+            
+        # Regime Inversion
+        if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
+            ps.regime_conflict_count += 1
+            if ps.regime_conflict_count >= 3:
+                sig.hard_exit = True
+                sig.reason_primary = "[THESIS DECAY] Regime Inversion"
+                sig.reasons.append(f"Regime flipped to {hmm} against {pos_dir} position for 3 periods")
+                return sig
+        else:
+            ps.regime_conflict_count = 0
 
     # ── 1. Secondary Failsafe (Broker Execution Failure) (HARD EXIT) ─────────
     # OPERATION VISIBLE HORIZON: Profit Manager is now a failsafe.
@@ -690,6 +778,19 @@ def market_close(pos, reason: str = "PM_LIQUIDATION") -> bool:
     res = mt5.order_send(req)
     if res and res.retcode == mt5.TRADE_RETCODE_DONE:
         logger.info(f"[CLOSED] {pos.symbol} #{pos.ticket} | PnL={pos.profit:+.2f} | {reason}")
+        
+        # CONSTRAINT 5: INSTANT REVENGE-TRADE COOLDOWN
+        # If asset hits hard virtual stop-loss or is closed in drawdown, lock down for N bars (e.g., 2 hours = 7200s)
+        if pos.profit < 0.0:
+            cooldown_period = 7200
+            _COOLDOWN_LOCKS[pos.symbol] = time.time() + cooldown_period
+            logger.warning(f"[COOLDOWN_LOCK] {pos.symbol} closed in drawdown. Initiating Instant Revenge-Trade Cooldown for {cooldown_period}s.")
+            try:
+                with open("C:/Sentinel_Project/data/cooldown_locks.json", "w") as f:
+                    json.dump(_COOLDOWN_LOCKS, f)
+            except Exception as e:
+                pass
+                
         return True
     code = res.retcode if res else "N/A"
     msg  = res.comment if res else ""
@@ -984,6 +1085,9 @@ def run_composite_health_audit() -> float:
         mult = 0.0 # Execution freeze
         logger.critical(f"[HEALTH] [EXECUTION_FREEZE] All 3 health metrics failed! Freezing execution.")
         
+    # Trigger low profit pairs update
+    update_low_profit_pairs_tracker(closed_positions)
+        
     # Log current health status
     logger.info(f"[HEALTH_DASHBOARD] PSR Fail={psr_fail} | HMM Acc Fail={accuracy_fail} | SHAP Stability Fail={stability_fail} | Size Mult={mult}")
     return mult
@@ -1023,6 +1127,11 @@ class SentinelProfitManager:
 
         self._states: dict[int, PositionState] = {}
         self._oracle  = OracleCache(ttl=REGIME_POLL_INTERVAL)
+        self.level_resolver   = StructuralLevelResolver(self._oracle)
+        self.tp_engine        = TPPlacementEngine(self._oracle, self.level_resolver)
+        self._tp_violation_log = []
+        self.hermes_agent = None
+
         self._last_regime_check: dict[str, float] = {}
         logger.info("Profit Manager v25.0 online — Institution-Grade CADES ACTIVE.")
 
@@ -1265,15 +1374,6 @@ class SentinelProfitManager:
         # Mandate Symmetric Take Profits: structurally lock TP distance to min 1.5x SL distance
         min_tp_dist = 1.5 * sl_dist
         tp_dist = max(tp_mult * macro_atr, min_tp_dist)
-
-        # Always recompute TP dynamically
-        new_tp = (entry + tp_dist) if is_buy else (entry - tp_dist)
-        target_tp  = normalize_stop(pos.symbol, curr, new_tp, is_sl=False, is_buy=is_buy)
-        target_tp  = round(target_tp, digits)
-        modify_tp  = (pos.tp == 0.0 or abs(pos.tp - target_tp) > 1e-5)
-
-        # Calculate Target Path
-        d_target = abs(target_tp - entry)
         
         # Determine active regime for D_guard (v30.60 RANGE Logic)
         active_regime_for_guard = "TRENDING"
@@ -1284,6 +1384,22 @@ class SentinelProfitManager:
             active_regime_for_guard = str(row["wasserstein_state"]).upper()
         except:
             pass
+            
+        # Crypto Triple-Barrier Protocol: Regime-Aware TP Squashing
+        crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+        is_crypto = any(k in pos.symbol.upper() for k in crypto_keywords)
+        
+        if is_crypto and "RANGE" in active_regime_for_guard:
+            tp_dist *= 0.15 # Squash Take Profit distance by 0.15x
+
+        # Always recompute TP dynamically
+        new_tp = (entry + tp_dist) if is_buy else (entry - tp_dist)
+        target_tp  = normalize_stop(pos.symbol, curr, new_tp, is_sl=False, is_buy=is_buy)
+        target_tp  = round(target_tp, digits)
+        modify_tp  = (pos.tp == 0.0 or abs(pos.tp - target_tp) > 1e-5)
+
+        # Calculate Target Path
+        d_target = abs(target_tp - entry)
         
         if "RANGE" in active_regime_for_guard:
             d_guard = 0.50 * d_target
@@ -1294,8 +1410,20 @@ class SentinelProfitManager:
 
         trail_allowed = (d_current >= d_guard)
         
-        # Scenario A: Terminal RANGE Harvest
-        if "RANGE" in active_regime_for_guard and d_current >= d_guard and not ps.zone1_done:
+        # Crypto Regime-Aware TP Squashing Scale Out
+        if is_crypto and "RANGE" in active_regime_for_guard:
+            if d_current >= 1.75 * macro_atr and not getattr(ps, "crypto_squash_done", False):
+                logger.info(f"[CRYPTO_SQUASH] {pos.symbol} breached +1.75 ATR in RANGE. Liquidating 75%.")
+                tick = mt5.symbol_info_tick(pos.symbol)
+                info = mt5.symbol_info(pos.symbol)
+                if safe_scale_out(pos, ps, 0.75, "CRYPTO_RANGE_HARVEST", info, tick):
+                    ps.crypto_squash_done = True
+            
+            # Disable parabolic trailing
+            trail_allowed = False
+        
+        # Scenario A: Terminal RANGE Harvest (Non-Crypto)
+        elif "RANGE" in active_regime_for_guard and d_current >= d_guard and not ps.zone1_done:
             logger.info(f"[RANGE_HARVEST] {pos.symbol} breached D_guard {d_guard:.5f} in RANGE. Harvesting 75%.")
             tick = mt5.symbol_info_tick(pos.symbol)
             info = mt5.symbol_info(pos.symbol)
@@ -1758,3 +1886,118 @@ if __name__ == "__main__":
         mgr.monitor_loop()
     except KeyboardInterrupt:
         mt5.shutdown()
+
+    def _reconcile_tp_compliance(self) -> None:
+        import logging
+        from datetime import datetime, timezone
+        log = logging.getLogger("CADES.ProfitManager.ZetaReconcile")
+        now = datetime.now(tz=timezone.utc)
+
+        for ticket, state in list(self._states.items()):
+            symbol    = state.symbol
+            entry     = state.entry_price
+            sl        = state.initial_sl
+            tp        = state.peak_price # placeholder, we don't store actual TP in PositionState, we can get it from MT5 position. 
+            direction = 0 if state.direction == mt5.ORDER_TYPE_BUY else 1
+
+            pos_info = mt5.position_get(ticket=ticket)
+            if pos_info:
+                current_tp = pos_info[0].tp
+                sl = pos_info[0].sl
+            else:
+                continue
+
+            audit = self.tp_engine.audit_open_position(
+                symbol=symbol, entry=entry, sl=sl, current_tp=current_tp, direction=direction
+            )
+
+            if not audit.is_valid and getattr(state, "zeta_status", "") != "LEGACY_VIOLATION":
+                log.warning(f"[ZetaReconcile] #{ticket} {symbol} is a LEGACY_VIOLATION: {audit.rejection_reason}")
+                state.zeta_status = "LEGACY_VIOLATION"
+                self._tp_violation_log.append({
+                    "ticket":    ticket,
+                    "symbol":    symbol,
+                    "reason":    audit.rejection_reason,
+                    "tp":        current_tp,
+                    "tp_pct":    audit.tp_distance_pct,
+                    "detected":  now.isoformat(),
+                })
+
+            # 2. Time-stop enforcement (Article III)
+            max_days = getattr(state, "time_stop_days", None)
+            if max_days and getattr(state, "entry_time", None):
+                elapsed_trading_days = self._count_trading_days(datetime.fromtimestamp(state.entry_time, timezone.utc), now)
+
+                hmm_state = self._oracle.get(symbol).get("hmm_state", "RANGE") if self._oracle.get(symbol) else "RANGE"
+                wass_dist = 0.20 # Default
+
+                in_strong_trend = (hmm_state == "TRENDING" and wass_dist is not None and wass_dist < 0.15)
+                if not in_strong_trend and elapsed_trading_days >= max_days:
+                    log.warning(f"[ZetaTimeStop] #{ticket} {symbol} exceeded time-stop of {max_days} days. Queuing market exit.")
+                    state.zeta_status = "TIME_STOP_TRIGGERED"
+                    self._queue_time_stop_exit(ticket, symbol, state)
+
+    @staticmethod
+    def _count_trading_days(start, end) -> int:
+        import numpy as np
+        days = np.busday_count(start.date(), end.date(), weekmask="Mon Tue Wed Thu Fri")
+        return int(days)
+
+    def _modify_tp_on_broker(self, ticket: int, new_tp: float) -> bool:
+        try:
+            pos = mt5.position_get(ticket=ticket)
+            if not pos: return False
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "position": ticket,
+                "symbol": pos[0].symbol,
+                "sl": pos[0].sl,
+                "tp": new_tp
+            }
+            res = mt5.order_send(request)
+            return res.retcode == mt5.TRADE_RETCODE_DONE
+        except Exception as exc:
+            import logging
+            logging.getLogger("CADES.ProfitManager").error(f"[BrokerModify] TP mod failed for #{ticket}: {exc}")
+            return False
+
+    def _queue_time_stop_exit(self, ticket: int, symbol: str, state) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").warning(f"[TimeStop] Executing market exit for #{ticket} {symbol}")
+        market_close(mt5.position_get(ticket=ticket)[0], reason="ZETA_TIME_STOP")
+
+    def _emit_tp_gate_reject(self, ticket: int, symbol: str, result: TPValidationResult) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").error(f"[TP_GATE_REJECT] #{ticket} {symbol}: {result.rejection_reason} | proposed_tp={result.proposed_tp:.5f} rr={result.rr_ratio:.2f}")
+
+    def _emit_tp_adjustment_failure(self, ticket: int, symbol: str, adjusted_tp: float) -> None:
+        import logging
+        logging.getLogger("CADES.ProfitManager").error(f"[ZetaAdjustFail] Broker TP modification failed for #{ticket} {symbol} -> {adjusted_tp:.5f}.")
+
+    def _apply_time_stop_dampening(self, base_score: float, elapsed_trading_days: int, max_days: int, in_strong_trend: bool) -> float:
+        if in_strong_trend or max_days is None: return base_score
+        time_consumed = elapsed_trading_days / max_days
+        if time_consumed < 0.70: return base_score
+        dampening_factor = 1.0 - 0.5 * ((time_consumed - 0.70) / 0.30)
+        return base_score * max(0.5, dampening_factor)
+
+    def run_legacy_violation_audit(self) -> dict:
+        import logging
+        logger = logging.getLogger("CADES.ProfitManager.LegacyAudit")
+        logger.info("[LegacyAudit] Starting DIRECTIVE ZETA startup audit...")
+        summary = {"total_positions": 0, "violations": [], "compliant": [], "warnings": []}
+        for ticket, state in self._states.items():
+            summary["total_positions"] += 1
+            pos_info = mt5.position_get(ticket=ticket)
+            if not pos_info: continue
+            audit = self.tp_engine.audit_open_position(
+                symbol=state.symbol, entry=state.entry_price, sl=pos_info[0].sl, current_tp=pos_info[0].tp, direction=0 if state.direction == mt5.ORDER_TYPE_BUY else 1
+            )
+            if not audit.is_valid:
+                state.zeta_status = "LEGACY_VIOLATION"
+                summary["violations"].append({"ticket": ticket, "symbol": state.symbol, "reason": audit.rejection_reason})
+            else:
+                state.zeta_status = "COMPLIANT"
+                summary["compliant"].append(ticket)
+        logger.info(f"[LegacyAudit] Complete: {len(summary['violations'])} violations, {len(summary['compliant'])} compliant.")
+        return summary

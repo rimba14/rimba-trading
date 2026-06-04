@@ -41,26 +41,26 @@ if ($LASTEXITCODE -ne 0) {
 
 # STEP 3: Launch services in correct sequence
 Write-Host '[LAUNCH] Starting Machine C (Macro Calendar Sync)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'macro_calendar_sync.py' -PassThru
+Start-Process python -ArgumentList 'macro_calendar_sync.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine D (Risk Agent)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'agents\risk_agent.py' -PassThru
+Start-Process python -ArgumentList 'agents\risk_agent.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine E (SRE Watchdog Daemon)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'sre_watchdog.py' -PassThru
+Start-Process python -ArgumentList 'sre_watchdog.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine A (Profit Manager v28.34 - Composite HMM)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'profit_manager_v28_34.py' -PassThru
+Start-Process python -ArgumentList 'profit_manager_v28_34.py' -PassThru
 Start-Sleep -Seconds 3
 
 Write-Host '[LAUNCH] Starting Machine B (FastAPI Sniper)...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList '-m uvicorn fastapi_sniper:app --host 0.0.0.0 --port 8000' -PassThru
+Start-Process python -ArgumentList '-m uvicorn fastapi_sniper:app --host 0.0.0.0 --port 8000' -PassThru
 Start-Sleep -Seconds 5
 
 Write-Host '[LAUNCH] Starting Slow Loop...' -ForegroundColor Yellow
-Start-Process .\venv\Scripts\python.exe -ArgumentList 'sentinel_slow_loop.py' -PassThru
+Start-Process python -ArgumentList 'sentinel_slow_loop.py' -PassThru
 
 Write-Host '[OK] All services launched successfully under v30.50 (CADES Empirical & Microstructure)!' -ForegroundColor Green
