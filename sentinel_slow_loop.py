@@ -255,14 +255,6 @@ from sentinel_config import (
     GROQ_GEMMA_MODEL, GEMINI_MODEL_NAME,
 )
 
-# -- TensorTrade Integration (v18.6) --
-try:
-    from tensor_env import UnifiedObserver
-    _OBSERVER = UnifiedObserver(window_size=20)
-    logging.info("[BOOT] TensorTrade UnifiedObserver initialized.")
-except ImportError:
-    _OBSERVER = None
-    logging.warning("[BOOT] TensorTrade modules not found. S_t generation will be degraded.")
 
 # -- Paths ---------------------------------------------------------------------
 PROJECT_ROOT = Path(r"C:\Sentinel_Project")
@@ -1611,20 +1603,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             logging.warning(f"[{symbol}] Failed to compute numerical Wasserstein distance: {w_err}")
             w_dist_norm = 1.0
 
-        if _OBSERVER:
-            timesfm_item = _arctic_read(f"{symbol}_timesfm")
-            p10_val = float(timesfm_item.data.iloc[-1].get("p10", 0.0)) if timesfm_item is not None else 0.0
-            p90_val = float(timesfm_item.data.iloc[-1].get("p90", 0.0)) if timesfm_item is not None else 0.0
-            s_t_data = {
-                "kronos_p": k_prob,
-                "xgb_p": x_prob,
-                "ddqn_p": ddqn_p,
-                "wasserstein_state": w_dist_norm, # Use numeric distance
-                "atr": atr,
-                "timesfm_p10": p10_val,
-                "timesfm_p90": p90_val
-            }
-            _OBSERVER.observe(pd.DataFrame([s_t_data]))
 
         primary_dir = 1 if p_blend > 0.60 else (-1 if p_blend < 0.40 else 0)
 

@@ -94,16 +94,3 @@ def get_sampled_data(symbol: str):
     
     return None
 
-class UnifiedObserver:
-    """
-    Standardized v18.6 Observer.
-    Generates the unified state representation (S_t) for the Math Meta-Model.
-    """
-    def __init__(self, window_size: int = 20):
-        self.window_size = window_size
-        
-    def observe(self, data: pd.DataFrame):
-        # Implementation of unified state generation from DataFeed
-        # In TensorTrade, this is handled by the internal feed.observe()
-        # This class provides a bridge for the MathMetaModel.
-        pass
