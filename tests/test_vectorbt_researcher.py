@@ -9,6 +9,8 @@ import numpy as np
 import sys
 mock_vbt = MagicMock()
 sys.modules['vectorbt'] = mock_vbt
+sys.modules['MetaTrader5'] = MagicMock()
+sys.modules['gitagent_utils'] = MagicMock()
 
 from agents.vectorbt_researcher_mcp import run_parameter_sweep
 

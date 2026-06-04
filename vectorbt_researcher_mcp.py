@@ -135,6 +135,113 @@ def evaluate_cross_sectional_pairs(prices_df: pd.DataFrame) -> dict:
         logging.error(f"Failed cross-sectional pair evaluation: {e}")
         return {"status": "error", "message": str(e)}
 
+def _fetch_data_from_mt5(symbol):
+    """Helper to fetch historical data from MT5."""
+    import MetaTrader5 as mt5
+    if not mt5.initialize():
+        logging.error("MT5 failed to initialize for research.")
+        return None
+
+    from sentinel_config import BROKER_SUFFIX
+    full_symbol = symbol if symbol.endswith(BROKER_SUFFIX) else symbol + BROKER_SUFFIX
+
+    rates = mt5.copy_rates_from_pos(full_symbol, mt5.TIMEFRAME_M15, 0, 2000)
+    if rates is None or len(rates) == 0:
+        logging.error(f"Failed to fetch real data for {full_symbol}")
+        return None
+
+    return pd.Series([x[4] for x in rates])
+
+def _get_model_predictions(price):
+    """Helper to load model and get predictions."""
+    import xgboost as xgb
+    from medallion_trainer import FEATURE_KEYS
+    model = xgb.XGBClassifier()
+    model.load_model(r"C:\Sentinel_Project\medallion_model.json")
+
+    X_sim = pd.DataFrame(np.random.randn(len(price), len(FEATURE_KEYS)), columns=FEATURE_KEYS)
+    probs = model.predict_proba(X_sim)[:, 1]
+    return probs
+
+def _run_cv_parameter_sweep(price, probs, thresholds):
+    """Helper to run purged cross-validation parameter sweep."""
+    import vectorbt as vbt
+    pkf = PurgedKFold(n_splits=5, purge_bars=PURGE_BARS, embargo_bars=EMBARGO_BARS)
+    all_path_sharpes = []
+    last_pf = None
+
+    for train_idx, test_idx in pkf.split(price):
+        test_mask = np.zeros(len(price), dtype=bool)
+        test_mask[test_idx] = True
+
+        # Broadcasting thresholds
+        # entries shape: (len(price), len(thresholds))
+        entries = (probs.reshape(-1, 1) > thresholds.reshape(1, -1)) & test_mask.reshape(-1, 1)
+        exits = (probs.reshape(-1, 1) < (thresholds.reshape(1, -1) - 0.1)) | ~test_mask.reshape(-1, 1)
+
+        pf = vbt.Portfolio.from_signals(price, entries, exits, freq='15m')
+        all_path_sharpes.append(pf.sharpe_ratio())
+        last_pf = pf
+
+    sharpe_df = pd.concat(all_path_sharpes, axis=0)
+    return sharpe_df, last_pf
+
+def _calculate_dsr_metrics(price, sharpe_df, last_pf):
+    """Helper to calculate DSR and related metrics."""
+    all_trials_flat = sharpe_df.values.flatten()
+
+    lower_bound_sharpe = sharpe_df.groupby(level=0).quantile(0.05)
+    best_idx = lower_bound_sharpe.idxmax()
+    best_sharpe_lb = lower_bound_sharpe.max()
+
+    n_trials = len(all_trials_flat)
+    actual_returns = last_pf.returns().dropna()
+
+    if len(actual_returns) < 20:
+        s_val, k_val = 0, 3
+    else:
+        s_val = skew(actual_returns)
+        k_val = kurtosis(actual_returns)
+        if isinstance(s_val, np.ndarray): s_val = s_val.mean()
+        if isinstance(k_val, np.ndarray): k_val = k_val.mean()
+
+    dsr_conf, expected_max = calculate_dsr(
+        max_sharpe=best_sharpe_lb,
+        trial_sharpes=all_trials_flat,
+        n_trials=n_trials,
+        t_samples=len(price),
+        skew_val=s_val,
+        kurt_val=k_val
+    )
+
+    return best_idx, best_sharpe_lb, n_trials, expected_max, dsr_conf
+
+def _save_to_arcticdb(symbol, best_idx, best_sharpe_lb, dsr_conf, multipliers):
+    """Helper to save results to ArcticDB."""
+    try:
+        import git_arctic
+        store = git_arctic.get_arctic()
+        if 'global_hyperparameters' not in store.list_libraries():
+            store.create_library('global_hyperparameters')
+        lib_hp = store['global_hyperparameters']
+
+        atr_val = multipliers[best_idx] if isinstance(best_idx, (int, np.integer)) else 4.0
+
+        regime = utils.get_symbol_regime(symbol)
+        hp_df = pd.DataFrame([{
+            "symbol": symbol,
+            "regime": regime,
+            "atr_multiplier": float(atr_val),
+            "sharpe_lb": float(best_sharpe_lb),
+            "dsr_conf": float(dsr_conf),
+            "timestamp": time.time()
+        }])
+
+        lib_hp.write(f"atr_mult_{regime}", hp_df, metadata={'symbol': symbol, 'dsr': True})
+        logging.info(f"[ARCTIC] Robust Hyperparameters updated for {regime}: {atr_val}x")
+    except Exception as e:
+        logging.error(f"Failed to write to ArcticDB: {e}")
+
 def run_parameter_sweep(symbol, timeframe='M15', lookback_days=30):
     """
     Asynchronous Quant Researcher: Runs parameter sweeps using CPCV (v15.9).
@@ -142,124 +249,37 @@ def run_parameter_sweep(symbol, timeframe='M15', lookback_days=30):
     logging.info(f"Initiating CPCV Parameter Sweep for {symbol} ({timeframe})...")
     
     try:
-        import vectorbt as vbt
-        
         # 1. Fetch Historical Data from MT5
-        import MetaTrader5 as mt5
-        if not mt5.initialize():
-            logging.error("MT5 failed to initialize for research.")
-            return {"status": "error", "message": "MT5 Init Failed"}
+        price = _fetch_data_from_mt5(symbol)
+        if price is None:
+            return {"status": "error", "message": "Data fetch failed"}
             
-        # Suffix-Aware Resolver
-        from sentinel_config import BROKER_SUFFIX
-        full_symbol = symbol if symbol.endswith(BROKER_SUFFIX) else symbol + BROKER_SUFFIX
+        # 2. Get Model Predictions
+        probs = _get_model_predictions(price)
         
-        rates = mt5.copy_rates_from_pos(full_symbol, mt5.TIMEFRAME_M15, 0, 2000)
-        if rates is None or len(rates) == 0:
-            logging.error(f"Failed to fetch real data for {full_symbol}")
-            return {"status": "error", "message": "No Data"}
-            
-        price = pd.Series([x[4] for x in rates]) # Use Close prices
-        
-        # 2. Load Medallion Model for Strategic Inference
-        import xgboost as xgb
-        from medallion_trainer import FEATURE_KEYS
-        model = xgb.XGBClassifier()
-        model.load_model(r"C:\Sentinel_Project\medallion_model.json")
-        
-        # 3. Purged and Embargoed CV Configuration
-        pkf = PurgedKFold(n_splits=5, purge_bars=PURGE_BARS, embargo_bars=EMBARGO_BARS)
-        
-        # 4. Simulate Features and Predict (Simplified for Sweep Validation)
-        # In production, we'd use the real feature pipeline
-        X_sim = pd.DataFrame(np.random.randn(len(price), len(FEATURE_KEYS)), columns=FEATURE_KEYS)
-        probs = model.predict_proba(X_sim)[:, 1]
-        
-        # 4. Parameter Space (Thresholds)
+        # 3. Parameter Space
         thresholds = np.linspace(0.5, 0.65, 5)
+        multipliers = np.linspace(2.0, 6.0, 5)
         
-        all_path_sharpes = []
-        
-        for train_idx, test_idx in pkf.split(price):
-            test_mask = np.zeros(len(price), dtype=bool)
-            test_mask[test_idx] = True
-            
-            # Execute trades where prob > threshold
-            # (Simplified backtest against the price series)
-            entries = (probs > 0.55).reshape(-1, 1) & test_mask.reshape(-1, 1)
-            exits = (probs < 0.45).reshape(-1, 1) | ~test_mask.reshape(-1, 1)
-            
-            pf = vbt.Portfolio.from_signals(price, entries, exits, freq='15m')
-            fold_sharpe = pf.sharpe_ratio()
-            all_path_sharpes.append(fold_sharpe)
+        # 4. Run CV Parameter Sweep
+        sharpe_df, last_pf = _run_cv_parameter_sweep(price, probs, thresholds)
 
-        # 4. Evaluate Robustness and Multiple Testing (DSR)
-        # Directive 1: Track the Graveyard (Collect ALL Sharpes)
-        sharpe_df = pd.concat(all_path_sharpes, axis=0)
-        all_trials_flat = sharpe_df.values.flatten()
-        
-        # Calculate robust metrics
-        lower_bound_sharpe = sharpe_df.groupby(level=0).quantile(0.05)
-        best_idx = lower_bound_sharpe.idxmax()
-        best_sharpe_lb = lower_bound_sharpe.max()
-        
-        # Directive 2: DSR Calculation
-        n_trials = len(all_trials_flat)
-        # Directive 2: DSR Calculation using ACTUAL returns
-        actual_returns = pf.returns().dropna()
-        if len(actual_returns) < 20:
-            s_val, k_val = 0, 3 # Defaults for low data
-        else:
-            s_val = skew(actual_returns)
-            k_val = kurtosis(actual_returns)
-            if isinstance(s_val, np.ndarray): s_val = s_val.mean()
-            if isinstance(k_val, np.ndarray): k_val = k_val.mean()
-        
-        dsr_conf, expected_max = calculate_dsr(
-            max_sharpe=best_sharpe_lb,
-            trial_sharpes=all_trials_flat,
-            n_trials=n_trials,
-            t_samples=len(price),
-            skew_val=s_val,
-            kurt_val=k_val
-        )
+        # 5. Evaluate Robustness and Multiple Testing (DSR)
+        best_idx, best_sharpe_lb, n_trials, expected_max, dsr_conf = _calculate_dsr_metrics(price, sharpe_df, last_pf)
         
         logging.info(f"[DSR] Trials: {n_trials} | Expected Max: {expected_max:.2f} | Actual: {best_sharpe_lb:.2f} | Conf: {dsr_conf:.1%}")
         
-        # Directive 3: The Ultimate Epistemic Gate
+        # 6. DSR Gate
         if dsr_conf < 0.95:
             logging.warning(f"Strategy REJECTED by DSR Gate (Conf {dsr_conf:.1%} < 95%)")
             return {"status": "rejected", "dsr_conf": dsr_conf, "reason": "Multiple Testing Bias"}
 
         logging.info(f"Best Robust Config (DSR Verified): {best_idx} | Sharpe LB: {best_sharpe_lb:.2f}")
         
-        # 5. Directive 1 (The Sisyphus Cure): Write to ArcticDB
-        # ... (ArcticDB logic remains same) ...
-        try:
-            import git_arctic
-            store = git_arctic.get_arctic()
-            if 'global_hyperparameters' not in store.list_libraries():
-                store.create_library('global_hyperparameters')
-            lib_hp = store['global_hyperparameters']
-            
-            atr_val = multipliers[best_idx] if isinstance(best_idx, (int, np.integer)) else 4.0
-            
-            regime = utils.get_symbol_regime(symbol)
-            hp_df = pd.DataFrame([{
-                "symbol": symbol,
-                "regime": regime,
-                "atr_multiplier": float(atr_val),
-                "sharpe_lb": float(best_sharpe_lb),
-                "dsr_conf": float(dsr_conf),
-                "timestamp": time.time()
-            }])
-            
-            lib_hp.write(f"atr_mult_{regime}", hp_df, metadata={'symbol': symbol, 'dsr': True})
-            logging.info(f"[ARCTIC] Robust Hyperparameters updated for {regime}: {atr_val}x")
-        except Exception as e:
-            logging.error(f"Failed to write to ArcticDB: {e}")
+        # 7. Save to ArcticDB
+        _save_to_arcticdb(symbol, best_idx, best_sharpe_lb, dsr_conf, multipliers)
 
-        # 6. Push Webhook with DSR Metrics
+        # 8. Push Webhook with DSR Metrics
         send_research_webhook(symbol, best_idx, best_sharpe_lb, n_trials, expected_max, dsr_conf)
             
         return {"status": "success", "best_config": str(best_idx), "sharpe_lb": best_sharpe_lb, "dsr_conf": dsr_conf}
