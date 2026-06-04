@@ -120,6 +120,67 @@ def monte_carlo_path_stress(pnl_array, initial_capital=10000, n_simulations=1000
         "worst_sim_mdd": worst_shuffled_dd
     }
 
+def apply_reality_tax(direction, entry_price, exit_price, pip_multiplier, spread_val, held_overnight, flat_commission, swap_charge):
+    """
+    SRE Patched: Applies slippage, commissions, and swap charges to gross P&L.
+    """
+    # Gross P&L
+    gross_pnl = direction * (exit_price - entry_price) * pip_multiplier
+
+    # 1. Slippage penalty: 1.0x spread
+    slippage_penalty = spread_val * 10.0 # Standard lot pip value
+
+    # 2. Swap penalty
+    swap_penalty = swap_charge if held_overnight else 0.0
+
+    net_pnl = gross_pnl - slippage_penalty - flat_commission - swap_penalty
+    return net_pnl
+
+def simulate_trading_fold(test_df, probs, pip_multiplier, flat_commission, swap_charge, default_spread):
+    """
+    Simulates trading for a single walk-forward fold.
+    """
+    fold_trades_pnl = []
+    oos_trades_log = []
+
+    close_prices = test_df['close'].values
+    times = test_df.index
+
+    for idx in range(len(test_df) - 1):
+        prob = probs[idx]
+
+        # Simple threshold trade entries
+        if prob > 0.55 or prob < 0.45:
+            direction = 1 if prob > 0.55 else -1
+            entry_price = close_prices[idx]
+
+            # Hold for 4 bars or until exit
+            exit_idx = min(idx + 4, len(test_df) - 1)
+            exit_price = close_prices[exit_idx]
+
+            # Retrieve spread in pips (points / 10 if standard MT5 broker)
+            spread_val = test_df['spread'].iloc[idx] / 10.0 if 'spread' in test_df.columns else default_spread
+
+            # Check if held overnight past 23:55
+            held_overnight = False
+            for t_offset in range(idx, exit_idx):
+                if times[t_offset].hour == 23 and times[t_offset].minute >= 50:
+                    held_overnight = True
+                    break
+
+            net_pnl = apply_reality_tax(
+                direction, entry_price, exit_price, pip_multiplier,
+                spread_val, held_overnight, flat_commission, swap_charge
+            )
+
+            fold_trades_pnl.append(net_pnl)
+            oos_trades_log.append({
+                "close_time": times[exit_idx],
+                "pnl_net": net_pnl
+            })
+
+    return fold_trades_pnl, oos_trades_log
+
 def fetch_data():
     """Fetches H1 historical candles for EURUSD or falls back to high-fidelity synthetic candles if offline."""
     df = None
@@ -216,48 +277,11 @@ def main():
         fold_auc = roc_auc_score(y_test, probs)
         
         # Simulate OOS Trading on this fold
-        fold_trades_pnl = []
-        for idx in range(len(test_df) - 1):
-            prob = probs[idx]
-            close_prices = test_df['close'].values
-            times = test_df.index
-            
-            # Simple threshold trade entries
-            if prob > 0.55 or prob < 0.45:
-                direction = 1 if prob > 0.55 else -1
-                entry_price = close_prices[idx]
-                
-                # Hold for 4 bars or until exit
-                exit_idx = min(idx + 4, len(test_df) - 1)
-                exit_price = close_prices[exit_idx]
-                
-                # Gross P&L
-                gross_pnl = direction * (exit_price - entry_price) * pip_multiplier
-                
-                # Retrieve spread in pips (points / 10 if standard MT5 broker)
-                spread_val = test_df['spread'].iloc[idx] / 10.0 if 'spread' in test_df.columns else default_spread
-                
-                # ── Apply the Reality Tax ──
-                # 1. Slippage penalty: 1.0x spread
-                slippage_penalty = spread_val * 10.0 # Standard lot pip value
-                
-                # 2. Swap penalty: check if held overnight past 23:55
-                held_overnight = False
-                for t_offset in range(idx, exit_idx):
-                    if times[t_offset].hour == 23 and times[t_offset].minute >= 50:
-                        held_overnight = True
-                        break
-                        
-                swap_penalty = swap_charge if held_overnight else 0.0
-                
-                net_pnl = gross_pnl - slippage_penalty - flat_commission - swap_penalty
-                fold_trades_pnl.append(net_pnl)
-                
-                oos_trades_log.append({
-                    "close_time": times[exit_idx],
-                    "pnl_net": net_pnl
-                })
-                
+        fold_trades_pnl, fold_log = simulate_trading_fold(
+            test_df, probs, pip_multiplier, flat_commission, swap_charge, default_spread
+        )
+        oos_trades_log.extend(fold_log)
+
         fold_trades_pnl = np.array(fold_trades_pnl)
         fold_net_profit = np.sum(fold_trades_pnl) if len(fold_trades_pnl) > 0 else 0.0
         
