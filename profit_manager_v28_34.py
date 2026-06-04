@@ -516,6 +516,158 @@ class ExitSignal:
     reasons:        list  = field(default_factory=list)
 
 
+def _check_crypto_rules(
+    ps: PositionState,
+    symbol: str,
+    is_buy: bool,
+    hmm: str,
+    pos_dir: str,
+    live_p: float,
+    h1_candles: int,
+    sig: ExitSignal
+) -> bool:
+    """Refactored crypto barrier logic."""
+    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+    is_crypto = any(k in symbol.upper() for k in crypto_keywords)
+    if not is_crypto:
+        return False
+
+    # Stagnation Exit (Barrier 3)
+    if h1_candles > 120 and not ps.zone2_done:
+        sig.hard_exit = True
+        sig.reason_primary = "[STAGNATION LIQUIDATION]"
+        sig.reasons.append(f"Crypto open > 120 bars ({h1_candles}) without hitting Zone 2")
+        return True
+
+    # Thesis Decay
+    thesis_p_crypto = live_p if is_buy else (1.0 - live_p)
+    if thesis_p_crypto < 0.55:
+        sig.hard_exit = True
+        sig.reason_primary = "[THESIS DECAY] Conviction < 0.55"
+        sig.reasons.append(f"Kronos Conviction {thesis_p_crypto:.3f} < 0.55")
+        return True
+
+    # Regime Inversion
+    if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
+        ps.regime_conflict_count += 1
+        if ps.regime_conflict_count >= 3:
+            sig.hard_exit = True
+            sig.reason_primary = "[THESIS DECAY] Regime Inversion"
+            sig.reasons.append(f"Regime flipped to {hmm} against {pos_dir} position for 3 periods")
+            return True
+    else:
+        ps.regime_conflict_count = 0
+    return False
+
+
+def _check_failsafe_triggers(
+    ps: PositionState,
+    is_buy: bool,
+    current_price: float,
+    macro_atr: float,
+    sl_mult: float,
+    sig: ExitSignal
+) -> bool:
+    """Refactored broker execution failsafe logic."""
+    buffer = macro_atr * 0.10
+    sl_target = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
+    tp_target = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
+    if ps.initial_sl > 0:
+        sl_target = ps.initial_sl
+
+    if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
+        sig.hard_exit = True
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past SL={sl_target:.5f} by buffer={buffer:.5f}")
+        return True
+
+    if (is_buy and current_price >= (tp_target + buffer)) or (not is_buy and current_price <= (tp_target - buffer)):
+        sig.hard_exit = True
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past TP={tp_target:.5f} by buffer={buffer:.5f}")
+        return True
+    return False
+
+
+def _check_macro_shocks(
+    pos_dir: str,
+    sentiment: float,
+    sig: ExitSignal
+) -> bool:
+    """Refactored macro sentiment shock logic."""
+    if (pos_dir == "BUY" and sentiment < -0.65) or (pos_dir == "SELL" and sentiment > 0.65):
+        sig.hard_exit = True
+        sig.reason_primary = "[MACRO SHOCK]"
+        sig.reasons.append(f"Sentiment={sentiment:.2f} threshold breached for {pos_dir}")
+        return True
+    return False
+
+
+def _compute_regime_score(
+    ps: PositionState,
+    pos_dir: str,
+    hmm: str,
+    profit_r: float,
+    sig: ExitSignal
+):
+    """Refactored regime conflict scoring logic."""
+    is_conflict = (pos_dir == "BUY" and hmm == "BEAR") or (pos_dir == "SELL" and hmm == "BULL")
+    if is_conflict:
+        ps.regime_conflict_count += 1
+        # Higher profit → require more persistent regime conflict before exiting
+        r_gate      = max(3, int(3 + max(0, profit_r)))   # 0R→3, 3R→6, 5R→8 confirms
+        persistence = min(ps.regime_conflict_count / r_gate, 1.0)
+        sig.score  += 0.40 * persistence
+        sig.reasons.append(
+            f"REGIME({hmm} vs {pos_dir}, count={ps.regime_conflict_count}/{r_gate})"
+        )
+    else:
+        ps.regime_conflict_count = 0
+
+
+def _apply_hysteresis(
+    ps: PositionState,
+    symbol: str,
+    current_price: float,
+    elapsed: float,
+    sig: ExitSignal
+):
+    """Refactored age and edge-based suppression logic."""
+    if sig.score <= 0:
+        return
+
+    if elapsed < 1200:
+        logger.info(f"[HARD_HOLD] {symbol}: suppressing exit — age {elapsed:.0f}s < 20m")
+        sig.score = 0.0
+        sig.reasons = [f"SUPPRESSED_HARD_HOLD({elapsed:.0f}s)"]
+    else:
+        info = mt5.symbol_info(symbol)
+        if info:
+            min_edge = 30 * info.point
+            if ps.profit_delta(current_price) > -min_edge:
+                logger.info(f"[HYSTERESIS] {symbol}: suppressing exit — profit delta > -30 points")
+                sig.score = 0.0
+                sig.reasons = [f"SUPPRESSED_MIN_EDGE({ps.profit_delta(current_price):.5f} > -{min_edge:.5f})"]
+
+
+def _apply_event_horizon(
+    symbol: str,
+    sig: ExitSignal
+):
+    """Refactored event-based suppression logic."""
+    if sig.score <= 0:
+        return
+
+    try:
+        has_event, event_desc = check_upcoming_tier1_events(symbol, threshold_hours=12.0)
+        if has_event:
+            logger.info(f"[EVENT_HORIZON_GATE] {symbol}: suppressing cognitive exits — {event_desc}")
+            sig.score   = 0.0
+            sig.reasons = [f"SUPPRESSED_PRE_EVENT({event_desc})"]
+    except Exception as e:
+        logger.warning(f"[EVENT_CHECK_ERR] {symbol}: {e}")
+
+
 def compute_exit_score(
     ps:               PositionState,
     oracle:           dict,
@@ -549,115 +701,25 @@ def compute_exit_score(
     profit_r = ps.profit_r(current_price, macro_atr, sl_mult)
     elapsed  = broker_now - ps.entry_time
 
-    # ── Crypto Triple-Barrier Rules (v36.0) ──────────────────────────────────
-    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
-    is_crypto = any(k in symbol.upper() for k in crypto_keywords)
-    
-    if is_crypto:
-        # Stagnation Exit (Barrier 3)
-        if h1_candles > 120 and not ps.zone2_done:
-            sig.hard_exit = True
-            sig.reason_primary = "[STAGNATION LIQUIDATION]"
-            sig.reasons.append(f"Crypto open > 120 bars ({h1_candles}) without hitting Zone 2")
-            return sig
-            
-        # Thesis Decay
-        thesis_p_crypto = live_p if is_buy else (1.0 - live_p)
-        if thesis_p_crypto < 0.55:
-            sig.hard_exit = True
-            sig.reason_primary = "[THESIS DECAY] Conviction < 0.55"
-            sig.reasons.append(f"Kronos Conviction {thesis_p_crypto:.3f} < 0.55")
-            return sig
-            
-        # Regime Inversion
-        if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
-            ps.regime_conflict_count += 1
-            if ps.regime_conflict_count >= 3:
-                sig.hard_exit = True
-                sig.reason_primary = "[THESIS DECAY] Regime Inversion"
-                sig.reasons.append(f"Regime flipped to {hmm} against {pos_dir} position for 3 periods")
-                return sig
-        else:
-            ps.regime_conflict_count = 0
-
-    # ── 1. Secondary Failsafe (Broker Execution Failure) (HARD EXIT) ─────────
-    # OPERATION VISIBLE HORIZON: Profit Manager is now a failsafe.
-    # Uses ps.initial_sl if available. If they fail, we add a 10% ATR buffer and force market exit.
-    buffer = macro_atr * 0.10
-    sl_target = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
-    tp_target = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
-    if ps.initial_sl > 0:
-        sl_target = ps.initial_sl
-
-    if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
-        sig.hard_exit = True
-        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
-        sig.reasons.append(f"Price={current_price:.5f} blew past SL={sl_target:.5f} by buffer={buffer:.5f}")
+    # ── Hard Exits (Bypass Scoring) ──────────────────────────────────────────
+    if _check_crypto_rules(ps, symbol, is_buy, hmm, pos_dir, live_p, h1_candles, sig):
         return sig
 
-    if (is_buy and current_price >= (tp_target + buffer)) or (not is_buy and current_price <= (tp_target - buffer)):
-        sig.hard_exit = True
-        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
-        sig.reasons.append(f"Price={current_price:.5f} blew past TP={tp_target:.5f} by buffer={buffer:.5f}")
+    if _check_failsafe_triggers(ps, is_buy, current_price, macro_atr, sl_mult, sig):
         return sig
 
-    # ── 2. Macro Shock / Sentiment Kill (HARD EXIT) ──────────────────────────
-    if (pos_dir == "BUY" and sentiment < -0.65) or (pos_dir == "SELL" and sentiment > 0.65):
-        sig.hard_exit = True
-        sig.reason_primary = "[MACRO SHOCK]"
-        sig.reasons.append(f"Sentiment={sentiment:.2f} threshold breached for {pos_dir}")
+    if _check_macro_shocks(pos_dir, sentiment, sig):
         return sig
 
-    # ── 3. (REMOVED) Velocity Kill ───────────────────────────────────────────
+    # ── Soft Scored Exits ────────────────────────────────────────────────────
+    _compute_regime_score(ps, pos_dir, hmm, profit_r, sig)
 
-    # ── From here: soft scored exits ─────────────────────────────────────────
+    # ── Suppression Gates ────────────────────────────────────────────────────
+    _apply_hysteresis(ps, symbol, current_price, elapsed, sig)
+    _apply_event_horizon(symbol, sig)
 
-    # ── 4. Regime Conflict (scored) ──────────────────────────────────────────
-    # BUG FIX: v23.2 had no profit gate. v25.0 scales required persistence with R.
-    is_conflict = (pos_dir == "BUY" and hmm == "BEAR") or (pos_dir == "SELL" and hmm == "BULL")
-    if is_conflict:
-        ps.regime_conflict_count += 1
-        # Higher profit → require more persistent regime conflict before exiting
-        r_gate      = max(3, int(3 + max(0, profit_r)))   # 0R→3, 3R→6, 5R→8 confirms
-        persistence = min(ps.regime_conflict_count / r_gate, 1.0)
-        sig.score  += 0.40 * persistence
-        sig.reasons.append(
-            f"REGIME({hmm} vs {pos_dir}, count={ps.regime_conflict_count}/{r_gate})"
-        )
-    else:
-        ps.regime_conflict_count = 0
-
-    # ── 5. (REMOVED) Thesis/Dead Money/Theta Exits ───────────────────────────
-
-    # ── Hysteresis Hardening (v9.5) ──────────────────────────────────────────
-    if sig.score > 0:
-        if elapsed < 1200:
-            logger.info(f"[HARD_HOLD] {symbol}: suppressing exit — age {elapsed:.0f}s < 20m")
-            sig.score = 0.0
-            sig.reasons = [f"SUPPRESSED_HARD_HOLD({elapsed:.0f}s)"]
-        else:
-            info = mt5.symbol_info(symbol)
-            if info:
-                min_edge = 30 * info.point
-                if ps.profit_delta(current_price) > -min_edge:
-                    logger.info(f"[HYSTERESIS] {symbol}: suppressing exit — profit delta > -30 points")
-                    sig.score = 0.0
-                    sig.reasons = [f"SUPPRESSED_MIN_EDGE({ps.profit_delta(current_price):.5f} > -{min_edge:.5f})"]
-
-    # ── 8. Event Horizon suppression gate ────────────────────────────────────
-    if sig.score > 0:
-        try:
-            has_event, event_desc = check_upcoming_tier1_events(symbol, threshold_hours=12.0)
-            if has_event:
-                logger.info(f"[EVENT_HORIZON_GATE] {symbol}: suppressing cognitive exits — {event_desc}")
-                sig.score   = 0.0
-                sig.reasons = [f"SUPPRESSED_PRE_EVENT({event_desc})"]
-        except Exception as e:
-            logger.warning(f"[EVENT_CHECK_ERR] {symbol}: {e}")
-
-    # ── 9. Profit-weighted dampening ─────────────────────────────────────────
+    # ── Profit-weighted dampening ────────────────────────────────────────────
     # Positions in strong profit need a higher signal score to justify an exit.
-    # A +4R position running with modest decay needs the system to fight for it.
     if profit_r > 2.0 and sig.score > 0:
         dampener  = max(0.30, 1.0 - (profit_r - 2.0) * 0.08)
         sig.score *= dampener
