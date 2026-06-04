@@ -739,8 +739,12 @@ def push_exit_signal(pos, reason: str):
         "action": "CLOSE", "symbol": pos.symbol, "ticket": pos.ticket,
         "reason": reason,  "timestamp": int(time.time()),
     }
+    headers = {}
+    api_key = os.getenv("SENTINEL_API_KEY")
+    if api_key:
+        headers["X-API-Key"] = api_key
     try:
-        resp = requests.post(f"{url}/liquidate", json=payload, timeout=5)
+        resp = requests.post(f"{url}/liquidate", json=payload, headers=headers, timeout=5)
         if resp.status_code == 200:
             logger.info(f"[EXIT_SIGNAL_OK] {pos.symbol} #{pos.ticket} → Execution Node")
         else:

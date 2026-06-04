@@ -849,7 +849,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _post_to_sniper(payload: Dict[str, Any], url: str):
     """Direct HTTP POST to the Execution Node with exponential backoff."""
-    response = requests.post(url, json=payload, timeout=5)
+    headers = {}
+    api_key = os.getenv("SENTINEL_API_KEY")
+    if api_key:
+        headers["X-API-Key"] = api_key
+    response = requests.post(url, json=payload, headers=headers, timeout=5)
     response.raise_for_status()
     return response
 

@@ -123,6 +123,9 @@ def run_synthetic_fuzzing():
     }
     url = "http://localhost:8000/execute_trade"
     headers = {"IS_FUZZING": "True"}
+    api_key = os.getenv("SENTINEL_API_KEY")
+    if api_key:
+        headers["X-API-Key"] = api_key
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=5.0)
         logger.info(f"[FUZZ] POST response code: {resp.status_code}")

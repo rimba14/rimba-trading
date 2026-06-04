@@ -23,7 +23,7 @@ if sys.stderr.encoding != 'utf-8':
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from pydantic import BaseModel
 import uvicorn
 import MetaTrader5 as mt5
@@ -135,6 +135,16 @@ if not logger.handlers:
 
 # FastAPI App Initialization
 app = FastAPI(title="Adaptive Sentinel HTTP Sniper")
+
+async def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """v31.0: Security Hardening - API Key Verification."""
+    expected_key = os.getenv("SENTINEL_API_KEY")
+    if not expected_key:
+        logger.warning("[SECURITY] SENTINEL_API_KEY not set in environment. Running in UNSECURED mode.")
+        return
+    if x_api_key != expected_key:
+        logger.critical(f"[SECURITY BREACH] Invalid API Key attempt from header.")
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid API Key")
 
 def load_risk_config() -> dict:
     try:
@@ -380,7 +390,7 @@ def status():
 class StripStopsRequest(BaseModel):
     ticket: int
 
-@app.post("/strip_stops")
+@app.post("/strip_stops", dependencies=[Depends(verify_api_key)])
 async def strip_stops_endpoint(req: StripStopsRequest):
     """v30.98: Strip physical SL/TP from a position. Stops are ALWAYS virtual — managed by profit_manager_v28_34.py."""
     ticket = req.ticket
@@ -403,7 +413,7 @@ async def strip_stops_endpoint(req: StripStopsRequest):
     else:
         raise HTTPException(status_code=500, detail=f"Strip failed: retcode={retcode}")
 
-@app.post("/execute_trade")
+@app.post("/execute_trade", dependencies=[Depends(verify_api_key)])
 async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     """Securely accepts and executes trade signals from the Oracle Brain."""
     is_fuzzing = request.headers.get("IS_FUZZING") == "True"
@@ -617,7 +627,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     else:
         raise HTTPException(status_code=500, detail="MT5 execution failed")
 
-@app.post("/liquidate")
+@app.post("/liquidate", dependencies=[Depends(verify_api_key)])
 async def liquidate_endpoint(request: Request):
     """Accepts liquidation signals from the Profit Manager or Deep Research Oracle."""
     data = await request.json()

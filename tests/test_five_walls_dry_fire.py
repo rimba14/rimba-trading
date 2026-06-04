@@ -1,3 +1,4 @@
+import os
 import requests
 
 BASE = "http://localhost:8000"
@@ -59,7 +60,11 @@ for test_name, payload, expected_status, expected_pattern in test_cases:
         continue
 
     try:
-        resp = requests.post(f"{BASE}/execute_trade", json=payload).json()
+        headers = {}
+        api_key = os.getenv("SENTINEL_API_KEY")
+        if api_key:
+            headers["X-API-Key"] = api_key
+        resp = requests.post(f"{BASE}/execute_trade", json=payload, headers=headers).json()
         status_ok = resp.get('status') == expected_status
         pattern_ok = expected_pattern is None or expected_pattern in resp.get('reason', '')
         passed = status_ok and pattern_ok
