@@ -294,9 +294,6 @@ class RiskAgent:
 
         return True, "Risk check passed."
 
-    def monitor_portfolio(self):
-        pass
-
 
 # ── MCP Server (FastAPI Microservice) ────────────────────────────────────────
 
