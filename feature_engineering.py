@@ -425,19 +425,3 @@ if __name__ == "__main__":
         print("Feature engineering diagnostic: FAILED")
 
 
-class FeatureEngine:
-    """Unified Feature Engine for Live and Backtest Isolation."""
-    def __init__(self):
-        pass
-
-    def generate_features(self, ticks_df, other_asset_df=None):
-        return generate_features(ticks_df, other_asset_df)
-
-    def engineer_features(self, df, price_col='close', volume_col='tick_volume', frac_d=0.45, fft_top_k=3, cs_rank=0.5, vrs=1.0):
-        return engineer_features(df, price_col, volume_col, frac_d, fft_top_k, cs_rank, vrs)
-
-    def compute_swing_alpha(self, df, df_h4=None, symbol='UNKNOWN'):
-        return compute_swing_alpha(df, df_h4, symbol)
-
-    def calculate_vrp_spread(self):
-        return calculate_vrp_spread()
