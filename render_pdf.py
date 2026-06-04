@@ -1,4 +1,5 @@
 import os
+import textwrap
 from fpdf import FPDF
 
 class StablePDF(FPDF):
@@ -19,14 +20,19 @@ def generate_stable_pdf(src, dst):
     # Process lines safely
     for line in content.split('\n'):
         # Fix: ensure line isn't too long for multi_cell
-        # If it's a table line or divider, just print it as is
-        pdf.multi_cell(180, 6, line.strip()) 
+        # wrap(line) breaks long lines into segments based on width
+        # width=80 is conservative for Courier 10pt on 180mm width
+        segments = textwrap.wrap(line.strip(), width=80) or [""]
+        for segment in segments:
+            pdf.multi_cell(180, 6, segment)
         # No extra formatting to avoid "Not enough space" errors
         
     pdf.output(dst)
     print(f"PDF Success: {dst}")
 
 if __name__ == "__main__":
-    MD_PATH = r'C:\Users\Administrator\.gemini\antigravity\brain\12325980-a53b-4d3f-8c1d-135ccefcf2eb\exit_evolution_report.md'
-    PDF_PATH = r'C:\Users\Administrator\.gemini\antigravity\brain\12325980-a53b-4d3f-8c1d-135ccefcf2eb\exit_evolution_report.pdf'
-    generate_stable_pdf(MD_PATH, PDF_PATH)
+    # Use relative paths for better portability
+    MD_PATH = 'exit_evolution_report.md'
+    PDF_PATH = 'exit_evolution_report.pdf'
+    if os.path.exists(MD_PATH):
+        generate_stable_pdf(MD_PATH, PDF_PATH)
