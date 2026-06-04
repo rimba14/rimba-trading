@@ -24,8 +24,9 @@ class portfolio_guardian:
         
         # 1. Weights
         symbols = list(positions_usd.keys())
-        total_value = sum(positions_usd.values())
-        weights = np.array([positions_usd[s] / total_value for s in symbols])
+        weights = np.fromiter(positions_usd.values(), dtype=float)
+        total_value = weights.sum()
+        weights /= total_value
         
         # 2. Covariance Matrix
         cov_matrix = returns_df[symbols].cov()
@@ -50,8 +51,9 @@ class portfolio_guardian:
             return 0.0
             
         symbols = list(positions_usd.keys())
-        total_value = sum(positions_usd.values())
-        weights = np.array([positions_usd[s] / total_value for s in symbols])
+        weights = np.fromiter(positions_usd.values(), dtype=float)
+        total_value = weights.sum()
+        weights /= total_value
         
         # Mean and Covariance
         mean_returns = returns_df[symbols].mean()
@@ -109,8 +111,12 @@ class portfolio_guardian:
             else:
                 betas[sym] = 1.0 # default to unit beta if unknown
                 
-        total_value = sum(positions.values())
-        net_beta = sum((positions[s] / total_value) * betas[s] for s in positions.keys())
+        pos_values = np.fromiter(positions.values(), dtype=float)
+        total_value = pos_values.sum()
+        if total_value == 0: return 0.0
+
+        beta_values = np.fromiter(betas.values(), dtype=float)
+        net_beta = np.dot(pos_values / total_value, beta_values)
         return net_beta
 
 guardian = portfolio_guardian()
