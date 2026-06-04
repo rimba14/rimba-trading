@@ -78,6 +78,30 @@ def _arc_read(lib, key: str):
         except Exception:
             return None
 
+
+def _arc_read_batch(lib, keys: list):
+    """Parallelized ArcticDB read with 300 ms hard cap."""
+    if lib is None:
+        return {k: None for k in keys}
+
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_key = {executor.submit(lib.read, key): key for key in keys}
+        try:
+            for future in concurrent.futures.as_completed(future_to_key, timeout=ARCTIC_TIMEOUT + 0.05):
+                key = future_to_key[future]
+                try:
+                    results[key] = future.result()
+                except Exception:
+                    results[key] = None
+        except concurrent.futures.TimeoutError:
+            pass
+
+    for key in keys:
+        if key not in results:
+            results[key] = None
+    return results
+
 # ── Header ─────────────────────────────────────────────────────────────────────
 col_title, col_clock = st.columns([4, 1])
 with col_title:
@@ -118,8 +142,9 @@ col_l, col_r = st.columns(2)
 with col_l:
     st.subheader("📡 Slow Loop — HMM Radar")
     hmm_rows = []
+    hmm_results = _arc_read_batch(lib, [f"{sym}_hmm" for sym in SAMPLE_WATCHLIST])
     for sym in SAMPLE_WATCHLIST:
-        item = _arc_read(lib, f"{sym}_hmm")
+        item = hmm_results.get(f"{sym}_hmm")
         if item is not None:
             row = item.data.iloc[-1]
             age = time.time() - float(row.get("timestamp", 0))
@@ -140,8 +165,9 @@ with col_l:
 with col_r:
     st.subheader("⚡ Fast Loop — Meta-Conviction Matrix")
     meta_rows = []
+    meta_results = _arc_read_batch(lib, [f"{sym}_meta" for sym in SAMPLE_WATCHLIST])
     for sym in SAMPLE_WATCHLIST:
-        item = _arc_read(lib, f"{sym}_meta")
+        item = meta_results.get(f"{sym}_meta")
         if item is not None:
             row   = item.data.iloc[-1]
             p     = float(row.get("meta_conviction", 0.5))
