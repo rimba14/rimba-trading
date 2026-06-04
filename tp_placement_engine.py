@@ -387,201 +387,91 @@ class TPPlacementEngine:
         Returns a TPValidationResult. Caller must check .is_valid and
         use .final_tp (not .proposed_tp) when placing the MT5 order.
         """
-        symbol = symbol.upper().replace(".", "").replace("_", "").replace(" ", "")
+        # 1. Setup & Classification
+        symbol = self._normalize_symbol(symbol)
         asset_class = self._classify(symbol)
-
-        sl_distance     = abs(entry - sl)
+        sl_distance = abs(entry - sl)
         sl_distance_pct = sl_distance / entry if entry > 0 else 0.0
 
-        # ---------------------------------------------------------------
-        # Law 4 — Crypto absolute veto (REPEALED in v36.0)
-        # Crypto now flows through with Triple-Barrier limits applied
-        # in trade_executor_mcp.py and audited in profit_manager_v28_34.py
-        # ---------------------------------------------------------------
+        # 2. Law 4 — Crypto absolute veto (REPEALED in v36.0)
         if asset_class == AssetClass.CRYPTO:
-            return TPValidationResult(
-                is_valid=True,
-                proposed_tp=proposed_tp,
-                final_tp=0.0,
-                adjusted=False,
-                direction=direction,
-                asset_class=asset_class,
-                symbol=symbol,
-                entry=entry,
-                sl=sl,
-                sl_distance=sl_distance,
-                sl_distance_pct=sl_distance_pct,
-                tp_distance=0.0,
-                tp_distance_pct=0.0,
-                rr_ratio=1.5,
-                atr_d1=self._get_atr(symbol),
-                atr_ceiling_price=None,
-                atr_ceiling_dist=None,
-                atr_ceiling_pct=None,
-                asset_class_cap_pct=None,
-                asset_class_cap_price=None,
-                binding_ceiling_price=None,
-                binding_ceiling_label=None,
-                structural_level=None,
-                time_stop_days=None,
-                rejection_reason="",
+            return self._handle_crypto_veto(
+                symbol=symbol, entry=entry, sl=sl, proposed_tp=proposed_tp,
+                direction=direction, asset_class=asset_class,
+                sl_distance=sl_distance, sl_distance_pct=sl_distance_pct
             )
 
-        # ---------------------------------------------------------------
-        # Basic geometry checks
-        # ---------------------------------------------------------------
-        if sl_distance <= 0:
-            return self._hard_reject(
-                symbol, entry, sl, proposed_tp, direction, asset_class,
-                "SL distance is zero or negative — invalid position geometry.",
-            )
+        # 3. Basic geometry checks
+        geom_error = self._get_geometry_error(entry, sl, proposed_tp, direction)
+        if geom_error:
+            return self._hard_reject(symbol, entry, sl, proposed_tp, direction, asset_class, geom_error)
 
-        # Validate direction consistency
-        if direction == 1 and proposed_tp <= entry:
-            return self._hard_reject(
-                symbol, entry, sl, proposed_tp, direction, asset_class,
-                f"Direction=LONG but proposed_tp ({proposed_tp}) <= entry ({entry}).",
-            )
-        if direction == -1 and proposed_tp >= entry:
-            return self._hard_reject(
-                symbol, entry, sl, proposed_tp, direction, asset_class,
-                f"Direction=SHORT but proposed_tp ({proposed_tp}) >= entry ({entry}).",
-            )
-
-        # ---------------------------------------------------------------
-        # Law 2 — ATR ceiling
-        # ---------------------------------------------------------------
+        # 4. Law 2 — ATR ceiling
         atr_d1 = self._get_atr(symbol)
         if atr_d1 is None:
             return self._hard_reject(
                 symbol, entry, sl, proposed_tp, direction, asset_class,
-                "D1 ATR(14) unavailable or stale — DEGRADED DATA VETO. Entry blocked per DIRECTIVE OMEGA.",
+                "D1 ATR(14) unavailable or stale — DEGRADED DATA VETO. Entry blocked per DIRECTIVE OMEGA."
             )
 
         atr_ceiling_dist  = atr_d1 * ATR_CEILING_MULTIPLIER
         atr_ceiling_price = (entry + atr_ceiling_dist) if direction == 1 else (entry - atr_ceiling_dist)
         atr_ceiling_pct   = atr_ceiling_dist / entry
 
-        # ---------------------------------------------------------------
-        # Law 3 — Asset class % cap
-        # ---------------------------------------------------------------
-        asset_class_cap_pct   = ASSET_CLASS_TP_CAPS[asset_class]
-        asset_class_cap_price = (
-            (entry * (1.0 + asset_class_cap_pct)) if direction == 1
-            else (entry * (1.0 - asset_class_cap_pct))
-        ) if asset_class_cap_pct is not None else None
+        # 5. Law 3 — Asset class % cap
+        asset_class_cap_pct, asset_class_cap_price = self._calculate_asset_class_cap(entry, direction, asset_class)
 
-        # ---------------------------------------------------------------
-        # Binding ceiling — most restrictive of ATR and class cap
-        # ---------------------------------------------------------------
-        if direction == 1:
-            candidates = [atr_ceiling_price]
-            if asset_class_cap_price is not None:
-                candidates.append(asset_class_cap_price)
-            binding_ceiling = min(candidates)
-            binding_label   = "ATR" if binding_ceiling == atr_ceiling_price else "AssetCap"
-        else:
-            candidates = [atr_ceiling_price]
-            if asset_class_cap_price is not None:
-                candidates.append(asset_class_cap_price)
-            binding_ceiling = max(candidates)
-            binding_label   = "ATR" if binding_ceiling == atr_ceiling_price else "AssetCap"
+        # 6. Binding ceiling — most restrictive of ATR and class cap
+        binding_ceiling, binding_label = self._determine_binding_ceiling(
+            direction, atr_ceiling_price, asset_class_cap_price
+        )
 
-        # ---------------------------------------------------------------
-        # Law 1 — Structural level resolution
-        # ---------------------------------------------------------------
-        structural_level: Optional[StructuralLevel] = None
-        chosen_tp = proposed_tp
-
-        if use_structural_resolver:
-            levels = self.level_resolver.get_levels(
-                symbol=symbol,
-                entry=entry,
-                direction=direction,
-                ceiling=binding_ceiling,
-            )
-            if levels:
-                best = levels[0]          # nearest level within ceiling
-                best.distance     = abs(best.price - entry)
-                best.distance_pct = best.distance / entry
-                structural_level  = best
-                chosen_tp         = best.price
-                logger.info(
-                    f"[TPEngine] {symbol}: structural TP = {chosen_tp:.5f} "
-                    f"({best.level_type} on {best.source_tf}, strength={best.strength:.2f})"
-                )
-            else:
-                logger.warning(
-                    f"[TPEngine] {symbol}: No structural level found within "
-                    f"binding ceiling {binding_ceiling:.5f}. Falling back to ceiling."
-                )
-                chosen_tp = binding_ceiling
-        else:
-            # Validate proposed_tp against ceiling
-            if direction == 1 and proposed_tp > binding_ceiling:
-                chosen_tp = binding_ceiling
-            elif direction == -1 and proposed_tp < binding_ceiling:
-                chosen_tp = binding_ceiling
+        # 7. Law 1 — Structural level resolution
+        structural_level, chosen_tp = self._resolve_structural_level(
+            symbol, entry, direction, proposed_tp, binding_ceiling, use_structural_resolver
+        )
 
         tp_distance     = abs(chosen_tp - entry)
         tp_distance_pct = tp_distance / entry
         rr_ratio        = tp_distance / sl_distance
 
-        # ---------------------------------------------------------------
-        # Law 5 — Minimum R:R gate
-        # ---------------------------------------------------------------
-        warnings: List[str] = []
-
+        # 8. Law 5 — Minimum R:R gate
         if rr_ratio < MIN_RR_RATIO:
-            return TPValidationResult(
-                is_valid=False,
-                proposed_tp=proposed_tp,
-                final_tp=None,
-                adjusted=False,
-                direction=direction,
-                asset_class=asset_class,
-                symbol=symbol,
-                entry=entry,
-                sl=sl,
-                sl_distance=sl_distance,
-                sl_distance_pct=sl_distance_pct,
-                tp_distance=tp_distance,
-                tp_distance_pct=tp_distance_pct,
-                rr_ratio=rr_ratio,
-                atr_d1=atr_d1,
-                atr_ceiling_price=atr_ceiling_price,
-                atr_ceiling_dist=atr_ceiling_dist,
-                atr_ceiling_pct=atr_ceiling_pct,
-                asset_class_cap_pct=asset_class_cap_pct,
-                asset_class_cap_price=asset_class_cap_price,
-                binding_ceiling_price=binding_ceiling,
-                binding_ceiling_label=binding_label,
-                structural_level=structural_level,
-                time_stop_days=ASSET_CLASS_TIME_STOP[asset_class],
-                rejection_reason=(
-                    f"DIRECTIVE ZETA — LAW 5: R:R of {rr_ratio:.2f} is below the minimum "
-                    f"threshold of {MIN_RR_RATIO}. No structural level within the binding "
-                    f"ceiling ({binding_ceiling:.5f}) produces an acceptable trade. "
-                    f"Wait for a better entry or identify a more distant structural target "
-                    f"that passes the ceiling test."
-                ),
-                warnings=warnings,
+            return self._handle_min_rr_violation(
+                TPValidationResult(
+                    is_valid=False,
+                    proposed_tp=proposed_tp,
+                    final_tp=None,
+                    adjusted=False,
+                    direction=direction,
+                    asset_class=asset_class,
+                    symbol=symbol,
+                    entry=entry,
+                    sl=sl,
+                    sl_distance=sl_distance,
+                    sl_distance_pct=sl_distance_pct,
+                    tp_distance=tp_distance,
+                    tp_distance_pct=tp_distance_pct,
+                    rr_ratio=rr_ratio,
+                    atr_d1=atr_d1,
+                    atr_ceiling_price=atr_ceiling_price,
+                    atr_ceiling_dist=atr_ceiling_dist,
+                    atr_ceiling_pct=atr_ceiling_pct,
+                    asset_class_cap_pct=asset_class_cap_pct,
+                    asset_class_cap_price=asset_class_cap_price,
+                    binding_ceiling_price=binding_ceiling,
+                    binding_ceiling_label=binding_label,
+                    structural_level=structural_level,
+                    time_stop_days=ASSET_CLASS_TIME_STOP[asset_class],
+                    rejection_reason=None,
+                    warnings=[],
+                )
             )
 
         adjusted = (abs(chosen_tp - proposed_tp) > 1e-8)
-        if adjusted:
-            warnings.append(
-                f"TP adjusted from {proposed_tp:.5f} to {chosen_tp:.5f} "
-                f"({tp_distance_pct*100:.2f}% from entry, R:R={rr_ratio:.2f}). "
-                f"Original TP violated {binding_label} ceiling at {binding_ceiling:.5f}."
-            )
-
-        if tp_distance_pct > asset_class_cap_pct * 0.85:
-            warnings.append(
-                f"TP distance {tp_distance_pct*100:.2f}% is within 15% of the "
-                f"asset class cap ({asset_class_cap_pct*100:.1f}%). "
-                f"Monitor closely — any adverse ATR expansion could breach the ceiling."
-            )
+        warnings = self._generate_warnings(
+            proposed_tp, chosen_tp, tp_distance_pct, rr_ratio, binding_label, binding_ceiling, asset_class_cap_pct
+        )
 
         return TPValidationResult(
             is_valid=True,
@@ -637,6 +527,168 @@ class TPPlacementEngine:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _normalize_symbol(self, symbol: str) -> str:
+        return symbol.upper().replace(".", "").replace("_", "").replace(" ", "")
+
+    def _get_geometry_error(self, entry: float, sl: float, proposed_tp: float, direction: int) -> Optional[str]:
+        if abs(entry - sl) <= 0:
+            return "SL distance is zero or negative — invalid position geometry."
+        if direction == 1 and proposed_tp <= entry:
+            return f"Direction=LONG but proposed_tp ({proposed_tp}) <= entry ({entry})."
+        if direction == -1 and proposed_tp >= entry:
+            return f"Direction=SHORT but proposed_tp ({proposed_tp}) >= entry ({entry})."
+        return None
+
+    def _handle_min_rr_violation(self, res: TPValidationResult) -> TPValidationResult:
+        res.rejection_reason = (
+            f"DIRECTIVE ZETA — LAW 5: R:R of {res.rr_ratio:.2f} is below the minimum "
+            f"threshold of {MIN_RR_RATIO}. No structural level within the binding "
+            f"ceiling ({res.binding_ceiling_price:.5f}) produces an acceptable trade. "
+            f"Wait for a better entry or identify a more distant structural target "
+            f"that passes the ceiling test."
+        )
+        return res
+
+    def _handle_crypto_veto(
+        self,
+        symbol: str,
+        entry: float,
+        sl: float,
+        proposed_tp: float,
+        direction: int,
+        asset_class: AssetClass,
+        sl_distance: float,
+        sl_distance_pct: float,
+    ) -> TPValidationResult:
+        """
+        Crypto now flows through with Triple-Barrier limits applied
+        in trade_executor_mcp.py and audited in profit_manager_v28_34.py
+        """
+        return TPValidationResult(
+            is_valid=True,
+            proposed_tp=proposed_tp,
+            final_tp=0.0,
+            adjusted=False,
+            direction=direction,
+            asset_class=asset_class,
+            symbol=symbol,
+            entry=entry,
+            sl=sl,
+            sl_distance=sl_distance,
+            sl_distance_pct=sl_distance_pct,
+            tp_distance=0.0,
+            tp_distance_pct=0.0,
+            rr_ratio=1.5,
+            atr_d1=self._get_atr(symbol),
+            atr_ceiling_price=None,
+            atr_ceiling_dist=None,
+            atr_ceiling_pct=None,
+            asset_class_cap_pct=None,
+            asset_class_cap_price=None,
+            binding_ceiling_price=None,
+            binding_ceiling_label=None,
+            structural_level=None,
+            time_stop_days=None,
+            rejection_reason="",
+        )
+
+    def _generate_warnings(
+        self,
+        proposed_tp: float,
+        chosen_tp: float,
+        tp_distance_pct: float,
+        rr_ratio: float,
+        binding_label: str,
+        binding_ceiling: float,
+        asset_class_cap_pct: Optional[float],
+    ) -> List[str]:
+        warnings: List[str] = []
+        adjusted = (abs(chosen_tp - proposed_tp) > 1e-8)
+        if adjusted:
+            warnings.append(
+                f"TP adjusted from {proposed_tp:.5f} to {chosen_tp:.5f} "
+                f"({tp_distance_pct*100:.2f}% from entry, R:R={rr_ratio:.2f}). "
+                f"Original TP violated {binding_label} ceiling at {binding_ceiling:.5f}."
+            )
+
+        if asset_class_cap_pct is not None and tp_distance_pct > asset_class_cap_pct * 0.85:
+            warnings.append(
+                f"TP distance {tp_distance_pct*100:.2f}% is within 15% of the "
+                f"asset class cap ({asset_class_cap_pct*100:.1f}%). "
+                f"Monitor closely — any adverse ATR expansion could breach the ceiling."
+            )
+        return warnings
+
+    def _resolve_structural_level(
+        self,
+        symbol: str,
+        entry: float,
+        direction: int,
+        proposed_tp: float,
+        binding_ceiling: float,
+        use_structural_resolver: bool,
+    ) -> Tuple[Optional[StructuralLevel], float]:
+        structural_level: Optional[StructuralLevel] = None
+        chosen_tp = proposed_tp
+
+        if use_structural_resolver:
+            levels = self.level_resolver.get_levels(
+                symbol=symbol,
+                entry=entry,
+                direction=direction,
+                ceiling=binding_ceiling,
+            )
+            if levels:
+                best = levels[0]          # nearest level within ceiling
+                best.distance     = abs(best.price - entry)
+                best.distance_pct = best.distance / entry
+                structural_level  = best
+                chosen_tp         = best.price
+                logger.info(
+                    f"[TPEngine] {symbol}: structural TP = {chosen_tp:.5f} "
+                    f"({best.level_type} on {best.source_tf}, strength={best.strength:.2f})"
+                )
+            else:
+                logger.warning(
+                    f"[TPEngine] {symbol}: No structural level found within "
+                    f"binding ceiling {binding_ceiling:.5f}. Falling back to ceiling."
+                )
+                chosen_tp = binding_ceiling
+        else:
+            # Validate proposed_tp against ceiling
+            if direction == 1 and proposed_tp > binding_ceiling:
+                chosen_tp = binding_ceiling
+            elif direction == -1 and proposed_tp < binding_ceiling:
+                chosen_tp = binding_ceiling
+        return structural_level, chosen_tp
+
+    def _determine_binding_ceiling(
+        self, direction: int, atr_ceiling_price: float, asset_class_cap_price: Optional[float]
+    ) -> Tuple[float, str]:
+        if direction == 1:
+            candidates = [atr_ceiling_price]
+            if asset_class_cap_price is not None:
+                candidates.append(asset_class_cap_price)
+            binding_ceiling = min(candidates)
+            binding_label   = "ATR" if binding_ceiling == atr_ceiling_price else "AssetCap"
+        else:
+            candidates = [atr_ceiling_price]
+            if asset_class_cap_price is not None:
+                candidates.append(asset_class_cap_price)
+            binding_ceiling = max(candidates)
+            binding_label   = "ATR" if binding_ceiling == atr_ceiling_price else "AssetCap"
+        return binding_ceiling, binding_label
+
+    def _calculate_asset_class_cap(
+        self, entry: float, direction: int, asset_class: AssetClass
+    ) -> Tuple[Optional[float], Optional[float]]:
+        asset_class_cap_pct   = ASSET_CLASS_TP_CAPS[asset_class]
+        asset_class_cap_price = (
+            (entry * (1.0 + asset_class_cap_pct)) if direction == 1
+            else (entry * (1.0 - asset_class_cap_pct))
+        ) if asset_class_cap_pct is not None else None
+        return asset_class_cap_pct, asset_class_cap_price
 
     def _classify(self, symbol: str) -> AssetClass:
         if symbol in INSTRUMENT_ASSET_CLASS:
