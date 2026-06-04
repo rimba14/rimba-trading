@@ -6,7 +6,7 @@ content = path.read_text(encoding="utf-8")
 
 # Fix predict_conviction signature
 old_sig = 'def predict_conviction(self, symbol: str, xgb_prob: float, kronos_prob: float, hmm_state: str, faiss_sim: float) -> float:'
-new_sig = 'def predict_conviction(self, symbol: str, features: dict) -> float:'
+new_sig = 'def predict_conviction(self, symbol: str, features: dict) -> dict:'
 content = content.replace(old_sig, new_sig)
 
 # Fix hmm_encoded
