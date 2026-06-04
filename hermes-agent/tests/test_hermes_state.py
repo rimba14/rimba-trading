@@ -1912,3 +1912,33 @@ class TestAutoMaintenance:
         # Should parse as a float timestamp close to now.
         assert abs(float(marker) - time.time()) < 60
 
+
+class TestSecurityFix:
+    """Tests for the security fix (SQL injection protection in DDL)."""
+
+    def test_is_safe_identifier(self, db):
+        # Valid identifiers
+        assert db._is_safe_identifier("cache_read_tokens") is True
+        assert db._is_safe_identifier("reasoning") is True
+        assert db._is_safe_identifier("_my_column") is True
+        assert db._is_safe_identifier("col123") is True
+
+        # Invalid identifiers
+        assert db._is_safe_identifier("col; DROP TABLE sessions") is False
+        assert db._is_safe_identifier("col\"") is False
+        assert db._is_safe_identifier("123col") is False
+        assert db._is_safe_identifier("") is False
+        assert db._is_safe_identifier(None) is False
+        assert db._is_safe_identifier("col name") is False
+
+    def test_is_safe_type(self, db):
+        # Valid types
+        assert db._is_safe_type("TEXT") is True
+        assert db._is_safe_type("INTEGER DEFAULT 0") is True
+        assert db._is_safe_type("REAL") is True
+
+        # Invalid types
+        assert db._is_safe_type("TEXT; DROP TABLE sessions") is False
+        assert db._is_safe_type("TEXT\"") is False
+        assert db._is_safe_type("") is False
+        assert db._is_safe_type(None) is False

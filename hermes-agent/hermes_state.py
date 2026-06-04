@@ -142,6 +142,19 @@ class SessionDB:
     # Attempt a PASSIVE WAL checkpoint every N successful writes.
     _CHECKPOINT_EVERY_N_WRITES = 50
 
+    def _is_safe_identifier(self, identifier: str) -> bool:
+        """Strict validation for SQL identifiers (column names)."""
+        if not identifier:
+            return False
+        return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", identifier))
+
+    def _is_safe_type(self, type_string: str) -> bool:
+        """Strict validation for SQL column types."""
+        if not type_string:
+            return False
+        # Allows alphanumeric, underscores, and spaces (e.g. "INTEGER DEFAULT 0")
+        return bool(re.match(r"^[a-zA-Z0-9_ ]+$", type_string))
+
     def __init__(self, db_path: Path = None):
         self.db_path = db_path or DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -308,6 +321,8 @@ class SessionDB:
                     ("pricing_version", "TEXT"),
                 ]
                 for name, column_type in new_columns:
+                    if not self._is_safe_identifier(name) or not self._is_safe_type(column_type):
+                        raise ValueError(f"Unsafe column definition: {name} {column_type}")
                     try:
                         # name and column_type come from the hardcoded tuple above,
                         # not user input. Double-quote identifier escaping is applied
@@ -328,6 +343,8 @@ class SessionDB:
                     ("reasoning_details", "TEXT"),
                     ("codex_reasoning_items", "TEXT"),
                 ]:
+                    if not self._is_safe_identifier(col_name) or not self._is_safe_type(col_type):
+                        raise ValueError(f"Unsafe column definition: {col_name} {col_type}")
                     try:
                         safe = col_name.replace('"', '""')
                         cursor.execute(
