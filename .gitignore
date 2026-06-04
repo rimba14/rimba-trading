@@ -35,6 +35,9 @@ arctic_db/
 trades_ledger.csv
 orders_ledger.csv
 
+# Ngrok config
+ngrok.yml
+
 # Windows Boot Files (Security Hygiene)
 BOOTNXT
 bootTel.dat
