@@ -284,7 +284,6 @@ class PositionState:
     regime_conflict_count: int = 0
 
     current_conviction:     float = 0.50
-    current_conviction:     float = 0.50
     telemetry_logger:       Any   = None
 
     # Execution deduplication [ARCH FIX]
@@ -516,6 +515,92 @@ class ExitSignal:
     reasons:        list  = field(default_factory=list)
 
 
+def _check_crypto_exits(
+    ps:            PositionState,
+    symbol:        str,
+    is_buy:        bool,
+    hmm:           str,
+    pos_dir:       str,
+    h1_candles:    int,
+    live_p:        float,
+    sig:           ExitSignal
+) -> bool:
+    """Handle Crypto Triple-Barrier Rules (v36.0). Returns True if hard exit triggered."""
+    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
+    if not any(k in symbol.upper() for k in crypto_keywords):
+        return False
+
+    # Stagnation Exit (Barrier 3)
+    if h1_candles > 120 and not ps.zone2_done:
+        sig.hard_exit = True
+        sig.reason_primary = "[STAGNATION LIQUIDATION]"
+        sig.reasons.append(f"Crypto open > 120 bars ({h1_candles}) without hitting Zone 2")
+        return True
+
+    # Thesis Decay
+    thesis_p_crypto = live_p if is_buy else (1.0 - live_p)
+    if thesis_p_crypto < 0.55:
+        sig.hard_exit = True
+        sig.reason_primary = "[THESIS DECAY] Conviction < 0.55"
+        sig.reasons.append(f"Kronos Conviction {thesis_p_crypto:.3f} < 0.55")
+        return True
+
+    # Regime Inversion
+    if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
+        ps.regime_conflict_count += 1
+        if ps.regime_conflict_count >= 3:
+            sig.hard_exit = True
+            sig.reason_primary = "[THESIS DECAY] Regime Inversion"
+            sig.reasons.append(f"Regime flipped to {hmm} against {pos_dir} position for 3 periods")
+            return True
+    else:
+        ps.regime_conflict_count = 0
+    return False
+
+
+def _check_failsafe_exits(
+    ps:            PositionState,
+    current_price: float,
+    is_buy:        bool,
+    macro_atr:     float,
+    sl_mult:       float,
+    sig:           ExitSignal
+) -> bool:
+    """Handle Secondary Failsafe (Broker Execution Failure). Returns True if hard exit triggered."""
+    buffer = macro_atr * 0.10
+    sl_target = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
+    tp_target = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
+    if ps.initial_sl > 0:
+        sl_target = ps.initial_sl
+
+    if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
+        sig.hard_exit = True
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past SL={sl_target:.5f} by buffer={buffer:.5f}")
+        return True
+
+    if (is_buy and current_price >= (tp_target + buffer)) or (not is_buy and current_price <= (tp_target - buffer)):
+        sig.hard_exit = True
+        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
+        sig.reasons.append(f"Price={current_price:.5f} blew past TP={tp_target:.5f} by buffer={buffer:.5f}")
+        return True
+    return False
+
+
+def _check_macro_exits(
+    pos_dir:   str,
+    sentiment: float,
+    sig:       ExitSignal
+) -> bool:
+    """Handle Macro Shock / Sentiment Kill. Returns True if hard exit triggered."""
+    if (pos_dir == "BUY" and sentiment < -0.65) or (pos_dir == "SELL" and sentiment > 0.65):
+        sig.hard_exit = True
+        sig.reason_primary = "[MACRO SHOCK]"
+        sig.reasons.append(f"Sentiment={sentiment:.2f} threshold breached for {pos_dir}")
+        return True
+    return False
+
+
 def compute_exit_score(
     ps:               PositionState,
     oracle:           dict,
@@ -549,63 +634,14 @@ def compute_exit_score(
     profit_r = ps.profit_r(current_price, macro_atr, sl_mult)
     elapsed  = broker_now - ps.entry_time
 
-    # ── Crypto Triple-Barrier Rules (v36.0) ──────────────────────────────────
-    crypto_keywords = {"BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK", "AVAX", "LTC", "BCH", "TRX", "DOGE"}
-    is_crypto = any(k in symbol.upper() for k in crypto_keywords)
-    
-    if is_crypto:
-        # Stagnation Exit (Barrier 3)
-        if h1_candles > 120 and not ps.zone2_done:
-            sig.hard_exit = True
-            sig.reason_primary = "[STAGNATION LIQUIDATION]"
-            sig.reasons.append(f"Crypto open > 120 bars ({h1_candles}) without hitting Zone 2")
-            return sig
-            
-        # Thesis Decay
-        thesis_p_crypto = live_p if is_buy else (1.0 - live_p)
-        if thesis_p_crypto < 0.55:
-            sig.hard_exit = True
-            sig.reason_primary = "[THESIS DECAY] Conviction < 0.55"
-            sig.reasons.append(f"Kronos Conviction {thesis_p_crypto:.3f} < 0.55")
-            return sig
-            
-        # Regime Inversion
-        if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
-            ps.regime_conflict_count += 1
-            if ps.regime_conflict_count >= 3:
-                sig.hard_exit = True
-                sig.reason_primary = "[THESIS DECAY] Regime Inversion"
-                sig.reasons.append(f"Regime flipped to {hmm} against {pos_dir} position for 3 periods")
-                return sig
-        else:
-            ps.regime_conflict_count = 0
-
-    # ── 1. Secondary Failsafe (Broker Execution Failure) (HARD EXIT) ─────────
-    # OPERATION VISIBLE HORIZON: Profit Manager is now a failsafe.
-    # Uses ps.initial_sl if available. If they fail, we add a 10% ATR buffer and force market exit.
-    buffer = macro_atr * 0.10
-    sl_target = (ps.entry_price - sl_mult * macro_atr) if is_buy else (ps.entry_price + sl_mult * macro_atr)
-    tp_target = (ps.entry_price + sl_mult * 2.0 * macro_atr) if is_buy else (ps.entry_price - sl_mult * 2.0 * macro_atr)
-    if ps.initial_sl > 0:
-        sl_target = ps.initial_sl
-
-    if (is_buy and current_price <= (sl_target - buffer)) or (not is_buy and current_price >= (sl_target + buffer)):
-        sig.hard_exit = True
-        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
-        sig.reasons.append(f"Price={current_price:.5f} blew past SL={sl_target:.5f} by buffer={buffer:.5f}")
+    # ── Hard Exits (Bypass scoring) ──────────────────────────────────────────
+    if _check_crypto_exits(ps, symbol, is_buy, hmm, pos_dir, h1_candles, live_p, sig):
         return sig
 
-    if (is_buy and current_price >= (tp_target + buffer)) or (not is_buy and current_price <= (tp_target - buffer)):
-        sig.hard_exit = True
-        sig.reason_primary = "[FAILSAFE TRIGGERED] Broker Execution Failure"
-        sig.reasons.append(f"Price={current_price:.5f} blew past TP={tp_target:.5f} by buffer={buffer:.5f}")
+    if _check_failsafe_exits(ps, current_price, is_buy, macro_atr, sl_mult, sig):
         return sig
 
-    # ── 2. Macro Shock / Sentiment Kill (HARD EXIT) ──────────────────────────
-    if (pos_dir == "BUY" and sentiment < -0.65) or (pos_dir == "SELL" and sentiment > 0.65):
-        sig.hard_exit = True
-        sig.reason_primary = "[MACRO SHOCK]"
-        sig.reasons.append(f"Sentiment={sentiment:.2f} threshold breached for {pos_dir}")
+    if _check_macro_exits(pos_dir, sentiment, sig):
         return sig
 
     # ── 3. (REMOVED) Velocity Kill ───────────────────────────────────────────
