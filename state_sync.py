@@ -106,11 +106,11 @@ def sync_loop():
             cursor.execute("DELETE FROM active_positions")
             
             if positions:
-                for p in positions:
-                    cursor.execute('''
-                    INSERT INTO active_positions (ticket, symbol, direction, size, open_price, sl_price, tp_price, epoch_timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (p.ticket, p.symbol, p.type, p.volume, p.price_open, p.sl, p.tp, p.time))
+                data = [(p.ticket, p.symbol, p.type, p.volume, p.price_open, p.sl, p.tp, p.time) for p in positions]
+                cursor.executemany('''
+                INSERT INTO active_positions (ticket, symbol, direction, size, open_price, sl_price, tp_price, epoch_timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', data)
             cursor.execute("COMMIT")
             
             # Small sleep to prevent starving the CPU while keeping data near-real-time
