@@ -6,6 +6,7 @@ v24.2: Upgraded baseline to Volume-Weighted Micro-Price & Regime-Aware Squashing
 """
 
 import os
+import sqlite3
 import json
 import math
 import time
@@ -53,24 +54,47 @@ class CachedAccountInfo:
         self.margin_level = (self.equity / self.margin * 100.0) if self.margin > 0 else 999.0
         self.profit = data.get('floating_pnl', 0.0)
 
+def _get_account_from_db():
+    db_path = os.path.expanduser('~/.hermes/state.db')
+    if not os.path.exists(db_path):
+        return None
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM account_telemetry WHERE id=1")
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+    except Exception as e:
+        logger.debug(f"SQLite cache read failed: {e}")
+    finally:
+        if conn:
+            conn.close()
+    return None
+
 def get_cached_account_info():
     """
     Pattern 2: Local Account Replication.
     Queries the SQLite state DB first to avoid locking MT5 COM.
     """
-    db_path = os.path.expanduser('~/.hermes/state.db')
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM account_telemetry WHERE id=1")
-            row = cursor.fetchone()
-            conn.close()
-            if row: 
-                return CachedAccountInfo(dict(row))
-        except:
-            pass
+    db_data = _get_account_from_db()
+    if db_data:
+        return CachedAccountInfo(db_data)
+    return mt5.account_info()
+
+async def get_cached_account_info_async():
+    """
+    Non-blocking async version of account info fetch.
+    Offloads SQLite and MT5 calls to threads.
+    """
+    db_data = await asyncio.to_thread(_get_account_from_db)
+    if db_data:
+        return CachedAccountInfo(db_data)
+    # Fallback to MT5. Note: MT5 library is strictly single-threaded and
+    # must typically be called from the main thread.
     return mt5.account_info()
 
 def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float = 0.0, tp: float = 0.0, ticket: int = 0) -> str:
@@ -521,6 +545,9 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         logger.warning(f"[{signal.symbol}] [WALL 2 VETO] Pattern 6: Toxicity Blindness. Adversarial order flow detected. (VPIN={vpin_val:.3f})")
         raise HTTPException(status_code=429, detail="Order-flow toxicity threshold breached (VPIN > 0.750)")
 
+    # Fetch account info early to offload I/O and pass to downstream gates
+    account_info = await get_cached_account_info_async()
+
     # v30.50-CADES Health Size Multiplier Check
     try:
         config = load_risk_config()
@@ -538,7 +565,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         lot_size = signal.override_lot
         logger.warning(f"[{signal.symbol}] USING MANUAL LOT OVERRIDE: {lot_size}")
     else:
-        lot_size = calculate_kelly_lot(signal.symbol, signal.conviction)
+        lot_size = await calculate_kelly_lot_async(signal.symbol, signal.conviction, acc=account_info)
         
     if lot_size <= 0:
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Lot size <= 0")
@@ -561,7 +588,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     logger.info(f"DEBUG BYPASS EVAL: signal.override_lot={signal.override_lot}, type={type(signal.override_lot)}")
     if not signal.override_lot or float(signal.override_lot) <= 0:
         logger.info("DEBUG BYPASS: Did NOT bypass! Executing check_risk_gates...")
-        if not check_risk_gates(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction):
+        if not await check_risk_gates_async(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction, acc=account_info):
             return {"status": "rejected", "detail": "Risk gate block"}
     else:
         logger.info("DEBUG BYPASS: Bypassing check_risk_gates successfully!")
@@ -570,7 +597,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
     all_positions = mt5.positions_get()
     if all_positions:
-        account_info = get_cached_account_info()
+        # account_info fetched above
         for p in all_positions:
             if signal.symbol in p.symbol and p.magic == MAGIC_NUMBER:
                 p_dir = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
@@ -671,7 +698,7 @@ def extract_conviction_from_comment(comment: str) -> float:
         pass
     return 0.5
 
-def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5):
+def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5, acc=None):
     # A. Weekend Blackout
     if is_weekend_blackout(symbol):
         logger.warning(f"[{symbol}] Signal REJECTED: Weekend Blackout")
@@ -746,7 +773,8 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
         return False
 
     # E. Margin & Leverage Check (Phase 4 - Leverage Wall <= 10x)
-    acc = get_cached_account_info()
+    if acc is None:
+        acc = get_cached_account_info()
     if acc:
         if acc.margin_level > 0 and acc.margin_level < 200.0:
             logger.warning(f"[{symbol}] Signal REJECTED: Margin Level too low ({acc.margin_level})")
@@ -767,6 +795,19 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
             return False
 
     return True
+
+async def check_risk_gates_async(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5, acc=None):
+    """
+    Non-blocking async version of risk gates.
+    Offloads synchronous risk logic to thread.
+    """
+    if acc is None:
+        acc = await get_cached_account_info_async()
+    return await asyncio.to_thread(
+        check_risk_gates,
+        symbol, direction, wasserstein_state, incoming_notional,
+        xgb_p, ddqn_p, conviction, acc
+    )
 
 # --- DIRECTIVE OMEGA HELPERS & LAYER 5 COMPOSITE PRE-FLIGHT CHECKLIST ---
 
@@ -874,9 +915,10 @@ def is_wall5_macro_blackout(symbol: str) -> Tuple[bool, str]:
         
     return False, ""
 
-def get_daily_drawdown() -> float:
+def get_daily_drawdown(acc=None) -> float:
     """Calculate daily drawdown relative to starting balance and peak equity of the day (Rule 7.1)."""
-    acc = get_cached_account_info()
+    if acc is None:
+        acc = get_cached_account_info()
     if not acc:
         return 0.0
     try:
@@ -896,6 +938,15 @@ def get_daily_drawdown() -> float:
         return drawdown
     except Exception:
         return 0.0
+
+async def get_daily_drawdown_async(acc=None) -> float:
+    """
+    Non-blocking async version of daily drawdown.
+    Offloads synchronous logic to thread.
+    """
+    if acc is None:
+        acc = await get_cached_account_info_async()
+    return await asyncio.to_thread(get_daily_drawdown, acc=acc)
 
 def get_consecutive_losses() -> int:
     """Calculate the number of consecutive losing trades for Sentinel (Rule 7.2)."""
@@ -967,7 +1018,7 @@ async def run_composite_preflight_checklist(
         return False, "Point 1 Fail: Sizing <= 0 (Zero-Sizing Veto)"
 
     # Point 2: Affordability Check
-    acc = get_cached_account_info()
+    acc = await get_cached_account_info_async()
     info = mt5.symbol_info(symbol)
     if acc is None or info is None:
         return False, "Point 2 Fail: Failed to fetch account/symbol info"
@@ -1166,7 +1217,7 @@ async def run_composite_preflight_checklist(
         return False, f"Point 17 Fail: {veto_reason}"
 
     # Point 18: Account Daily Drawdown (Rule 7.1)
-    if float(get_daily_drawdown()) >= 0.03:
+    if float(await get_daily_drawdown_async(acc=acc)) >= 0.03:
         return False, "Point 18 Fail: Daily drawdown >= 3.0% (FORTRESS_MODE active)"
 
     # Point 19: Consecutive Losses SRE Hard Pause (Rule 7.2)
@@ -1222,10 +1273,11 @@ def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float
     if total_vol <= 0: return (bid + ask) / 2.0
     return (bid * ask_vol + ask * bid_vol) / total_vol
 
-def calculate_kelly_lot(symbol, conviction):
+def calculate_kelly_lot(symbol, conviction, acc=None):
     info = mt5.symbol_info(symbol)
     tick = mt5.symbol_info_tick(symbol)
-    acc = get_cached_account_info()
+    if acc is None:
+        acc = get_cached_account_info()
     if not info or not tick or not acc: return 0.0
 
     # â”€â”€ v23.1: Micro-Price Baseline â”€â”€
@@ -1313,6 +1365,15 @@ def calculate_kelly_lot(symbol, conviction):
         
     lot = max(min(lot, info.volume_max), 0.0) 
     return lot
+
+async def calculate_kelly_lot_async(symbol, conviction, acc=None):
+    """
+    Non-blocking async version of positions sizing.
+    Offloads synchronous logic to thread.
+    """
+    if acc is None:
+        acc = await get_cached_account_info_async()
+    return await asyncio.to_thread(calculate_kelly_lot, symbol, conviction, acc=acc)
 
 
 def calculate_ac_trajectory(
@@ -1627,7 +1688,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         
         # --- NEW LOGIC: Recalculate Lot Size based on Final SL & Enforce TP Floor ---
         # Sizing Recalculation
-        acc = get_cached_account_info()
+        acc = await get_cached_account_info_async()
         sl_dist_points = final_sl_dist / (info.point + 1e-12)
         point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
         max_dollar_risk = acc.balance * 0.02
