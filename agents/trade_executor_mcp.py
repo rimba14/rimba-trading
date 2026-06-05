@@ -162,6 +162,7 @@ def execute_trade(symbol: str, kronos_conviction: float, hmm_regime: str) -> str
                 if p_pos.magic == MAGIC_NUMBER:
                     return json.dumps({"status": "REJECTED", "reason": f"Amnesia Lock: Position already exists for {symbol}"})
 
+        symbol_info_cache = {}
         current_open_risk = 0
         total_notional = 0
         positions = mt5.positions_get()
