@@ -480,17 +480,22 @@ def calculate_atr_d1(symbol: str, period: int = 14) -> float:
     return float(np.mean(tr))
 
 
-def get_safe_atr(symbol: str, oracle_atr: float, pos_open: float) -> float:
+def get_safe_atr(symbol: str, oracle_atr: float, pos_open: float, info=None, tick=None, d1_atr=None) -> float:
     """
     v30.98 instrument-safe ATR using D1 timeframe.
     BUG FIX v25.0: raw_atr=0.0010 was a hardcoded forex value — useless for BTCUSD/indices.
     BUG FIX v30.98: Changed from H1 to D1 ATR. H1 ATR produced SL 6-12x too tight.
     Three floors: D1 computed, 0.20% of price, broker stop level.
     """
-    d1_atr      = calculate_atr_d1(symbol)
+    if d1_atr is None:
+        d1_atr      = calculate_atr_d1(symbol)
     price_floor = pos_open * 0.002          # 0.20% of open price
-    info        = mt5.symbol_info(symbol)
-    tick        = mt5.symbol_info_tick(symbol)
+
+    if info is None:
+        info        = mt5.symbol_info(symbol)
+    if tick is None:
+        tick        = mt5.symbol_info_tick(symbol)
+
     broker_floor = (info.trade_stops_level * info.point * 3) if info else 0.0
     spread_floor = ((tick.ask - tick.bid) * 1.5) if tick and (tick.ask - tick.bid) > 0 else 0.0
     
@@ -1564,18 +1569,21 @@ class SentinelProfitManager:
         pass
 
     # ── Naked Sweep (orphaned positions) ──────────────────────────────────────
-    def _naked_sweep(self, pos):
+    def _naked_sweep(self, pos, info=None, tick=None, d1_atr=None):
         """
         v25.0: Instrument-aware ATR floor.
         BUG FIX: raw_atr=0.0010 was a forex constant — useless for BTCUSD.
         """
-        tick = mt5.symbol_info_tick(pos.symbol)
-        info = mt5.symbol_info(pos.symbol)
+        if tick is None:
+            tick = mt5.symbol_info_tick(pos.symbol)
+        if info is None:
+            info = mt5.symbol_info(pos.symbol)
+
         if not tick or not info:
             return
 
         # Instrument-safe ATR
-        macro_atr = get_safe_atr(pos.symbol, 0.0, pos.price_open)
+        macro_atr = get_safe_atr(pos.symbol, 0.0, pos.price_open, info=info, tick=tick, d1_atr=d1_atr)
         is_buy    = (pos.type == mt5.ORDER_TYPE_BUY)
         curr      = tick.bid if is_buy else tick.ask
 
@@ -1617,6 +1625,9 @@ class SentinelProfitManager:
         now               = time.time()
         drawdown, _equity = get_equity_drawdown()
 
+        # v28.35: Cycle-level symbol cache to avoid Python-C++ MT5 overhead
+        symbol_cache = {}
+
         for pos in positions:
             symbol = pos.symbol
             ps     = self._get_state(pos)
@@ -1653,15 +1664,25 @@ class SentinelProfitManager:
                     conviction=ps.current_conviction
                 )
 
+            # v28.35: Fetch/Cache symbol info, tick, and D1 ATR
+            if symbol not in symbol_cache:
+                info = mt5.symbol_info(symbol)
+                tick = mt5.symbol_info_tick(symbol)
+                d1_atr = calculate_atr_d1(symbol)
+                symbol_cache[symbol] = {"info": info, "tick": tick, "d1_atr": d1_atr}
+            else:
+                info = symbol_cache[symbol]["info"]
+                tick = symbol_cache[symbol]["tick"]
+                d1_atr = symbol_cache[symbol]["d1_atr"]
+
             # Live price
-            tick = mt5.symbol_info_tick(symbol)
             if not tick:
                 continue
             current_price = tick.bid if pos.type == 0 else tick.ask
             broker_now    = tick.time if tick.time else int(now)
 
             # Instrument-safe ATR
-            macro_atr = get_safe_atr(symbol, oracle.get("atr", 0.0), pos.price_open)
+            macro_atr = get_safe_atr(symbol, oracle.get("atr", 0.0), pos.price_open, info=info, tick=tick, d1_atr=d1_atr)
             if ps.entry_atr <= 0:
                 ps.entry_atr = macro_atr
 
@@ -1780,13 +1801,25 @@ class SentinelProfitManager:
 
                 config = load_risk_config()
 
+                # v28.35: Pre-audit cache to share with _naked_sweep
+                audit_cache = {}
+
                 active_audit_positions = []
                 for pos in all_positions:
                     ps = self._get_state(pos)
                     
                     # Naked sweep strictly attaches missing SL/TP, no retroactive widening
                     if pos.tp == 0.0 or pos.sl == 0.0:
-                        self._naked_sweep(pos)
+                        if pos.symbol not in audit_cache:
+                            info = mt5.symbol_info(pos.symbol)
+                            tick = mt5.symbol_info_tick(pos.symbol)
+                            d1_atr = calculate_atr_d1(pos.symbol)
+                            audit_cache[pos.symbol] = {"info": info, "tick": tick, "d1_atr": d1_atr}
+
+                        self._naked_sweep(pos,
+                                          info=audit_cache[pos.symbol]["info"],
+                                          tick=audit_cache[pos.symbol]["tick"],
+                                          d1_atr=audit_cache[pos.symbol]["d1_atr"])
                     
                     active_audit_positions.append(pos)
 
