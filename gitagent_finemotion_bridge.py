@@ -15,10 +15,6 @@ class FinEmotionBridge:
     Provides 8D emotional vector analysis for financial texts.
     Dimensions: fear, anger, trust, surprise, sadness, disgust, joy, anticipation
     """
-    def __init__(self):
-        # We assume dependencies (spacy) were installed during Phase 221 initialization
-        pass
-
     def get_emotion_vector(self, text: str) -> Dict[str, float]:
         """
         Analyzes text and returns an 8D emotion vector.
