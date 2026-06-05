@@ -166,8 +166,11 @@ def execute_trade(symbol: str, kronos_conviction: float, hmm_regime: str) -> str
         current_open_risk = 0
         total_notional = 0
         if positions:
+            symbol_info_cache = {}
             for p_pos in positions:
-                p_info = mt5.symbol_info(p_pos.symbol)
+                if p_pos.symbol not in symbol_info_cache:
+                    symbol_info_cache[p_pos.symbol] = mt5.symbol_info(p_pos.symbol)
+                p_info = symbol_info_cache[p_pos.symbol]
                 if not p_info: continue
                 
                 # Calculate Open Risk for this position
