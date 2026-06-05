@@ -208,9 +208,16 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     )
 
     # 3. Order Flow Entropy (Shannon Entropy of directional probabilities)
-    pos_p = (returns > 0).rolling(window=20, min_periods=1).mean() + 1e-9
-    neg_p = (returns < 0).rolling(window=20, min_periods=1).mean() + 1e-9
-    entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
+    # v28.37: Normalized to binary outcomes to ensure [0, 1] bound.
+    # Exclude flat bars from the entropy denominator to avoid normalization bug (>1.0).
+    pos_count = (returns > 0).rolling(window=20, min_periods=1).sum()
+    neg_count = (returns < 0).rolling(window=20, min_periods=1).sum()
+    total_dir = pos_count + neg_count + 1e-9
+
+    p_up = (pos_count / total_dir).clip(1e-9, 1.0 - 1e-9)
+    p_dn = (neg_count / total_dir).clip(1e-9, 1.0 - 1e-9)
+
+    entropy_raw = -(p_up * np.log2(p_up) + p_dn * np.log2(p_dn)).fillna(0)
     df['order_flow_entropy'] = np.clip(entropy_raw, 0.0, 1.0)
     
     # 4. HKUST 2025 Multi-Agent Collusion Regime
@@ -228,6 +235,10 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
 
     # Inject Jitter if in Crushed Volatility regime (runs on numerical cols BEFORE pinning overdrive)
     df = gaussian_jitter_injector(df, vrs)
+
+    # Directive 2: Re-clip bounded features after jitter to prevent normalization-assert failures
+    if 'order_flow_entropy' in df.columns:
+        df['order_flow_entropy'] = np.clip(df['order_flow_entropy'], 0.0, 1.0)
 
     # Re-pin overdrive columns AFTER jitter so they are never contaminated by stochastic noise
     df['volume_overdrive'] = int(volume_overdrive)  # 0 or 1, immune to jitter
