@@ -4,13 +4,11 @@ import time
 import subprocess
 import psutil
 import MetaTrader5 as mt5
+from constants import SENTINEL_VERSION
 
-def main():
-    print("="*60)
-    print("      [BOOT] SENTINEL v28.27 MASTER ORCHESTRATOR COLD-BOOT")
-    print("="*60)
-
-    # Calculate and write the active git hash to secure handshake
+def initialize_git_handshake():
+    """Calculate and write the active git hash to secure handshake."""
+    print("\n[INIT] Initializing version handshake...")
     try:
         active_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip().decode("utf-8")
         hash_file = "C:/Sentinel_Project/data/active_git_hash.txt"
@@ -21,9 +19,8 @@ def main():
     except Exception as e:
         print(f"[BOOT] Warning: Could not write active version handshake signature: {e}")
 
-    # -------------------------------------------------------------
-    # Phase 1: The Purge (Wall 1 Process Dominance)
-    # -------------------------------------------------------------
+def purge_legacy_daemons():
+    """Phase 1: The Purge (Wall 1 Process Dominance) - Purging legacy trading daemons."""
     print("\n[PHASE 1] Purging legacy trading daemons...")
     current_pid = os.getpid()
     purged_count = 0
@@ -42,9 +39,8 @@ def main():
             pass
     print(f"[PHASE 1] Purged {purged_count} legacy process instances.")
 
-    # -------------------------------------------------------------
-    # Phase 2: Integrity Self-Certification Check
-    # -------------------------------------------------------------
+def run_self_certification():
+    """Phase 2: Integrity Self-Certification Check."""
     print("\n[PHASE 2] Running self-certification suite...")
     res = subprocess.run([sys.executable, "self_cert.py"], capture_output=True, text=True, encoding="utf-8")
     if res.returncode != 0:
@@ -54,9 +50,8 @@ def main():
         sys.exit(1)
     print("[PHASE 2] Self-Certification suite PASSED.")
 
-    # -------------------------------------------------------------
-    # Phase 3: Broker Handshake
-    # -------------------------------------------------------------
+def perform_broker_handshake():
+    """Phase 3: Broker Handshake."""
     print("\n[PHASE 3] Initiating Broker Handshake...")
     if not mt5.initialize():
         print("[CRITICAL ERROR] MetaTrader 5 Initialization FAILED. Cold-boot aborted.")
@@ -84,9 +79,8 @@ def main():
     
     mt5.shutdown()
 
-    # -------------------------------------------------------------
-    # Phase 4: Daemon Ignition
-    # -------------------------------------------------------------
+def launch_trading_daemons():
+    """Phase 4: Daemon Ignition."""
     print("\n[PHASE 4] Launching trading daemons...")
     
     # 1. fastapi_sniper (The Execution Bridge / Wall 4 & 5)
@@ -108,6 +102,20 @@ def main():
     print("[IGNITION] Starting sentinel_slow_loop.py (Alpha Factory)...")
     slow_proc = subprocess.Popen([sys.executable, "sentinel_slow_loop.py"])
     
+    return fastapi_proc, risk_proc, profit_proc, slow_proc
+
+def main():
+    print("="*60)
+    print(f"      [BOOT] SENTINEL {SENTINEL_VERSION} MASTER ORCHESTRATOR COLD-BOOT")
+    print("="*60)
+
+    initialize_git_handshake()
+    purge_legacy_daemons()
+    run_self_certification()
+    perform_broker_handshake()
+
+    fastapi_proc, risk_proc, profit_proc, slow_proc = launch_trading_daemons()
+
     print("\n" + "="*60)
     print("      [OK] ADAPTIVE SENTINEL TRADING DEPLOYED SUCCESSFULLY")
     print("="*60 + "\n")
@@ -117,7 +125,13 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n[SHUTDOWN] Orchestrator intercepted shutdown signal. Terminating background trading daemons...")
-        for name, p in [("fastapi_sniper", fastapi_proc), ("risk_agent", risk_proc), ("profit_manager", profit_proc), ("sentinel_slow_loop", slow_proc)]:
+        daemons = [
+            ("fastapi_sniper", fastapi_proc),
+            ("risk_agent", risk_proc),
+            ("profit_manager", profit_proc),
+            ("sentinel_slow_loop", slow_proc)
+        ]
+        for name, p in daemons:
             try:
                 print(f"[SHUTDOWN] Terminating process {name} (PID {p.pid})...")
                 p.terminate()
