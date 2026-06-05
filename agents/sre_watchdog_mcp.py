@@ -113,14 +113,19 @@ def restart_service(service_name: str) -> str:
     try:
         # 1. Terminate existing (Self-Healing logic)
         # We look for the python process that has the script name in its command line
-        kill_cmd = f"wmic process where \"commandline like '%{service_name}%'\" delete"
-        # Fallback for systems without wmic: taskkill based on string match isn't native, 
-        # so we'll use a python subprocess loop if needed.
+        # Use a list of arguments and shell=False for security
+        subprocess.run(["wmic", "process", "where", f"commandline like '%{service_name}%'", "delete"], check=False)
         
         # 2. Restart (Directive 1)
-        # Using 'start' to run in a new detached window
-        restart_cmd = f"cmd.exe /c start \"SENTINEL RESTART: {service_name}\" /D \"C:\\Sentinel_Project\" cmd /k \"call venv\\Scripts\\activate && {cmd}\""
-        subprocess.Popen(restart_cmd, shell=True)
+        # Using a list of arguments and shell=False to prevent command injection
+        # Note: 'start' is a cmd.exe internal command, so we still need cmd.exe /c
+        restart_cmd = [
+            "cmd.exe", "/c", "start",
+            f"SENTINEL RESTART: {service_name}",
+            "/D", "C:\\Sentinel_Project",
+            "cmd", "/k", f"call venv\\Scripts\\activate && {cmd}"
+        ]
+        subprocess.Popen(restart_cmd, shell=False)
         
         notifier.send_intervention_alert(f"Restarted service `{service_name}` via background watchdog.")
         return f"Service {service_name} restart initiated."
