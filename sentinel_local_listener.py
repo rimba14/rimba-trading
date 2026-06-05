@@ -8,8 +8,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Directive: Phase 5 Firebase Signal Bridge
-# import firebase_admin
-# from firebase_admin import credentials, db
 
 # Load environment
 load_dotenv()
