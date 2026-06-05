@@ -931,23 +931,292 @@ def push_to_orchestrator(payload: Dict[str, Any]):
             json.dump(payload, fh, indent=2)
 
 # -- Main Oracle Update --------------------------------------------------------
-def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -> Optional[dict]:
-    global _MODEL_DRIFT_HALT, _OFFICIAL_REGIME, _WASSERSTEIN_HISTORY, _LAST_UPDATE
+def _apply_fracdiff_and_normalization(df_ta: pd.DataFrame, symbol: str):
+    """
+    Applies STL decomposition, FracDiff optimization, and strict normalization.
+    Audits Z-score bounds clipping and returns (df_ml, data_quality_flag, clipped_features_count).
+    """
+    df_ml = df_ta.copy()
+    clipped_features_count = 0
+    data_quality_flag = "PRISTINE"
+
+    for col in ["open", "high", "low", "close"]:
+        series = df_ta[col].values
+        try:
+            from statsmodels.tsa.seasonal import STL
+            res = STL(series, period=24, robust=True).fit()
+            s_t = res.seasonal
+        except Exception as stl_err:
+            logging.warning(f"STL decomposition failed for {col}: {stl_err}. Falling back to raw series.")
+            s_t = series
+
+        opt_d, fd = optimize_fracdiff_d(s_t)
+        pad = len(df_ta) - len(fd)
+
+        mean_val = np.mean(fd)
+        std_val = np.std(fd) + 1e-9
+        final_fd_val = fd[-1]
+        z_score = (final_fd_val - mean_val) / std_val
+        if abs(z_score) >= 5.0:
+            clipped_features_count += 1
+
+        norm_fd = sigproc.strict_normalize(fd)
+        df_ml[col] = np.pad(norm_fd, (pad, 0), mode="edge")
+
+    if clipped_features_count > 3:
+        data_quality_flag = "DEGRADED"
+        logging.warning(f"[{symbol}] DEGRADED_DATA_VETO: Z-score clipping on {clipped_features_count} (>3) features.")
+
+    logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied. Clipped features: {clipped_features_count}")
+    return df_ml, data_quality_flag, clipped_features_count
+
+def _check_hmm_stability(symbol: str, df_m15: pd.DataFrame, df_ta: pd.DataFrame):
+    """
+    Performs HMM regime stability and BOCPD checks.
+    Groups ticks into dollar bars, computes OFI, and runs BOCPD.
+    Returns the regime condition number.
+    """
+    try:
+        import gitagent_hmm
+        df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
+        cp_probs = calculate_ofi_and_bocpd(df_bars)
+
+        if df_ta is not None and 'time' in df_ta.columns:
+            times = pd.to_datetime(df_ta['time'])
+            mask = (times.dt.weekday < 5) & (times.dt.hour >= 7) & (times.dt.hour <= 21)
+            df_active = df_ta[mask]
+            hmm_prices = df_active["close"].values
+        else:
+            hmm_prices = df_ta["close"].values if df_ta is not None else None
+
+        if hmm_prices is not None and len(hmm_prices) >= 60:
+            _, _, hmm_label_probs = gitagent_hmm.get_current_state(hmm_prices, lookback=200, cp_probs=cp_probs)
+            cond_num = hmm_label_probs.get("regime_condition_number", 1.0)
+        else:
+            cond_num = 1.0
+    except Exception as hmm_err:
+        logging.error(f"[{symbol}] HMM regime stability check failed: {hmm_err}")
+        cond_num = 1.0
+
+    _arctic_write(f"{symbol}_regime_metrics", pd.DataFrame([{
+        "regime_condition_number": float(cond_num),
+        "timestamp": utils.get_utc_epoch(),
+    }]))
+    return cond_num
+
+def _determine_regime(symbol: str, df_ml: pd.DataFrame, df_h1: pd.DataFrame):
+    """
+    Determines market regime using Wasserstein clustering and performs regime hysteresis.
+    Cross-verifies CRISIS_TAIL with ATR and volume metrics.
+    Returns (wasserstein_state, wasser_prob, label_probs, atr, adjusted_conviction).
+    """
+    global _OFFICIAL_REGIME, _WASSERSTEIN_HISTORY, _wasserstein_clusterer
+
+    if df_ml is not None and "frac_diff_price" in df_ml.columns:
+        raw_wasser_state, wasser_prob, label_probs = _wasserstein_clusterer.get_current_state(df_ml["frac_diff_price"].dropna().values)
+    else:
+        raw_wasser_state, wasser_prob, label_probs = "LOW-VOL TREND", 1.0, {"LOW-VOL TREND": 1.0}
+
+    if symbol not in _OFFICIAL_REGIME:
+        _OFFICIAL_REGIME[symbol] = raw_wasser_state
+
+    _WASSERSTEIN_HISTORY[symbol].append(raw_wasser_state)
+    if len(_WASSERSTEIN_HISTORY[symbol]) > 3:
+        _WASSERSTEIN_HISTORY[symbol].pop(0)
+
+    if len(_WASSERSTEIN_HISTORY[symbol]) == 3 and all(s == raw_wasser_state for s in _WASSERSTEIN_HISTORY[symbol]):
+        _OFFICIAL_REGIME[symbol] = raw_wasser_state
+
+    wasserstein_state = _OFFICIAL_REGIME[symbol]
+    regime_state = wasserstein_state
+    adjusted_conviction = None
+
+    if regime_state == "CRISIS_TAIL":
+        if df_h1 is not None and len(df_h1) >= 20:
+            h_high = df_h1['high'].values
+            h_low = df_h1['low'].values
+            h_close = df_h1['close'].values
+            h_vol = df_h1['tick_volume'].values if 'tick_volume' in df_h1.columns else df_h1['volume'].values
+
+            tr_list = []
+            for i in range(1, len(df_h1)):
+                tr = max(h_high[i] - h_low[i], abs(h_high[i] - h_close[i-1]), abs(h_low[i] - h_close[i-1]))
+                tr_list.append(tr)
+
+            trailing_20_period_ATR = sum(tr_list[-20:]) / min(len(tr_list), 20) if len(tr_list) > 0 else 0.0010
+            current_ATR = tr_list[-1] if len(tr_list) > 0 else 0.0010
+
+            current_volume = float(h_vol[-1])
+            trailing_20_period_volume = float(np.mean(h_vol[-20:]))
+
+            import sentinel_config
+            is_crypto_or_index = symbol.upper() in getattr(sentinel_config, 'CRYPTO_BASE_SYMBOLS', []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
+            if not is_crypto_or_index and (current_ATR < trailing_20_period_ATR or current_volume < trailing_20_period_volume):
+                regime_state = "MARKET_CLOSED_OR_STAGNANT"
+                adjusted_conviction = 0.0
+                logging.warning(f"[{symbol}] False CRISIS_TAIL detected (Low Vol/Vol). Downgrading to STAGNANT.")
+
+    wasserstein_state = regime_state
+    atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
+    logging.info(f"[HMM] {symbol}: Raw={raw_wasser_state} -> Official={wasserstein_state} (p={wasser_prob:.3f}) | ATR(H1)={atr:.5f}")
+
+    _arctic_write(f"{symbol}_wasserstein", pd.DataFrame([{
+        "state": wasserstein_state,
+        "prob": float(wasser_prob),
+        "atr": float(atr),
+        "timestamp": utils.get_utc_epoch(),
+    }]))
+
+    return wasserstein_state, wasser_prob, label_probs, atr, adjusted_conviction
+
+def _calculate_vrs(symbol: str, latest_swing: Any, df_h1: pd.DataFrame) -> float:
+    """
+    Calculates Volatility Relative Strength (VRS) based on rvol and ATR ratio.
+    """
+    try:
+        rvol = float(latest_swing.get("rvol", 1.0)) if (latest_swing is not None) else 1.0
+        if np.isnan(rvol) or np.isinf(rvol):
+            rvol = 1.0
+        if df_h1 is not None and len(df_h1) >= 20:
+            short_atr = utils.calculate_atr(df_h1.tail(5))
+            long_atr = utils.calculate_atr(df_h1.tail(20))
+            if long_atr > 0:
+                atr_ratio = short_atr / long_atr
+                if np.isnan(atr_ratio) or np.isinf(atr_ratio):
+                    atr_ratio = 1.0
+                vrs = (0.5 * rvol) + (0.5 * atr_ratio)
+            else:
+                vrs = rvol
+        else:
+            vrs = rvol
+    except Exception:
+        vrs = 1.0
+    if np.isnan(vrs) or np.isinf(vrs):
+        vrs = 1.0
+    return float(np.clip(vrs, 0.1, 3.0))
+
+def _apply_advanced_features(df_ml: pd.DataFrame, symbol: str, current_rank: float, vrs: float, latest_swing: Any) -> Optional[pd.DataFrame]:
+    """
+    Applies advanced feature engineering: FFT, spectral fingerprinting, and additional indicators.
+    Handles data slicing, NaN filling, and final validation.
+    Returns the processed df_ml or None if fatal issues occur and no swing fallback is available.
+    """
+    vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
+    try:
+        df_ml = feat_eng.engineer_features(
+            df_ml,
+            price_col="close",
+            volume_col=vol_col,
+            frac_d=0.45,
+            fft_top_k=3,
+            cs_rank=current_rank,
+            vrs=vrs
+        )
+
+        if df_ml is not None:
+            close_prices = df_ml["close"].values
+            fft_amp_1 = np.zeros(len(df_ml))
+            fft_amp_2 = np.zeros(len(df_ml))
+            fft_amp_3 = np.zeros(len(df_ml))
+
+            window_size = 64
+            for idx in range(len(df_ml)):
+                if idx < window_size:
+                    win = close_prices[:idx + 1]
+                else:
+                    win = close_prices[idx - window_size + 1: idx + 1]
+
+                if len(win) > 3:
+                    fft_vals = np.fft.rfft(win)
+                    fft_amps = np.abs(fft_vals)
+                    if len(fft_amps) > 1:
+                        fft_amps[0] = 0.0 # Ignore DC component
+                    sorted_amps = np.sort(fft_amps)[::-1]
+                    fft_amp_1[idx] = sorted_amps[0] if len(sorted_amps) > 0 else 0.0
+                    fft_amp_2[idx] = sorted_amps[1] if len(sorted_amps) > 1 else 0.0
+                    fft_amp_3[idx] = sorted_amps[2] if len(sorted_amps) > 2 else 0.0
+
+            df_ml["fft_amp_1"] = fft_amp_1
+            df_ml["fft_amp_2"] = fft_amp_2
+            df_ml["fft_amp_3"] = fft_amp_3
+            df_ml['frac_diff_price'] = df_ml['close']
+
+        if df_ml is not None and len(df_ml) > 100:
+            df_ml = df_ml.iloc[100:].copy()
+            try:
+                df_ml.fillna(method='bfill', inplace=True)
+            except Exception:
+                df_ml.bfill(inplace=True)
+
+        nan_count = df_ml.isna().sum().sum() if df_ml is not None else 0
+        logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
+        if nan_count > 0:
+            logging.warning(f"[{symbol}] WARNING: NaNs detected in features:\n{df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
+    except Exception as e:
+        logging.error(f"[{symbol}] FEATURE_ENGINEERING_CRITICAL_FAILURE (Non-Fatal for Swing): {e}")
+        if latest_swing is None:
+            return None
+
+    if df_ml is not None:
+        df_ml = df_ml.dropna()
+        if len(df_ml) < 512 and latest_swing is None:
+            logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars and no swing fallback. Skipping.")
+            return None
+
+    if df_ml is not None:
+        _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
+        _final_row = df_ml.iloc[-1]
+        _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
+        if _nan_features and latest_swing is None:
+            logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
+            return None
+    elif latest_swing is None:
+        logging.critical(f"[FATAL] {symbol}: No ML data and no Swing fallback. Halting.")
+        return None
+
+    return df_ml
+
+def _calculate_technical_indicators(df_m15: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates technical indicators (RSI, MACD, Trend, BB, Volatility) on M15 dataframe.
+    Returns df_ta with added indicator columns.
+    """
+    df_ta = df_m15.copy()
+    c = df_ta["close"]
+    delta = c.diff()
+    gain = delta.where(delta > 0, 0).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    df_ta["W_rsi"] = 100 - (100 / (1 + gain / (loss + 1e-9)))
+    ema12 = c.ewm(span=12, adjust=False).mean()
+    ema26 = c.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    df_ta["W_macd"] = macd - macd.ewm(span=9, adjust=False).mean()
+    ema20 = c.ewm(span=20, adjust=False).mean()
+    ema50 = c.ewm(span=50, adjust=False).mean()
+    df_ta["Wy_trend"] = (ema20 - ema50) / (c * 0.01 + 1e-9)
+    ma20 = c.rolling(20).mean(); std20 = c.rolling(20).std()
+    df_ta["B_bbpos"] = (c - (ma20 - 2 * std20)) / (4 * std20 + 1e-9)
+    df_ta["WHL_vol"] = c.pct_change().rolling(20).std()
+    df_ta["S_struct"] = 0.5
+    return df_ta
+
+def _check_halts_and_cooldowns(symbol: str) -> Optional[dict]:
+    """
+    Checks for model drift, oracle cooldowns, global macro halts, and black swan risks.
+    Returns m_state dict if OK to proceed, else returns None.
+    """
+    global _MODEL_DRIFT_HALT, _LAST_UPDATE
     if _MODEL_DRIFT_HALT:
         logging.critical(f"[CRITICAL MODEL DRIFT] Autonomous trading is HALTED due to model mode collapse.")
         return None
-
-    data_quality_flag = "PRISTINE"
-    is_this_symbol_starved = False
 
     now = time.time()
     if now - _LAST_UPDATE.get(symbol, 0) < ORACLE_COOLDOWN:
         return None
     _LAST_UPDATE[symbol] = now
 
-    # -- Macro Halt & Black Swan Override (v19.5) ----------------------------
     m_state = {"global_macro_sentiment": 0.0, "black_swan_risk": 0.0, "asset_specific_catalysts": {}}
-    
+
     if HALT_PATH.exists():
         logging.critical("[MACRO_HALT] Global suspension active. Sleeping 60 s.")
         time.sleep(60)
@@ -971,14 +1240,22 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
     except Exception as e:
         logging.warning(f"[MACRO_STATE] Failed to check black swan risk: {e}")
 
+    return m_state
+
+def _fetch_market_data(symbol: str, force_refresh: bool, m_state: dict) -> Optional[dict]:
+    """
+    Fetches market data (H1, H4, ticks, M1 fallback) and calculates swing alpha.
+    Returns a dict with dataframes and flags, or a result early_return dict, or None on failure.
+    """
+    data_quality_flag = "PRISTINE"
+    is_this_symbol_starved = False
+
     if not force_refresh and _check_staleness(symbol):
         logging.info(f"[{symbol}] Previous signal is stale. Curing via fresh oracle update...")
 
     time.sleep(random.uniform(0.05, 0.3))
 
-    df_m15 = df_ta = df_ml = None
-    latest_swing = None # v27.0: Store swing alpha features for Heuristic Override
-    df_h1 = df_h4 = swing_alpha = None
+    df_m15 = df_h1 = df_h4 = swing_alpha = latest_swing = None
     try:
         logging.info(f"[{symbol}] Updating high-resolution oracles (v21.0)...")
         mt5.symbol_select(symbol, True)
@@ -1003,37 +1280,35 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
                 logging.warning(f"[{symbol}] H1 ingestion insufficient ({len(df_h1) if df_h1 is not None else 0} bars). Proceeding with tick fallback.")
         except Exception as _h1_err:
             logging.warning(f"[{symbol}] v27.0 Swing Alpha failed: {_h1_err}. Proceeding with tick fallback.")
-        
-        # 1. Force a single tick request to wake up the broker's data stream
+
         mt5.symbol_info_tick(symbol)
-        
-        # Directive 1: Increase lookback by 100 (from 2000 to 2100)
+
         df_m15 = None
         max_retries = 5
-        for attempt in range(max_retries):
+        for _ in range(max_retries):
             df_m15 = sigproc.get_tick_dataframe(symbol, 2100)
             if df_m15 is not None and len(df_m15) >= 512:
                 break
             time.sleep(1.0)
 
         if df_m15 is None or len(df_m15) < 512:
-            # Directive 2: M1 OHLCV Anti-Starvation Fallback
             logging.warning(f"[TICKER_ERROR] {symbol}: insufficient ticks after {max_retries} attempts. Attempting M1 OHLCV fallback...")
             data_quality_flag = "DEGRADED"
             is_this_symbol_starved = True
-            
+
             if symbol.upper() in CORE_MAJORS:
                 global _TICK_STARVATION_DETECTED
+                _TICK_STARVATION_DETECTED = True
                 logging.critical(f"[{symbol}] CORE MAJOR STARVATION. Triggering Global Lock.")
             else:
                 logging.warning(f"[{symbol}] Minor asset starved. Quarantining locally.")
-                
+
             _INDICES = {"NAS100", "US30", "SP500", "SPX500", "GER40", "US2000", "HK50"}
             if symbol.upper() in _INDICES:
                 global _INDEX_STARVATION_DETECTED
+                _INDEX_STARVATION_DETECTED = True
 
             try:
-                # Directive 1: Increase lookback by 100 (from 750 to 850)
                 rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 850)
                 if rates is not None and len(rates) >= 512:
                     df_m15 = pd.DataFrame(rates)
@@ -1054,12 +1329,9 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
                 logging.error(f"[TICKER_ERROR] {symbol}: M1 fallback exception: {_fe}. Skipping.")
                 return None
 
-        # Directive 1: Zero-Variance Bypass
         if df_m15 is not None and not df_m15.empty:
             price_variance = df_m15['close'].tail(10).std()
             cumulative_volume = df_m15['tick_volume'].tail(10).sum() if 'tick_volume' in df_m15.columns else 0
-            # Allow active price variance to bypass the cumulative_volume == 0 check.
-            # Stagnation is only triggered if the price variance is flat or NaN.
             import sentinel_config
             if pd.isna(price_variance) or price_variance < getattr(sentinel_config, 'STAGNANT_VARIANCE_THRESHOLD', 1e-7):
                 logging.warning(f"[SLOW_LOOP] [STAGNANT] Asset flatlining. Skipping cycle to protect matrix stability.")
@@ -1068,269 +1340,62 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
                 with open(f"shap_diagnostics/{symbol}_stagnant.json", "w") as f:
                     _json.dump({"status": "STAGNANT", "variance": float(price_variance) if not pd.isna(price_variance) else 0.0, "volume": float(cumulative_volume)}, f)
                 return {
-                    "df_ml": None, "df_ta": None, "df_m15": df_m15, "df_h1": df_h1, "df_h4": None,
-                    "swing_alpha": {}, "latest_swing": {}, "vrs": 1.0,
-                    "wasserstein_state": "MARKET_STAGNANT", "wasser_prob": 1.0,
-                    "label_probs": {"MARKET_STAGNANT": 1.0}, "data_quality_flag": "DEAD_MARKET",
-                    "is_this_symbol_starved": is_this_symbol_starved, "atr": 0.0010, "m_state": m_state
-                }
-                logging.warning(f"[{symbol}] ZERO-VARIANCE DETECTED (stagnant market). Bypassing FracDiff/HMM.")
-                return {
-                    "df_ml": None,
-                    "df_ta": None,
-                    "df_m15": df_m15,
-                    "df_h1": df_h1,
-                    "df_h4": None,
-                    "swing_alpha": {},
-                    "latest_swing": {},
-                    "vrs": 1.0,
-                    "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
-                    "wasser_prob": 1.0,
-                    "label_probs": {"MARKET_CLOSED_OR_STAGNANT": 1.0},
-                    "data_quality_flag": "DEAD_MARKET",
-                    "is_this_symbol_starved": is_this_symbol_starved,
-                    "atr": 0.0010,
-                    "m_state": m_state
+                    "early_return": {
+                        "df_ml": None, "df_ta": None, "df_m15": df_m15, "df_h1": df_h1, "df_h4": None,
+                        "swing_alpha": {}, "latest_swing": {}, "vrs": 1.0,
+                        "wasserstein_state": "MARKET_STAGNANT", "wasser_prob": 1.0,
+                        "label_probs": {"MARKET_STAGNANT": 1.0}, "data_quality_flag": "DEAD_MARKET",
+                        "is_this_symbol_starved": is_this_symbol_starved, "atr": 0.0010, "m_state": m_state
+                    }
                 }
 
-        df_ta = df_m15.copy()
-        c = df_ta["close"]
-        delta = c.diff()
-        gain  = delta.where(delta > 0, 0).rolling(14).mean()
-        loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        df_ta["W_rsi"]    = 100 - (100 / (1 + gain / (loss + 1e-9)))
-        ema12 = c.ewm(span=12, adjust=False).mean()
-        ema26 = c.ewm(span=26, adjust=False).mean()
-        macd  = ema12 - ema26
-        df_ta["W_macd"]   = macd - macd.ewm(span=9, adjust=False).mean()
-        ema20 = c.ewm(span=20, adjust=False).mean()
-        ema50 = c.ewm(span=50, adjust=False).mean()
-        df_ta["Wy_trend"] = (ema20 - ema50) / (c * 0.01 + 1e-9)
-        ma20  = c.rolling(20).mean(); std20 = c.rolling(20).std()
-        df_ta["B_bbpos"]  = (c - (ma20 - 2*std20)) / (4*std20 + 1e-9)
-        df_ta["WHL_vol"]  = c.pct_change().rolling(20).std()
-        df_ta["S_struct"]  = 0.5
+        return {
+            "df_m15": df_m15,
+            "df_h1": df_h1,
+            "df_h4": df_h4,
+            "swing_alpha": swing_alpha,
+            "latest_swing": latest_swing,
+            "data_quality_flag": data_quality_flag,
+            "is_this_symbol_starved": is_this_symbol_starved
+        }
+    except Exception as e:
+        logging.error(f"[{symbol}] Market data fetch failed: {e}")
+        return None
 
-        df_ml = df_ta.copy()
-        clipped_features_count = 0
-        for col in ["open", "high", "low", "close"]:
-            # STL price decomposition to target ML inputs at seasonality component (S_t)
-            series = df_ta[col].values
-            try:
-                res = STL(series, period=24, robust=True).fit()
-                s_t = res.seasonal
-            except Exception as stl_err:
-                logging.warning(f"STL decomposition failed for {col}: {stl_err}. Falling back to raw series.")
-                s_t = series
+def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -> Optional[dict]:
+    global _OFFICIAL_REGIME, _WASSERSTEIN_HISTORY
 
-            opt_d, fd = optimize_fracdiff_d(s_t)
-            pad = len(df_ta) - len(fd)
-            
-            # Audit Z-score bounds clipping on final row (Rule 2.1)
-            mean_val = np.mean(fd)
-            std_val = np.std(fd) + 1e-9
-            final_fd_val = fd[-1]
-            z_score = (final_fd_val - mean_val) / std_val
-            if abs(z_score) >= 5.0:
-                clipped_features_count += 1
-                
-            norm_fd = sigproc.strict_normalize(fd)
-            df_ml[col] = np.pad(norm_fd, (pad, 0), mode="edge")
-            
-        if clipped_features_count > 3:
-            data_quality_flag = "DEGRADED"
-            logging.warning(f"[{symbol}] DEGRADED_DATA_VETO: Z-score clipping on {clipped_features_count} (>3) features.")
-        logging.info(f"[{symbol}] FracDiff + Strict Normalization [-5, 5] applied. Clipped features: {clipped_features_count}")
+    m_state = _check_halts_and_cooldowns(symbol)
+    if m_state is None:
+        return None
 
-        vol_col = "tick_volume" if "tick_volume" in df_ml.columns else "volume"
+    market_data = _fetch_market_data(symbol, force_refresh, m_state)
+    if market_data is None:
+        return None
+    if "early_return" in market_data:
+        return market_data["early_return"]
+
+    df_m15 = market_data["df_m15"]
+    df_h1 = market_data["df_h1"]
+    df_h4 = market_data["df_h4"]
+    swing_alpha = market_data["swing_alpha"]
+    latest_swing = market_data["latest_swing"]
+    data_quality_flag = market_data["data_quality_flag"]
+    is_this_symbol_starved = market_data["is_this_symbol_starved"]
+
+    try:
+        df_ta = _calculate_technical_indicators(df_m15)
+        df_ml, data_quality_flag, clipped_features_count = _apply_fracdiff_and_normalization(df_ta, symbol)
+
         current_rank = _GLOBAL_CS_RANKS.get(symbol, 0.5)
-        
-        # Calculate VRS
-        try:
-            rvol = float(latest_swing.get("rvol", 1.0)) if (latest_swing is not None) else 1.0
-            if np.isnan(rvol) or np.isinf(rvol):
-                rvol = 1.0
-            if df_h1 is not None and len(df_h1) >= 20:
-                short_atr = utils.calculate_atr(df_h1.tail(5))
-                long_atr = utils.calculate_atr(df_h1.tail(20))
-                if long_atr > 0:
-                    atr_ratio = short_atr / long_atr
-                    if np.isnan(atr_ratio) or np.isinf(atr_ratio):
-                        atr_ratio = 1.0
-                    vrs = (0.5 * rvol) + (0.5 * atr_ratio)
-                else:
-                    vrs = rvol
-            else:
-                vrs = rvol
-        except Exception:
-            vrs = 1.0
-        if np.isnan(vrs) or np.isinf(vrs):
-            vrs = 1.0
-        vrs = float(np.clip(vrs, 0.1, 3.0))
-
-        try:
-            df_ml = feat_eng.engineer_features(
-                df_ml,
-                price_col="close",
-                volume_col=vol_col,
-                frac_d=0.45,
-                fft_top_k=3,
-                cs_rank=current_rank,
-                vrs=vrs
-            )
-            
-            if df_ml is not None:
-                # Spectral Fingerprinting: rolling FFT extraction of dominant amplitudes
-                close_prices = df_ml["close"].values
-                fft_amp_1 = np.zeros(len(df_ml))
-                fft_amp_2 = np.zeros(len(df_ml))
-                fft_amp_3 = np.zeros(len(df_ml))
-                
-                window_size = 64
-                for idx in range(len(df_ml)):
-                    if idx < window_size:
-                        win = close_prices[:idx + 1]
-                    else:
-                        win = close_prices[idx - window_size + 1: idx + 1]
-                    
-                    if len(win) > 3:
-                        fft_vals = np.fft.rfft(win)
-                        fft_amps = np.abs(fft_vals)
-                        if len(fft_amps) > 1:
-                            fft_amps[0] = 0.0 # Ignore DC component
-                        sorted_amps = np.sort(fft_amps)[::-1]
-                        fft_amp_1[idx] = sorted_amps[0] if len(sorted_amps) > 0 else 0.0
-                        fft_amp_2[idx] = sorted_amps[1] if len(sorted_amps) > 1 else 0.0
-                        fft_amp_3[idx] = sorted_amps[2] if len(sorted_amps) > 2 else 0.0
-                
-                df_ml["fft_amp_1"] = fft_amp_1
-                df_ml["fft_amp_2"] = fft_amp_2
-                df_ml["fft_amp_3"] = fft_amp_3
-                df_ml['frac_diff_price'] = df_ml['close']
-
-            # Directive 1: Slice off the first 100 historical rows to discard mathematical tail
-            if df_ml is not None and len(df_ml) > 100:
-                df_ml = df_ml.iloc[100:].copy()
-                try:
-                    df_ml.fillna(method='bfill', inplace=True)
-                except Exception:
-                    df_ml.bfill(inplace=True)
-
-            nan_count = df_ml.isna().sum().sum() if df_ml is not None else 0
-            logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
-            if nan_count > 0:
-                logging.warning(f"[{symbol}] WARNING: NaNs detected in features:\n{df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
-        except Exception as e:
-            logging.error(f"[{symbol}] FEATURE_ENGINEERING_CRITICAL_FAILURE (Non-Fatal for Swing): {e}")
-            if latest_swing is None:
-                return None
-
-        if df_ml is not None:
-            df_ml = df_ml.dropna()
-            if len(df_ml) < 512 and latest_swing is None:
-                logging.error(f"[TICKER_ERROR] {symbol}: <512 clean bars and no swing fallback. Skipping.")
-                return None
-
-        # Verify the FINAL ROW has valid (non-NaN) features
-        if df_ml is not None:
-            _warmup_cols = ["frac_diff_price", "fft_amp_1", "fft_amp_2", "fft_amp_3"]
-            _final_row = df_ml.iloc[-1]
-            _nan_features = [c for c in _warmup_cols if c in df_ml.columns and (pd.isna(_final_row[c]) or np.isinf(_final_row[c]))]
-            if _nan_features and latest_swing is None:
-                logging.critical(f"[FATAL] {symbol}: Model input contains NaNs/Infs in {_nan_features}. Halting inference for {symbol}.")
-                return None
-        elif latest_swing is None:
-            logging.critical(f"[FATAL] {symbol}: No ML data and no Swing fallback. Halting.")
+        vrs = _calculate_vrs(symbol, latest_swing, df_h1)
+        df_ml = _apply_advanced_features(df_ml, symbol, current_rank, vrs, latest_swing)
+        if df_ml is None:
             return None
 
-        if df_ml is not None and "frac_diff_price" in df_ml.columns:
-            raw_wasser_state, wasser_prob, label_probs = _wasserstein_clusterer.get_current_state(df_ml["frac_diff_price"].dropna().values)
-        else:
-            raw_wasser_state, wasser_prob, label_probs = "LOW-VOL TREND", 1.0, {"LOW-VOL TREND": 1.0}
-        
-        # Regime Hysteresis (Debouncing)
-        if symbol not in _OFFICIAL_REGIME:
-            _OFFICIAL_REGIME[symbol] = raw_wasser_state
-            
-        _WASSERSTEIN_HISTORY[symbol].append(raw_wasser_state)
-        if len(_WASSERSTEIN_HISTORY[symbol]) > 3:
-            _WASSERSTEIN_HISTORY[symbol].pop(0)
-            
-        if len(_WASSERSTEIN_HISTORY[symbol]) == 3 and all(s == raw_wasser_state for s in _WASSERSTEIN_HISTORY[symbol]):
-            _OFFICIAL_REGIME[symbol] = raw_wasser_state
-            
-        wasserstein_state = _OFFICIAL_REGIME[symbol]
-        
-        regime_state = wasserstein_state
-        adjusted_conviction = None
-        # Cross-verify Crisis with actual market panic metrics
-        if regime_state == "CRISIS_TAIL":
-            if df_h1 is not None and len(df_h1) >= 20:
-                h_high = df_h1['high'].values
-                h_low = df_h1['low'].values
-                h_close = df_h1['close'].values
-                h_vol = df_h1['tick_volume'].values if 'tick_volume' in df_h1.columns else df_h1['volume'].values
-                
-                tr_list = []
-                for i in range(1, len(df_h1)):
-                    tr = max(h_high[i] - h_low[i], abs(h_high[i] - h_close[i-1]), abs(h_low[i] - h_close[i-1]))
-                    tr_list.append(tr)
-                
-                trailing_20_period_ATR = sum(tr_list[-20:]) / min(len(tr_list), 20) if len(tr_list) > 0 else 0.0010
-                current_ATR = tr_list[-1] if len(tr_list) > 0 else 0.0010
-                
-                current_volume = float(h_vol[-1])
-                trailing_20_period_volume = float(np.mean(h_vol[-20:]))
-                
-                import sentinel_config
-                is_crypto_or_index = symbol.upper() in getattr(sentinel_config, 'CRYPTO_BASE_SYMBOLS', []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
-                if not is_crypto_or_index and (current_ATR < trailing_20_period_ATR or current_volume < trailing_20_period_volume):
-                    # This is not a crisis; it is a liquidity vacuum/dead zone.
-                    regime_state = "MARKET_CLOSED_OR_STAGNANT"
-                    adjusted_conviction = 0.0
-                    logging.warning(f"[{symbol}] False CRISIS_TAIL detected (Low Vol/Vol). Downgrading to STAGNANT.")
-        wasserstein_state = regime_state
-        
-        atr = utils.calculate_atr(df_h1) if df_h1 is not None else 0.0010
-        logging.info(f"[HMM] {symbol}: Raw={raw_wasser_state} -> Official={wasserstein_state} (p={wasser_prob:.3f}) | ATR(H1)={atr:.5f}")
+        wasserstein_state, wasser_prob, label_probs, atr, adjusted_conviction = _determine_regime(symbol, df_ml, df_h1)
 
-        _arctic_write(f"{symbol}_wasserstein", pd.DataFrame([{
-            "state": wasserstein_state,
-            "prob": float(wasser_prob),
-            "atr": float(atr),
-            "timestamp": utils.get_utc_epoch(),
-        }]))
-
-        # v30.50-CADES HMM Regime Stability & BOCPD Check
-        try:
-            import gitagent_hmm
-            # 1. Group tick sequences into dollar bars
-            df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
-            
-            # 2. Compute OFI and run BOCPD
-            cp_probs = calculate_ofi_and_bocpd(df_bars)
-            
-            if df_ta is not None and 'time' in df_ta.columns:
-                times = pd.to_datetime(df_ta['time'])
-                mask = (times.dt.weekday < 5) & (times.dt.hour >= 7) & (times.dt.hour <= 21)
-                df_active = df_ta[mask]
-                hmm_prices = df_active["close"].values
-            else:
-                hmm_prices = df_ta["close"].values if df_ta is not None else None
-                
-            if hmm_prices is not None and len(hmm_prices) >= 60:
-                _, _, hmm_label_probs = gitagent_hmm.get_current_state(hmm_prices, lookback=200, cp_probs=cp_probs)
-                cond_num = hmm_label_probs.get("regime_condition_number", 1.0)
-            else:
-                cond_num = 1.0
-        except Exception as hmm_err:
-            logging.error(f"[{symbol}] HMM regime stability check failed: {hmm_err}")
-            cond_num = 1.0
-            
-        _arctic_write(f"{symbol}_regime_metrics", pd.DataFrame([{
-            "regime_condition_number": float(cond_num),
-            "timestamp": utils.get_utc_epoch(),
-        }]))
+        cond_num = _check_hmm_stability(symbol, df_m15, df_ta)
 
         return {
             "df_ml": df_ml,
@@ -1348,12 +1413,12 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             "is_this_symbol_starved": is_this_symbol_starved,
             "atr": atr,
             "m_state": m_state,
-            "adjusted_conviction": adjusted_conviction
+            "adjusted_conviction": adjusted_conviction,
+            "regime_condition_number": cond_num
         }
     except Exception as e:
         logging.error(f"[{symbol}] Feature extraction failed: {e}\n{traceback.format_exc()}")
         return None
-
 def run_inference_for_symbol(symbol: str, prep_data: dict):
     global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
     global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _VRP_SPREAD
