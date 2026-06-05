@@ -1354,6 +1354,423 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
         logging.error(f"[{symbol}] Feature extraction failed: {e}\n{traceback.format_exc()}")
         return None
 
+def _handle_dead_market(symbol: str, atr: float) -> bool:
+    """Handles the DEAD_MARKET short-circuit logic."""
+    with _CYCLE_LOCK:
+        _CYCLE_P_SCORES[symbol] = 0.0000
+
+    # Direct cache write to ensure readiness script sees the DEAD_MARKET state with 0.0 conviction.
+    _arctic_write(f"{symbol}_meta", pd.DataFrame([{
+        "primary_dir": 0,
+        "meta_conviction": 0.500,
+        "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
+        "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+        "strategy_type": "MOMENTUM",
+        "atr": atr,
+        "entropy": 0.0,
+        "hawkes_intensity": 0.0,
+        "timestamp": utils.get_utc_epoch(),
+        "is_legend": False,
+        "is_graveyard": False,
+        "vpin": 0.5,
+        "rsi": 50.0,
+        "vrs": 1.0,
+        "xgb_p": 0.500,
+        "ddqn_p": 0.500
+    }]))
+    return True
+
+def _calculate_ml_consensus(symbol: str, df_ml: pd.DataFrame, df_m15: pd.DataFrame, is_this_symbol_starved: bool):
+    """Orchestrates Kronos, XGB, and DDQN predictions, applies filters and returns consensus scores."""
+    kronos_bridge.update_cognition_cache(symbol, df_ml)
+    k_item = _arctic_read(f"{symbol}_kronos")
+    if k_item is not None:
+        _k_data = k_item.data.iloc[-1]
+        k_prob = float(_k_data["kronos_prob"])
+    else:
+        k_prob = 0.500
+
+    x_prob = get_xgb_prediction(df_ml)
+
+    scores_raw = {
+        "kronos": k_prob,
+        "xgb": x_prob
+    }
+
+    # RL Inference (if not quarantined)
+    from rl_agents.oxford_ddqn import CHECKPOINT_PATH
+    ddqn_p = 0.500
+    if os.path.exists(CHECKPOINT_PATH):
+        try:
+            ddqn_agent = ddqn_bridge.get_ddqn_agent()
+            feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
+            ddqn_p_raw = ddqn_agent.infer_probability(feature_vec)
+            if ddqn_p_raw is not None and not np.isnan(ddqn_p_raw):
+                ddqn_p = ddqn_p_raw
+                scores_raw["ddqn"] = ddqn_p
+        except Exception as e:
+            logging.warning(f"[{symbol}] DDQN Agent failed: {e}. Omitted from consensus.")
+
+    # APPLY QUARANTINE FILTER
+    q_result = registry.filter_agents(scores_raw)
+    active_scores = q_result.filtered_scores
+
+    # Directive 2: The Overconfidence Tripwire (v28.25 Calibration)
+    for agent_name, agent_prob in list(active_scores.items()):
+        if agent_prob > 0.95 or agent_prob < 0.05:
+            logging.warning(f"[{symbol}] [SOFTMAX_SATURATION_DETECTED] Agent '{agent_name}' outputted extreme/saturated confidence ({agent_prob:.4f}). Discarding from current cycle.")
+            del active_scores[agent_name]
+        elif agent_prob == 0.5000 or agent_prob is None or np.isnan(agent_prob):
+            logging.warning(f"[{symbol}] [DYNAMIC QUARANTINE] Agent '{agent_name}' returned 0.5000/NaN. Dropping from consensus.")
+            del active_scores[agent_name]
+
+    # Weight Allocation & Evolutionary Consensus Blending
+    base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
+
+    # 1. Proposal A: ACCURACY_WEIGHTED
+    p_accuracy = 0.500
+    total_active_weight = sum(base_weights[name] for name in active_scores)
+    if total_active_weight > 0:
+        p_accuracy = sum(
+            active_scores[name] * (base_weights[name] / total_active_weight)
+            for name in active_scores
+        )
+
+    # 2. Proposal B: MAX_CONVICTION
+    p_max = 0.500
+    if active_scores:
+        p_max = max(active_scores.values(), key=lambda v: abs(v - 0.5))
+
+    # 3. Proposal C: SHAP_FILTERED (Baseline weighted fallback for this cycle)
+    p_shap = p_accuracy
+
+    # Query the highest ELO proposal from registry
+    from gitagent_elo_registry import EvolutionaryConsensusRegistry
+    elo_registry = EvolutionaryConsensusRegistry()
+    active_proposal = elo_registry.get_highest_elo_proposal()
+
+    if active_proposal == "ACCURACY_WEIGHTED":
+        p_blend = p_accuracy
+    elif active_proposal == "MAX_CONVICTION":
+        p_blend = p_max
+    elif active_proposal == "SHAP_FILTERED":
+        p_blend = p_shap
+    else:
+        p_blend = p_accuracy
+
+    # Record prediction details for post-realization ELO adjustments
+    try:
+        current_close_price = float(df_ml['close'].iloc[-1])
+        proposals_predictions = {
+            "ACCURACY_WEIGHTED": p_accuracy,
+            "MAX_CONVICTION": p_max,
+            "SHAP_FILTERED": p_shap
+        }
+        elo_registry.record_prediction(symbol, current_close_price, proposals_predictions)
+        # Run self-contained evaluation of pending predictions periodically
+        elo_registry.evaluate_pending_predictions()
+    except Exception as elo_err:
+        logging.warning(f"[{symbol}] Elo prediction recording failed: {elo_err}")
+
+    # UPGRADE D: Microstructure Bar Activity Gating Layer
+    activity_ratio = 1.0
+    try:
+        # 1. Group tick sequences into dollar bars
+        df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
+        if not df_bars.empty:
+            bar_durations = df_bars['time'].diff().dt.total_seconds().dropna().values
+            if len(bar_durations) >= 2:
+                delta_tau_bar = bar_durations[-1]
+                # Rolling median of trailing 20 bars
+                median_delta_tau = np.median(bar_durations[-20:]) if len(bar_durations) >= 20 else np.median(bar_durations)
+                activity_ratio = median_delta_tau / (delta_tau_bar + 1e-9)
+
+                pre_gate_p = p_blend
+                if activity_ratio < 0.5:
+                    logging.warning(f"[{symbol}] [ACTIVITY_GATE] Low activity: ratio {activity_ratio:.4f} < 0.5. Suppressing conviction (P_blend=0.50).")
+                    p_blend = 0.500
+                else:
+                    p_blend = p_blend * min(activity_ratio, 1.5)
+                    p_blend = float(np.clip(p_blend, 0.0, 1.0))
+                    logging.info(f"[{symbol}] [ACTIVITY_GATE] Activity Ratio: {activity_ratio:.4f} | P_blend scaled: {pre_gate_p:.4f} -> {p_blend:.4f}")
+    except Exception as gate_err:
+        logging.error(f"[{symbol}] Microstructure activity gating failed: {gate_err}")
+
+    vals = [float(v) for v in active_scores.values() if not np.isnan(v)]
+    model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
+
+    import alpha_combiner
+    is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=is_this_symbol_starved)
+    if not is_consensus:
+        agree_on_direction = False
+        valid_vals = [v for v in active_scores.values() if not np.isnan(v)]
+        if len(valid_vals) >= 2:
+            all_buy = all(v > 0.50 for v in valid_vals)
+            all_sell = all(v < 0.50 for v in valid_vals)
+            agree_on_direction = all_buy or all_sell
+
+        if agree_on_direction:
+            logging.info(f"[{symbol}] CONSENSUS DIVERGENCE OVERRIDE: Models agree on directional sign. Allowing weighted blend P_blend={p_blend:.4f}.")
+        else:
+            if len(valid_vals) > 0:
+                max_conviction_val = max(valid_vals)
+                min_conviction_val = min(valid_vals)
+                p_blend = max_conviction_val if max_conviction_val > 0.5 else min_conviction_val
+                logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: Divergence > 0.40. Bypassing 0.5000 limit. Passing max raw conviction: P_blend={p_blend:.4f}.")
+            else:
+                logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: No valid models. Falling back to 0.0000.")
+                p_blend = 0.0000
+
+    return {
+        "p_blend": p_blend,
+        "active_scores": active_scores,
+        "x_prob": x_prob,
+        "k_prob": k_prob,
+        "ddqn_p": ddqn_p,
+        "model_divergence": model_divergence,
+        "activity_ratio": activity_ratio
+    }
+
+def _run_episodic_memory_check(symbol: str, w_dist_norm: float):
+    """Performs FAISS memory retrieval and calculates similarity/decay."""
+    live_vec = copy.deepcopy(sigproc.get_feature_vector(symbol))
+    mem_matches = _MEMORY.retrieve(live_vec, k=3)
+    is_legend = False; is_graveyard = False; max_sim = 0.0
+
+    decay_lambda = 1e-5
+    weighted_sim_sum = 0.0
+    weight_sum = 0.0
+
+    for match in mem_matches:
+        sim = match["distance"]
+        meta = match["meta"]
+        reasoning = meta.get("reasoning", "").upper()
+
+        # Time-decay
+        ts_str = meta.get("timestamp")
+        def _parse_timestamp(ts_val) -> float:
+            if ts_val is None:
+                return time.time() - 86400 * 30
+            if isinstance(ts_val, (int, float)):
+                return float(ts_val)
+            try:
+                return float(ts_val)
+            except ValueError:
+                pass
+            try:
+                dt = pd.to_datetime(ts_val)
+                return dt.timestamp()
+            except Exception:
+                return time.time() - 86400 * 30
+
+        delta_t = abs(time.time() - _parse_timestamp(ts_str))
+        W_time = math.exp(-decay_lambda * delta_t)
+
+        # Regime proximity
+        hist_w_raw = meta.get("wasserstein_distance", meta.get("wasserstein_state", 1.0))
+        try:
+            historic_wasserstein = float(hist_w_raw)
+        except (ValueError, TypeError):
+            hist_w_str = str(hist_w_raw).upper()
+            if "TREND" in hist_w_str:
+                historic_wasserstein = 0.0
+            elif "CRISIS" in hist_w_str:
+                historic_wasserstein = 2.0
+            else:
+                historic_wasserstein = 1.0
+
+        W_regime = 1.0 / (1.0 + abs(historic_wasserstein - w_dist_norm))
+        W_total = W_time * W_regime
+
+        weighted_sim_sum += sim * W_total
+        weight_sum += W_total
+
+        if sim > LEGEND_SIMILARITY_THRESHOLD:
+            if "LEGEND" in reasoning or meta.get("action") == "LEGEND_WEI":
+                is_legend = True
+        if sim > FAILURE_SIMILARITY_THRESHOLD:
+            if "FAILURE" in reasoning or "POST_MORTEM" in reasoning:
+                is_graveyard = True
+
+    if weight_sum > 0:
+        max_sim = weighted_sim_sum / weight_sum
+    else:
+        max_sim = 0.0
+
+    return is_legend, is_graveyard, max_sim
+
+def _prepare_local_meta_features(symbol, df_ml, x_prob, k_prob, max_sim, m_state, w_dist_norm, wasserstein_state, label_probs, volatility_ratio, sentiment_score):
+    """Consolidates meta-features for the meta-model."""
+    _final = df_ml.iloc[-1]
+    def logit(p):
+        p_clipped = np.clip(p, 1e-5, 1.0 - 1e-5)
+        return np.log(p_clipped / (1.0 - p_clipped))
+    sentiment_divergence_delta = abs(logit(sentiment_score) - logit(k_prob))
+    local_meta_features = {
+        "wasserstein_state": w_dist_norm, "hmm_state": wasserstein_state, "wasserstein_routing_probs": label_probs,
+        "xgb_p": x_prob, "xgboost_prob": x_prob, "kronos_p": k_prob, "kronos_prob": k_prob,
+        "faiss_sim": max_sim, "faiss_similarity": max_sim, "macro_sent": sentiment_score, "sentiment_score": sentiment_score,
+        "sentiment_divergence_delta": sentiment_divergence_delta, "volatility_ratio": volatility_ratio,
+        "macro_risk": float(m_state.get("black_swan_risk", 0.0)), "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
+        "frac_diff": float(_final.get("frac_diff_price", 0.0)), "fft_amp_1": float(_final.get("fft_amp_1", 0.0)),
+        "fft_amp_2": float(_final.get("fft_amp_2", 0.0)), "fft_amp_3": float(_final.get("fft_amp_3", 0.0)),
+        "vpin": float(_final.get("vpin", 0.0)), "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
+        "order_flow_entropy": float(_final.get("order_flow_entropy", 0.0)), "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
+        "uncertainty_width": float(m_state.get("uncertainty_width", 0.0)), "trust_gate_failed": False, "prediction_interval": [0.5, 0.5]
+    }
+    return local_meta_features
+
+def _evaluate_meta_strategy(symbol, df_m15, df_ta, local_meta_features, label_probs, wasserstein_state, p_blend, primary_dir):
+    """Determines active strategy and calculates meta_p."""
+    p_trend = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
+
+    rsi = df_ta["W_rsi"].iloc[-1]
+    bbpos = df_ta["B_bbpos"].iloc[-1]
+    prices = df_m15['close'].values
+    fft_data = sigproc.fft_cycle_detector(prices)
+    fft_amplitude = fft_data.get('power', 0.0)
+
+    if fft_amplitude > 1.5:
+        p_range = calculate_mean_reversion_score(rsi, bbpos)
+    else:
+        p_range = 0.50
+
+    w_trend = label_probs.get("TRENDING", 0.0) + label_probs.get("HIGH-VOLATILITY", 0.0) + label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0) + label_probs.get("LOW-VOL TREND", 0.0) + label_probs.get("CRISIS TAIL", 0.0)
+    w_range = label_probs.get("MEAN-REVERTING", 0.0) + label_probs.get("RANGE", 0.0) + label_probs.get("HIGH-VOL MEAN REVERSION", 0.0)
+
+    total_w = w_trend + w_range + 1e-9
+    w_trend /= total_w
+    w_range /= total_w
+
+    wasserstein_selector_state = "TREND" if ("TREND" in wasserstein_state or "CRISIS" in wasserstein_state) else "RANGE"
+
+    if wasserstein_selector_state == "TREND":
+        signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
+        meta_p = p_trend
+    elif wasserstein_selector_state == "RANGE":
+        signal = run_meridian_strategy(symbol, local_meta_features, p_range)
+        meta_p = p_range
+
+        if _VRP_SPREAD > 5.0 and wasserstein_state == "RANGE":
+            deviation = meta_p - 0.5
+            meta_p = np.clip(0.5 + deviation * 1.15, 0.0, 1.0)
+            logging.info(
+                f"[{symbol}] [VRP_OVERLAY] High VRP Spread ({_VRP_SPREAD:.2f} > 5.0) in RANGE state. "
+                f"Meridian conviction scaled: {p_range:.4f} -> {meta_p:.4f} (1.15x multiplier)"
+            )
+    else:
+        signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
+        meta_p = p_trend
+
+    if p_trend == 0.0:
+        meta_p = 0.0
+
+    return signal, meta_p, w_trend, w_range, p_trend, p_range
+
+def _apply_dynamic_gate_corrections(symbol, df_ml, data_quality_flag, is_this_symbol_starved, w_trend, w_range, vrs):
+    """Calculates entry gate with NY Open and volatility adjustments."""
+    range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
+    current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
+
+    high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
+    is_degraded = (data_quality_flag != "PRISTINE") or is_this_symbol_starved
+    if is_degraded:
+        min_p_gate = 0.75
+    elif symbol.upper() in high_vol_assets:
+        min_p_gate = 0.72
+    else:
+        min_p_gate = 0.68
+
+    base_gate = max(current_gate, min_p_gate)
+
+    dynamic_gate = base_gate * (1.0 - (0.5 * (1.0 - vrs)))
+    dynamic_gate = max(dynamic_gate, 0.65)
+    current_gate = dynamic_gate
+
+    # NY Open Dynamic Gate Correction
+    try:
+        volume_overdrive = bool(df_ml.iloc[-1].get("volume_overdrive", 0)) if df_ml is not None else False
+        z_vimb_val = float(df_ml.iloc[-1].get("z_vimb", 0.0)) if df_ml is not None else 0.0
+    except Exception:
+        volume_overdrive = False
+        z_vimb_val = 0.0
+
+    current_time_utc_hour = datetime.now(timezone.utc).hour
+    if volume_overdrive and (current_time_utc_hour in [13, 14, 15]):
+        pre_overdrive_gate = current_gate
+        applied_dynamic_gate = min(base_gate, current_gate * 0.85)
+        current_gate = applied_dynamic_gate
+        logging.info(
+            f"[{symbol}] [NY_OPEN_OVERDRIVE] Z(Vimb)={z_vimb_val:.4f} >= 2.0 | UTC Hour={current_time_utc_hour} "
+            f"| Gate relaxed from {pre_overdrive_gate:.4f} -> {current_gate:.4f} "
+            f"(15% compression stripped, capped at base={base_gate:.4f})"
+        )
+    return current_gate, base_gate
+
+def _check_hard_vetoes(symbol, meta_p, is_graveyard, is_legend, active_scores, label_probs, wasserstein_state, df_ml, latest_swing, atr, data_quality_flag):
+    """Evaluates rejection criteria."""
+    if is_graveyard:
+        logging.warning(f"[{symbol}] [HARD_VETO] [GRAVEYARD_VETO] Cosine similarity to post_mortem_failure vector > 85%. Blocking signal.")
+        return True
+
+    acc_info = mt5.account_info()
+    sym_info = mt5.symbol_info(symbol)
+    if acc_info and sym_info:
+        risk_budget = acc_info.balance * 0.02
+        point_value = sym_info.trade_tick_value / (sym_info.trade_tick_size / sym_info.point) if sym_info.trade_tick_size > 0 else sym_info.trade_tick_value
+        affordable_lot = risk_budget / (atr * point_value * 3.0 + 1e-12)
+        if affordable_lot < sym_info.volume_min:
+            logging.warning(f"[{symbol}] AFFORDABILITY_VETO: Affordable lot size {affordable_lot:.4f} < broker min {sym_info.volume_min}. Skipping signal.")
+            return True
+
+    predicted_dir = "BUY" if meta_p > 0.5 else "SELL"
+    regime_prob = label_probs.get(wasserstein_state, 0.0)
+
+    if regime_prob < 0.55:
+        logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
+    elif is_legend:
+        logging.info(f"[{symbol}] [LEGEND_OVERRIDE] Cosine similarity to legend_wei vector > 85%. Bypassing HMM regime/directional penalties.")
+    else:
+        is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
+        if not is_mixts_valid and regime_prob < 0.60:
+            logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {wasserstein_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
+            return True
+        if (predicted_dir == "BUY" and wasserstein_state == "BEAR") or (predicted_dir == "SELL" and wasserstein_state == "BULL"):
+            logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {wasserstein_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
+            return True
+
+    entropy_val = 0.0
+    if df_ml is not None:
+        try: entropy_val = float(df_ml.iloc[-1].get("order_flow_entropy", 0.0))
+        except: pass
+    if latest_swing is not None:
+        try: entropy_val = max(entropy_val, float(latest_swing.get('entropy', 0.0)))
+        except: pass
+
+    if entropy_val > 1.0:
+        logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Order Flow Entropy {entropy_val:.3f} > 1.0.")
+        return True
+
+    if data_quality_flag != "PRISTINE":
+        logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag}. Blocking signal.")
+        return True
+
+    return False
+
+def _safe_extract_with_lookback(sym, val, default_val, key_name):
+    if val is not None and not np.isnan(val) and not np.isinf(val):
+        return float(val)
+    try:
+        hist_item = _arctic_read(f"{sym}_meta")
+        if hist_item is not None and not hist_item.data.empty:
+            for i in range(len(hist_item.data) - 1, -1, -1):
+                hist_val = hist_item.data.iloc[i].get(key_name)
+                if hist_val is not None and not np.isnan(hist_val) and not np.isinf(hist_val):
+                    return float(hist_val)
+    except Exception:
+        pass
+    return float(default_val)
+
 def run_inference_for_symbol(symbol: str, prep_data: dict):
     global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
     global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _VRP_SPREAD
@@ -1374,761 +1791,135 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
     atr = prep_data["atr"]
     m_state = prep_data["m_state"]
     adjusted_conviction = prep_data.get("adjusted_conviction", None)
-
     try:
         # Directive 1: Zero-Variance Bypass Check
         if data_quality_flag == "DEAD_MARKET":
-            logging.info(f"[{symbol}] Dead market bypass engaged. Enforcing zero conviction and short-circuiting inference.")
-            
-            with _CYCLE_LOCK:
-                _CYCLE_P_SCORES[symbol] = 0.0000
+            if _handle_dead_market(symbol, atr):
+                return
 
-            # Direct cache write to ensure readiness script sees the DEAD_MARKET state with 0.0 conviction.
-            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
-                "primary_dir": 0,
-                "meta_conviction": 0.500,
-                "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
-                "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
-                "strategy_type": "MOMENTUM",
-                "atr": atr,
-                "entropy": 0.0,
-                "hawkes_intensity": 0.0,
-                "timestamp": utils.get_utc_epoch(),
-                "is_legend": False,
-                "is_graveyard": False,
-                "vpin": 0.5,
-                "rsi": 50.0,
-                "vrs": 1.0,
-                "xgb_p": 0.500,
-                "ddqn_p": 0.500
-            }]))
-            return
-
-        # ── Level 34 SRE: Heuristic Override & ML Bypass ──────────────────
+        # ML Consensus
         try:
-            kronos_bridge.update_cognition_cache(symbol, df_ml)
-            k_item = _arctic_read(f"{symbol}_kronos")
-            if k_item is not None:
-                _k_data = k_item.data.iloc[-1]
-                k_prob = float(_k_data["kronos_prob"])
-            else:
-                k_prob = 0.500
-            
-            x_prob = get_xgb_prediction(df_ml)
-
-            scores_raw = {
-                "kronos": k_prob,
-                "xgb": x_prob
-            }
-            
-            # RL Inference (if not quarantined)
-            from rl_agents.oxford_ddqn import CHECKPOINT_PATH
-            if os.path.exists(CHECKPOINT_PATH):
-                try:
-                    ddqn_agent = ddqn_bridge.get_ddqn_agent()
-                    feature_vec = df_ml.select_dtypes(include=[np.number]).iloc[-1].astype(float).values
-                    ddqn_p = ddqn_agent.infer_probability(feature_vec)
-                    if ddqn_p is not None and not np.isnan(ddqn_p):
-                        scores_raw["ddqn"] = ddqn_p
-                except Exception as e:
-                    logging.warning(f"[{symbol}] DDQN Agent failed: {e}. Omitted from consensus.")
-            
-            # APPLY QUARANTINE FILTER
-            q_result = registry.filter_agents(scores_raw)
-            active_scores = q_result.filtered_scores
-            
-            # Directive 2: The Overconfidence Tripwire (v28.25 Calibration)
-            for agent_name, agent_prob in list(active_scores.items()):
-                if agent_prob > 0.95 or agent_prob < 0.05:
-                    logging.warning(f"[{symbol}] [SOFTMAX_SATURATION_DETECTED] Agent '{agent_name}' outputted extreme/saturated confidence ({agent_prob:.4f}). Discarding from current cycle.")
-                    del active_scores[agent_name]
-                elif agent_prob == 0.5000 or agent_prob is None or np.isnan(agent_prob):
-                    logging.warning(f"[{symbol}] [DYNAMIC QUARANTINE] Agent '{agent_name}' returned 0.5000/NaN. Dropping from consensus.")
-                    del active_scores[agent_name]
-            
-            # Weight Allocation & Evolutionary Consensus Blending
-            base_weights = {"kronos": 0.4, "xgb": 0.3, "ddqn": 0.3}
-            
-            # 1. Proposal A: ACCURACY_WEIGHTED
-            p_accuracy = 0.500
-            total_active_weight = sum(base_weights[name] for name in active_scores)
-            if total_active_weight > 0:
-                p_accuracy = sum(
-                    active_scores[name] * (base_weights[name] / total_active_weight)
-                    for name in active_scores
-                )
-                
-            # 2. Proposal B: MAX_CONVICTION
-            p_max = 0.500
-            if active_scores:
-                p_max = max(active_scores.values(), key=lambda v: abs(v - 0.5))
-                
-            # 3. Proposal C: SHAP_FILTERED (Baseline weighted fallback for this cycle)
-            p_shap = p_accuracy
-            
-            # Query the highest ELO proposal from registry
-            from gitagent_elo_registry import EvolutionaryConsensusRegistry
-            elo_registry = EvolutionaryConsensusRegistry()
-            active_proposal = elo_registry.get_highest_elo_proposal()
-            
-            if active_proposal == "ACCURACY_WEIGHTED":
-                p_blend = p_accuracy
-            elif active_proposal == "MAX_CONVICTION":
-                p_blend = p_max
-            elif active_proposal == "SHAP_FILTERED":
-                p_blend = p_shap
-            else:
-                p_blend = p_accuracy
-                
-            # Record prediction details for post-realization ELO adjustments
-            try:
-                current_close_price = float(df_ml['close'].iloc[-1])
-                proposals_predictions = {
-                    "ACCURACY_WEIGHTED": p_accuracy,
-                    "MAX_CONVICTION": p_max,
-                    "SHAP_FILTERED": p_shap
-                }
-                elo_registry.record_prediction(symbol, current_close_price, proposals_predictions)
-                # Run self-contained evaluation of pending predictions periodically
-                elo_registry.evaluate_pending_predictions()
-            except Exception as elo_err:
-                logging.warning(f"[{symbol}] Elo prediction recording failed: {elo_err}")
-
-                
-            # UPGRADE D: Microstructure Bar Activity Gating Layer
-            activity_ratio = 1.0
-            try:
-                # 1. Group tick sequences into dollar bars
-                df_bars = ticks_to_dollar_bars(df_m15, threshold=500000.0)
-                if not df_bars.empty:
-                    bar_durations = df_bars['time'].diff().dt.total_seconds().dropna().values
-                    if len(bar_durations) >= 2:
-                        delta_tau_bar = bar_durations[-1]
-                        # Rolling median of trailing 20 bars
-                        median_delta_tau = np.median(bar_durations[-20:]) if len(bar_durations) >= 20 else np.median(bar_durations)
-                        activity_ratio = median_delta_tau / (delta_tau_bar + 1e-9)
-                        
-                        pre_gate_p = p_blend
-                        if activity_ratio < 0.5:
-                            logging.warning(f"[{symbol}] [ACTIVITY_GATE] Low activity: ratio {activity_ratio:.4f} < 0.5. Suppressing conviction (P_blend=0.50).")
-                            p_blend = 0.500
-                        else:
-                            p_blend = p_blend * min(activity_ratio, 1.5)
-                            p_blend = float(np.clip(p_blend, 0.0, 1.0))
-                            logging.info(f"[{symbol}] [ACTIVITY_GATE] Activity Ratio: {activity_ratio:.4f} | P_blend scaled: {pre_gate_p:.4f} -> {p_blend:.4f}")
-            except Exception as gate_err:
-                logging.error(f"[{symbol}] Microstructure activity gating failed: {gate_err}")
-
-            # UPGRADE B: Live Parameter Adaptation via Moving Window Fitness
-            try:
-                global _LIVE_SWEEP_COUNTER
-                if '_LIVE_SWEEP_COUNTER' not in globals():
-                    _LIVE_SWEEP_COUNTER = defaultdict(int)
-                _LIVE_SWEEP_COUNTER[symbol] += 1
-                if _LIVE_SWEEP_COUNTER[symbol] % 50 == 0:
-                    logging.info(f"[OPTIMIZER] Running live parameter adaptation sweep for {symbol}...")
-                    # Get price history and ATR series
-                    if df_ta is not None:
-                        price_history = df_ta['close']
-                        atr_series = df_ta['WHL_vol'] # standard vol/ATR proxy
-                        _MATH_META_MODEL.optimize_hyperparameters(price_history, atr_series)
-            except Exception as sweep_err:
-                logging.error(f"[OPTIMIZER] Live parameter sweep failed: {sweep_err}")
-                
-            vals = [float(v) for v in active_scores.values() if not np.isnan(v)]
-            model_divergence = max(vals) - min(vals) if len(vals) >= 2 else 0.0
-
-            import alpha_combiner
-            is_consensus = alpha_combiner.combiner.check_consensus(active_scores, p_blend, tighten=is_this_symbol_starved)
-            if not is_consensus:
-                agree_on_direction = False
-                valid_vals = [v for v in active_scores.values() if not np.isnan(v)]
-                if len(valid_vals) >= 2:
-                    all_buy = all(v > 0.50 for v in valid_vals)
-                    all_sell = all(v < 0.50 for v in valid_vals)
-                    agree_on_direction = all_buy or all_sell
-                
-                if agree_on_direction:
-                    logging.info(f"[{symbol}] CONSENSUS DIVERGENCE OVERRIDE: Models agree on directional sign. Allowing weighted blend P_blend={p_blend:.4f}.")
-                else:
-                    if len(valid_vals) > 0:
-                        max_conviction_val = max(valid_vals)
-                        min_conviction_val = min(valid_vals)
-                        p_blend = max_conviction_val if max_conviction_val > 0.5 else min_conviction_val
-                        logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: Divergence > 0.40. Bypassing 0.5000 limit. Passing max raw conviction: P_blend={p_blend:.4f}.")
-                    else:
-                        logging.warning(f"[{symbol}] CONSENSUS GATE BLOCKED: No valid models. Falling back to 0.0000.")
-                        p_blend = 0.0000
-            logging.info(f"[{symbol}] ML Inference SUCCESS: P_blend={p_blend:.4f} (Agents: {list(active_scores.keys())})")
-            
+            ml_res = _calculate_ml_consensus(symbol, df_ml, df_m15, is_this_symbol_starved)
+            p_blend = ml_res["p_blend"]; active_scores = ml_res["active_scores"]
+            x_prob = ml_res["x_prob"]; k_prob = ml_res["k_prob"]
+            ddqn_p = ml_res["ddqn_p"]; model_divergence = ml_res["model_divergence"]
+            activity_ratio = ml_res["activity_ratio"]
         except Exception as e:
             logging.warning(f"[{symbol}] ML Bypass in effect. Reason: {e}")
-            data_quality_flag = "DEGRADED"
-            x_prob = 0.500
-            ddqn_p = 0.500
-            k_prob = 0.500
-            active_scores = {"kronos": k_prob, "xgb": x_prob, "ddqn": ddqn_p}
-            model_divergence = 0.0
-            print(f"[ML BYPASS] Shape mismatch detected. Falling back to Heuristic Swing Routing for {symbol}.")
-            x_prob = 0.500
-            ddqn_p = 0.500
-            
+            data_quality_flag = "DEGRADED"; x_prob = 0.500; ddqn_p = 0.500; k_prob = 0.500
+            ml_res = {"activity_ratio": 1.0}; activity_ratio = 1.0; p_blend = 0.50
+            active_scores = {"kronos": k_prob, "xgb": x_prob, "ddqn": ddqn_p}; model_divergence = 0.0
             if latest_swing is not None:
-                rsi = latest_swing.get('rsi', 50)
-                entropy = latest_swing.get('entropy', 0.5)
-                
-                if rsi < 35 and entropy > 0.85:
-                    p_blend = 0.85
-                elif rsi > 65 and entropy > 0.85:
-                    p_blend = 0.15
-                elif latest_swing.get('trend_continuation_signal', 0) > 0:
-                    p_blend = 0.90 if df_m15['close'].iloc[-1] > latest_swing.get('ema_20', 0) else 0.10
-                elif latest_swing.get('catalyst_momentum_signal', 0) > 0:
-                    p_blend = 0.80 if latest_swing.get('gap_pct', 0) > 0 else 0.20
-                else:
-                    p_blend = 0.50
-            else:
-                p_blend = 0.50
-                
-            logging.warning(f"[{symbol}] HEURISTIC_OVERRIDE ACTIVE: P_blend={p_blend:.2f} (Reason: {e})")
+                rsi_v = latest_swing.get("rsi", 50); ent_v = latest_swing.get("entropy", 0.5)
+                if rsi_v < 35 and ent_v > 0.85: p_blend = 0.85
+                elif rsi_v > 65 and ent_v > 0.85: p_blend = 0.15
+                elif latest_swing.get("trend_continuation_signal", 0) > 0: p_blend = 0.90 if df_m15["close"].iloc[-1] > latest_swing.get("ema_20", 0) else 0.10
+                elif latest_swing.get("catalyst_momentum_signal", 0) > 0: p_blend = 0.80 if latest_swing.get("gap_pct", 0) > 0 else 0.20
+                else: p_blend = 0.50
+            else: p_blend = 0.50
 
-        # Compute normalized Wasserstein distance
+        # Optimizer Sweep
         try:
-            p_live = df_ml["frac_diff_price"].dropna().values
-            if len(p_live) > 500:
-                p_live = p_live[-500:]
-            
-            all_vals = df_ml["frac_diff_price"].dropna().values
-            if len(all_vals) >= 500:
-                p_train = all_vals[:500]
-            else:
-                p_train = np.random.normal(np.mean(p_live), np.std(p_live) + 1e-9, len(p_live))
-                
+            global _LIVE_SWEEP_COUNTER
+            if "_LIVE_SWEEP_COUNTER" not in globals(): _LIVE_SWEEP_COUNTER = defaultdict(int)
+            _LIVE_SWEEP_COUNTER[symbol] += 1
+            if _LIVE_SWEEP_COUNTER[symbol] % 50 == 0 and df_ta is not None: _MATH_META_MODEL.optimize_hyperparameters(df_ta["close"], df_ta["WHL_vol"])
+        except: pass
+
+        # Wasserstein
+        try:
+            p_live = df_ml["frac_diff_price"].dropna().values[-500:] if len(df_ml["frac_diff_price"].dropna().values) > 500 else df_ml["frac_diff_price"].dropna().values
+            p_train = df_ml["frac_diff_price"].dropna().values[:500] if len(df_ml["frac_diff_price"].dropna().values) >= 500 else np.random.normal(np.mean(p_live), np.std(p_live) + 1e-9, len(p_live))
             from scipy.stats import wasserstein_distance
-            w_dist_raw = wasserstein_distance(np.sort(p_live), np.sort(p_train))
-            w_dist_norm = float(w_dist_raw / (np.std(p_train) + 1e-9))
-        except Exception as w_err:
-            logging.warning(f"[{symbol}] Failed to compute numerical Wasserstein distance: {w_err}")
-            w_dist_norm = 1.0
+            w_dist_norm = float(wasserstein_distance(np.sort(p_live), np.sort(p_train)) / (np.std(p_train) + 1e-9))
+        except: w_dist_norm = 1.0
 
         if _OBSERVER:
-            timesfm_item = _arctic_read(f"{symbol}_timesfm")
-            p10_val = float(timesfm_item.data.iloc[-1].get("p10", 0.0)) if timesfm_item is not None else 0.0
-            p90_val = float(timesfm_item.data.iloc[-1].get("p90", 0.0)) if timesfm_item is not None else 0.0
-            s_t_data = {
-                "kronos_p": k_prob,
-                "xgb_p": x_prob,
-                "ddqn_p": ddqn_p,
-                "wasserstein_state": w_dist_norm, # Use numeric distance
-                "atr": atr,
-                "timesfm_p10": p10_val,
-                "timesfm_p90": p90_val
-            }
-            _OBSERVER.observe(pd.DataFrame([s_t_data]))
+            ts_i = _arctic_read(f"{symbol}_timesfm")
+            p10 = float(ts_i.data.iloc[-1].get("p10", 0.0)) if ts_i is not None else 0.0
+            p90 = float(ts_i.data.iloc[-1].get("p90", 0.0)) if ts_i is not None else 0.0
+            _OBSERVER.observe(pd.DataFrame([{"kronos_p": k_prob, "xgb_p": x_prob, "ddqn_p": ddqn_p, "wasserstein_state": w_dist_norm, "atr": atr, "timesfm_p10": p10, "timesfm_p90": p90}]))
 
         primary_dir = 1 if p_blend > 0.60 else (-1 if p_blend < 0.40 else 0)
+        is_legend, is_graveyard, max_sim = _run_episodic_memory_check(symbol, w_dist_norm)
 
-        # ── Regime-Weighted FAISS Episodic Retrieval ──────────────────────────
-        live_vec = copy.deepcopy(sigproc.get_feature_vector(symbol))
-        mem_matches = _MEMORY.retrieve(live_vec, k=3)
-        is_legend = False; is_graveyard = False; max_sim = 0.0
-        
-        decay_lambda = 1e-5
-        weighted_sim_sum = 0.0
-        weight_sum = 0.0
-        
-        for match in mem_matches:
-            sim = match["distance"]
-            meta = match["meta"]
-            reasoning = meta.get("reasoning", "").upper()
-            
-            # Time-decay
-            ts_str = meta.get("timestamp")
-            def _parse_timestamp(ts_val) -> float:
-                if ts_val is None:
-                    return time.time() - 86400 * 30
-                if isinstance(ts_val, (int, float)):
-                    return float(ts_val)
-                try:
-                    return float(ts_val)
-                except ValueError:
-                    pass
-                try:
-                    dt = pd.to_datetime(ts_val)
-                    return dt.timestamp()
-                except Exception:
-                    return time.time() - 86400 * 30
-                    
-            delta_t = abs(time.time() - _parse_timestamp(ts_str))
-            W_time = math.exp(-decay_lambda * delta_t)
-            
-            # Regime proximity
-            hist_w_raw = meta.get("wasserstein_distance", meta.get("wasserstein_state", 1.0))
-            try:
-                historic_wasserstein = float(hist_w_raw)
-            except (ValueError, TypeError):
-                hist_w_str = str(hist_w_raw).upper()
-                if "TREND" in hist_w_str:
-                    historic_wasserstein = 0.0
-                elif "CRISIS" in hist_w_str:
-                    historic_wasserstein = 2.0
-                else:
-                    historic_wasserstein = 1.0
-                    
-            W_regime = 1.0 / (1.0 + abs(historic_wasserstein - w_dist_norm))
-            W_total = W_time * W_regime
-            
-            weighted_sim_sum += sim * W_total
-            weight_sum += W_total
-            
-            if sim > LEGEND_SIMILARITY_THRESHOLD:
-                if "LEGEND" in reasoning or meta.get("action") == "LEGEND_WEI":
-                    is_legend = True
-            if sim > FAILURE_SIMILARITY_THRESHOLD:
-                if "FAILURE" in reasoning or "POST_MORTEM" in reasoning:
-                    is_graveyard = True
-                    
-        if weight_sum > 0:
-            max_sim = weighted_sim_sum / weight_sum
-        else:
-            max_sim = 0.0
-
-        try:
-            k_hist_item = _arctic_read(f"{symbol}_kronos")
-            if k_hist_item is not None:
-                k_hist = k_hist_item.data.tail(50)
-                xgb_vals = k_hist['xgboost_prob'].values
-                k_vals = k_hist['kronos_prob'].values
-                z_xgb = np.clip((float(x_prob) - np.mean(xgb_vals)) / (np.std(xgb_vals) + 1e-9), -3.0, 3.0)
-                z_kronos = np.clip((float(k_prob) - np.mean(k_vals)) / (np.std(k_vals) + 1e-9), -3.0, 3.0)
-            else:
-                z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
-                z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
-        except Exception:
-            z_xgb = np.clip((float(x_prob) - 0.5) / 0.15, -3.0, 3.0)
-            z_kronos = np.clip((float(k_prob) - 0.5) / 0.15, -3.0, 3.0)
-
-        _final = df_ml.iloc[-1]
-
-        def _safe_extract_with_lookback(sym, val, default_val, key_name):
-            if val is not None and not np.isnan(val) and not np.isinf(val):
-                return float(val)
-            try:
-                hist_item = _arctic_read(f"{sym}_meta")
-                if hist_item is not None and not hist_item.data.empty:
-                    for i in range(len(hist_item.data) - 1, -1, -1):
-                        hist_val = hist_item.data.iloc[i].get(key_name)
-                        if hist_val is not None and not np.isnan(hist_val) and not np.isinf(hist_val):
-                            return float(hist_val)
-            except Exception:
-                pass
-            return float(default_val)
-
-        safe_xgb = float(x_prob) if not np.isnan(float(x_prob)) else 0.5000
-        safe_kronos = float(k_prob) if not np.isnan(float(k_prob)) else 0.5000
-        safe_faiss = _safe_extract_with_lookback(symbol, float(max_sim) if max_sim is not None else None, 0.0000, "faiss_similarity")
-        raw_sent = m_state.get("global_macro_sentiment", 0.5)
-        safe_sent = _safe_extract_with_lookback(symbol, float(raw_sent) if raw_sent is not None else None, 0.5000, "sentiment_score")
-
-        # STEP 1: CAUSAL FEATURE EXPANSION (v30.95)
-        instant_atr_10 = calculate_atr_df(df_m15, 10)
-        baseline_atr_200 = calculate_atr_df(df_m15, 200)
-        volatility_ratio = float(instant_atr_10 / baseline_atr_200) if baseline_atr_200 > 0.0 else 1.0
-        
-        df_bars_hft = ticks_to_dollar_bars(df_m15, threshold=500000.0) if df_m15 is not None else None
-
-        # Cross-Asset Sentiment Divergence Delta
-        def logit(p):
-            p_clipped = np.clip(p, 1e-5, 1.0 - 1e-5)
-            return np.log(p_clipped / (1.0 - p_clipped))
-            
-        sentiment_divergence_delta = abs(logit(safe_sent) - logit(safe_kronos))
-
-        local_meta_features = copy.deepcopy({
-            "wasserstein_state": w_dist_norm, # Use numeric distance
-            "hmm_state": wasserstein_state,   # Use string state
-            "wasserstein_routing_probs": label_probs, # soft weights
-            "xgb_p": safe_xgb,
-            "xgboost_prob": safe_xgb,
-            "kronos_p": safe_kronos,
-            "kronos_prob": safe_kronos,
-            "faiss_sim": safe_faiss,
-            "faiss_similarity": safe_faiss,
-            "macro_sent": safe_sent,
-            "sentiment_score": safe_sent,
-            "sentiment_divergence_delta": sentiment_divergence_delta,
-            "volatility_ratio": volatility_ratio,
-            "macro_risk": float(m_state.get("black_swan_risk", 0.0)),
-            "catalyst": float(m_state.get("asset_specific_catalysts", {}).get(symbol, 0.0)),
-            "frac_diff": float(_final.get("frac_diff_price", 0.0)),
-            "fft_amp_1": float(_final.get("fft_amp_1", 0.0)),
-            "fft_amp_2": float(_final.get("fft_amp_2", 0.0)),
-            "fft_amp_3": float(_final.get("fft_amp_3", 0.0)),
-            "vpin": float(_final.get("vpin", 0.0)),
-            "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
-            "order_flow_entropy": float(_final.get("order_flow_entropy", 0.0)),
-            "cs_rank": float(_GLOBAL_CS_RANKS.get(symbol, 0.5)),
-        })
-        
-        _nan_vals = {k: v for k, v in local_meta_features.items() if isinstance(v, float) and (np.isnan(v) or np.isinf(v))}
-        if _nan_vals:
-            logging.critical(f"[FATAL] {symbol}: NaN/Inf detected in meta-features: {list(_nan_vals.keys())}. Halting inference.")
-            return
-        
-        # Online realized calibration queue outcome update using previous prediction direction correctness
+        # Calibration update
         try:
             prev_meta_df = _arctic_read(f"{symbol}_meta")
-            if prev_meta_df is not None and not prev_meta_df.data.empty:
-                prev_row = prev_meta_df.data.iloc[-1]
-                prev_p = float(prev_row.get("meta_conviction", 0.5))
-                if df_ta is not None and len(df_ta) >= 2:
-                    curr_close = float(df_ta["close"].iloc[-1])
-                    prev_close = float(df_ta["close"].iloc[-2])
-                    price_change = curr_close - prev_close
-                    if prev_p > 0.5:
-                        realized = 1.0 if price_change > 0 else 0.0
-                        _MATH_META_MODEL.add_outcome(prev_p, realized)
-                    elif prev_p < 0.5:
-                        realized = 1.0 if price_change < 0 else 0.0
-                        _MATH_META_MODEL.add_outcome(prev_p, realized)
-        except Exception as cal_err:
-            logging.warning(f"[{symbol}] Failed to update calibration queue outcome: {cal_err}")
+            if prev_meta_df is not None and not prev_meta_df.data.empty and df_ta is not None and len(df_ta) >= 2:
+                prev_row = prev_meta_df.data.iloc[-1]; prev_p = float(prev_row.get("meta_conviction", 0.5))
+                price_change = float(df_ta["close"].iloc[-1]) - float(df_ta["close"].iloc[-2])
+                if prev_p > 0.5: _MATH_META_MODEL.add_outcome(prev_p, 1.0 if price_change > 0 else 0.0)
+                elif prev_p < 0.5: _MATH_META_MODEL.add_outcome(prev_p, 1.0 if price_change < 0 else 0.0)
+        except: pass
 
-        p_trend = get_meta_conviction(symbol, local_meta_features, primary_dir, base_p=p_blend)
-        
-        rsi = df_ta["W_rsi"].iloc[-1]
-        bbpos = df_ta["B_bbpos"].iloc[-1]
-        prices = df_m15['close'].values
-        fft_data = sigproc.fft_cycle_detector(prices)
-        fft_amplitude = fft_data.get('power', 0.0)
-        
-        if fft_amplitude > 1.5:
-            p_range = calculate_mean_reversion_score(rsi, bbpos)
-        else:
-            p_range = 0.50
-            
-        w_trend = label_probs.get("TRENDING", 0.0) + label_probs.get("HIGH-VOLATILITY", 0.0) + label_probs.get("BULL", 0.0) + label_probs.get("BEAR", 0.0) + label_probs.get("LOW-VOL TREND", 0.0) + label_probs.get("CRISIS TAIL", 0.0)
-        w_range = label_probs.get("MEAN-REVERTING", 0.0) + label_probs.get("RANGE", 0.0) + label_probs.get("HIGH-VOL MEAN REVERSION", 0.0)
-        
-        total_w = w_trend + w_range + 1e-9
-        w_trend /= total_w
-        w_range /= total_w
-        
-        wasserstein_selector_state = "TREND" if ("TREND" in wasserstein_state or "CRISIS" in wasserstein_state) else "RANGE"
-        
-        if wasserstein_selector_state == "TREND":
-            signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
-            meta_p = p_trend
-        elif wasserstein_selector_state == "RANGE":
-            signal = run_meridian_strategy(symbol, local_meta_features, p_range)
-            meta_p = p_range
-            
-            if _VRP_SPREAD > 5.0 and wasserstein_state == "RANGE":
-                deviation = meta_p - 0.5
-                meta_p = np.clip(0.5 + deviation * 1.15, 0.0, 1.0)
-                logging.info(
-                    f"[{symbol}] [VRP_OVERLAY] High VRP Spread ({_VRP_SPREAD:.2f} > 5.0) in RANGE state. "
-                    f"Meridian conviction scaled: {p_range:.4f} -> {meta_p:.4f} (1.15x multiplier)"
-                )
-        else:
-            signal = run_momentum_strategy(symbol, local_meta_features, p_trend)
-            meta_p = p_trend
-        
-        if p_trend == 0.0:
-            meta_p = 0.0
-            
-        range_gate_val = EPISTEMIC_GATE if _IS_STARTUP_OR_SHOCK else 0.75
-        current_gate = (w_trend * EPISTEMIC_GATE) + (w_range * range_gate_val)
-        
-        high_vol_assets = {"NAS100", "US30", "SPX500", "SP500", "GER40", "NAS100.r", "XAUUSD", "XAGUSD", "GOLD", "SILVER", "XPTUSD", "XPDUSD"}
-        is_degraded = (data_quality_flag != "PRISTINE") or is_this_symbol_starved
-        if is_degraded:
-            min_p_gate = 0.75
-        elif symbol.upper() in high_vol_assets:
-            min_p_gate = 0.72
-        else:
-            min_p_gate = 0.68
-        base_gate = max(current_gate, min_p_gate)
-        
-        dynamic_gate = base_gate * (1.0 - (0.5 * (1.0 - vrs)))
-        dynamic_gate = max(dynamic_gate, 0.65)
-        current_gate = dynamic_gate
-        
+        instant_atr_10 = calculate_atr_df(df_m15, 10); baseline_atr_200 = calculate_atr_df(df_m15, 200)
+        vol_ratio = float(instant_atr_10 / baseline_atr_200) if baseline_atr_200 > 0.0 else 1.0
+        raw_sent = m_state.get("global_macro_sentiment", 0.5)
+        safe_sent = _safe_extract_with_lookback(symbol, float(raw_sent) if raw_sent is not None else None, 0.5000, "sentiment_score")
+        local_meta_features = _prepare_local_meta_features(symbol, df_ml, x_prob, k_prob, max_sim, m_state, w_dist_norm, wasserstein_state, label_probs, vol_ratio, safe_sent)
+
+        signal, meta_p, w_trend, w_range, p_trend, p_range = _evaluate_meta_strategy(symbol, df_m15, df_ta, local_meta_features, label_probs, wasserstein_state, p_blend, primary_dir)
+        current_gate, base_gate = _apply_dynamic_gate_corrections(symbol, df_ml, data_quality_flag, is_this_symbol_starved, w_trend, w_range, vrs)
+
         regime_prob = label_probs.get(wasserstein_state, 0.0)
         import sentinel_config
-        is_crypto_or_index = symbol.upper() in getattr(sentinel_config, 'CRYPTO_BASE_SYMBOLS', []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
+        is_crypto_or_index = symbol.upper() in getattr(sentinel_config, "CRYPTO_BASE_SYMBOLS", []) or any(ind in symbol.upper() for ind in ["SP500", "NAS100", "US30", "GER40", "HK50", "US2000", "FRA40"])
         stagnant_regime_threshold = 0.25 if is_crypto_or_index else 0.40
         stagnant_activity_threshold = 0.40 if is_crypto_or_index else 0.85
         if regime_prob < stagnant_regime_threshold and activity_ratio < stagnant_activity_threshold:
-            wasserstein_state = "MARKET_STAGNANT"
-            logging.info(f"[{symbol}] [MARKET_STAGNANT] Low HMM ({regime_prob:.2f}) & Low Activity ({activity_ratio:.2f}). Gracefully skipping but writing neutral conviction.")
-            with _CYCLE_LOCK:
-                _CYCLE_P_SCORES[symbol] = 0.5000
-            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
-                "primary_dir": 0,
-                "meta_conviction": 0.500,
-                "wasserstein_state": "MARKET_STAGNANT",
-                "hmm_state": "MARKET_STAGNANT",
-                "strategy_type": "MOMENTUM",
-                "atr": float(atr),
-                "entropy": 0.0,
-                "hawkes_intensity": 0.0,
-                "timestamp": utils.get_utc_epoch(),
-                "is_legend": False,
-                "is_graveyard": False,
-                "vpin": 0.5,
-                "rsi": 50.0,
-                "vrs": 1.0,
-                "xgb_p": 0.500,
-                "ddqn_p": 0.500,
-                "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-            }]))
+            with _CYCLE_LOCK: _CYCLE_P_SCORES[symbol] = 0.5000
+            _arctic_write(f"{symbol}_meta", pd.DataFrame([{"primary_dir": 0, "meta_conviction": 0.500, "wasserstein_state": "MARKET_STAGNANT", "hmm_state": "MARKET_STAGNANT", "strategy_type": "MOMENTUM", "atr": float(atr), "entropy": 0.0, "hawkes_intensity": 0.0, "timestamp": utils.get_utc_epoch(), "is_legend": False, "is_graveyard": False, "vpin": 0.5, "rsi": 50.0, "vrs": 1.0, "xgb_p": 0.500, "ddqn_p": 0.500, "volatility_ratio": vol_ratio}]))
             return
-        elif regime_prob < 0.55:
-            current_gate = max(current_gate - 0.05, 0.60)
-            logging.info(f"[{symbol}] [CONVICTION_DRIFT_ACTIVE] HMM confidence low ({regime_prob:.3f} < 0.55). Relaxing entry gate by 5% conviction drift to {current_gate:.3f}")
-        
+        elif regime_prob < 0.55: current_gate = max(current_gate - 0.05, 0.60)
         if is_graveyard: meta_p = 0.50
+        if adjusted_conviction is not None and adjusted_conviction == 0.0: meta_p = 0.50
 
-        # ── v28.35 Directive 2: NY Open Dynamic Gate Correction ─────────────────
-        # Extract volume_overdrive flag from the feature-engineered dataframe.
-        # If the Vimb z-score burst is active AND we are inside the NY Open window
-        # (UTC hours 13, 14, 15), relax the gate back to its clean structural baseline,
-        # stripping any macro-calendar Wall-5 penalty inflation by 15%.
-        try:
-            volume_overdrive = bool(df_ml.iloc[-1].get("volume_overdrive", 0)) if df_ml is not None else False
-            z_vimb_val = float(df_ml.iloc[-1].get("z_vimb", 0.0)) if df_ml is not None else 0.0
-        except Exception:
-            volume_overdrive = False
-            z_vimb_val = 0.0
-
-        current_time_utc_hour = datetime.now(timezone.utc).hour
-        if volume_overdrive and (current_time_utc_hour in [13, 14, 15]):
-            pre_overdrive_gate = current_gate
-            applied_dynamic_gate = min(base_gate, current_gate * 0.85)
-            current_gate = applied_dynamic_gate
-            logging.info(
-                f"[{symbol}] [NY_OPEN_OVERDRIVE] Z(Vimb)={z_vimb_val:.4f} >= 2.0 | UTC Hour={current_time_utc_hour} "
-                f"| Gate relaxed from {pre_overdrive_gate:.4f} -> {current_gate:.4f} "
-                f"(15% compression stripped, capped at base={base_gate:.4f})"
-            )
-        # ────────────────────────────────────────────────────────────────────────
-
-        if adjusted_conviction is not None and adjusted_conviction == 0.0:
-            meta_p = 0.50
-            
-        if meta_p == 0.0:
-            logging.warning(f"[{symbol}] [COLD_START_QUARANTINE] Meta-model returned 0.0 due to cold/null features. HARD REJECTION. Skipping signal.")
-            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
-                "primary_dir": 0,
-                "meta_conviction": 0.0,
-                "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
-                "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
-                "strategy_type": "COLD_START_QUARANTINE",
-                "atr": float(atr),
-                "entropy": 0.0,
-                "hawkes_intensity": 0.0,
-                "timestamp": utils.get_utc_epoch(),
-                "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-            }]))
-            return
-        
-        logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
-
+        logging.info(f"[{symbol}] MixTS BLEND: P={meta_p:.4f} (Gate: {current_gate:.3f})")
         if float(meta_p) != 0.50:
             _P_SCORE_HISTORY.append(float(meta_p))
-            if len(_P_SCORE_HISTORY) > 100:
-                _P_SCORE_HISTORY.pop(0)
-
-        with _CYCLE_LOCK:
-            _CYCLE_P_SCORES[symbol] = float(meta_p)
-
-        p_history_path = Path(PROJECT_ROOT) / "data" / "p_score_history.jsonl"
-        p_history_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with open(p_history_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({
-                    "timestamp": int(time.time()),
-                    "symbol": symbol,
-                    "p_score": float(meta_p),
-                    "wasserstein_state": wasserstein_state,
-                    "primary_dir": int(primary_dir)
-                }) + "\n")
-        except Exception as _pe:
-            logging.error(f"[TELEMETRY_WRITE_ERROR] Failed to write P-score telemetry: {_pe}")
-
-        # --- CONSTRAINT 2: DYNAMIC TRIGGER HOOK ---
-        # Intercept Wasserstein distance regime gate. If geometric distribution shift detected -> trigger retrain
-        try:
-            wasserstein_str = str(wasserstein_state).upper()
-            if "CRISIS" in wasserstein_str or "GEOMETRIC_SHIFT" in wasserstein_str:
-                if _BACKGROUND_TRAIN_STATUS == "Idle" or _BACKGROUND_TRAIN_STATUS == "Active Continual":
-                    logging.warning(f"[WASSERSTEIN_GATE] Geometric shift detected ({wasserstein_state}). Triggering continual learning retrain.")
-                    trigger_background_retraining(f"Wasserstein Shift: {wasserstein_state}")
-        except Exception:
-            pass
-
+            if len(_P_SCORE_HISTORY) > 100: _P_SCORE_HISTORY.pop(0)
         if len(_P_SCORE_HISTORY) == 100:
             p_std = float(np.std(_P_SCORE_HISTORY))
             if p_std < 0.02:
                 if _DRIFT_RECOVERY_ATTEMPTS < 3:
                     _DRIFT_RECOVERY_ATTEMPTS += 1
-                    logging.critical(
-                        f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). "
-                        f"Initiating Automated Drift Reset ({_DRIFT_RECOVERY_ATTEMPTS}/3)..."
-                    )
+                    logging.critical(f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). Resetting ({_DRIFT_RECOVERY_ATTEMPTS}/3)...")
                     _P_SCORE_HISTORY.clear()
                     try:
-                        _get_oracle_lib()
-                        _ARCTIC.delete_library("oracle_cache")
-                        oracle_lib = _ARCTIC.create_library("oracle_cache")
-                        _load_meta_model_with_failsafe()
+                        _get_oracle_lib(); _ARCTIC.delete_library("oracle_cache"); oracle_lib = _ARCTIC.create_library("oracle_cache"); _load_meta_model_with_failsafe()
                         logging.info("[DRIFT RECOVERY] Cache purged and models rebooted.")
-                    except Exception as e:
-                        logging.error(f"[DRIFT RECOVERY] Reset failed: {e}")
+                    except Exception as e: logging.error(f"[DRIFT RECOVERY] Reset failed: {e}")
                 else:
                     _MODEL_DRIFT_HALT = True
-                    logging.critical(
-                        f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
-                        f"is {p_std:.6f} < 0.02 limit. Recovery attempts exhausted. HALTING AUTONOMOUS TRADING IMMEDIATELY."
-                    )
+                    logging.critical(f"[CRITICAL MODEL DRIFT] Mode Collapse detected! std={p_std:.6f} < 0.02. Recovery attempts exhausted. HALTING.")
+        with _CYCLE_LOCK: _CYCLE_P_SCORES[symbol] = float(meta_p)
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
-            "primary_dir": int(primary_dir),
-            "meta_conviction": float(meta_p),
-            "wasserstein_state": float(local_meta_features.get("wasserstein_state", 0.0)),
-            "hmm_state": str(local_meta_features.get("hmm_state", "RANGE")),
-            "strategy_type": signal["strategy_type"],
-            "atr": float(atr),
-            "entropy": float(_final.get("order_flow_entropy", 0.0)),
-            "hawkes_intensity": float(_final.get("hawkes_intensity", 0.0)),
-            "timestamp": utils.get_utc_epoch(),
-            "is_legend": is_legend,
-            "is_graveyard": is_graveyard,
-            "xgboost_prob": float(local_meta_features.get("xgb_p", 0.5)),
-            "kronos_prob": float(local_meta_features.get("kronos_p", 0.5)),
-            "faiss_similarity": float(local_meta_features.get("faiss_sim", 0.0)),
-            "sentiment_score": float(local_meta_features.get("sentiment_score", 0.5)),
-            "volatility_ratio": float(local_meta_features.get("volatility_ratio", 1.0)),
-            "sentiment_divergence_delta": float(local_meta_features.get("sentiment_divergence_delta", 0.0)),
-            "uncertainty_width": float(local_meta_features.get("uncertainty_width", 0.0)),
-            "trust_gate_failed": bool(local_meta_features.get("trust_gate_failed", False)),
-            "p_lower": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[0]),
-            "p_upper": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[1]),
+            "primary_dir": int(1 if meta_p > 0.5 else (-1 if meta_p < 0.5 else 0)), "meta_conviction": float(meta_p), "wasserstein_state": w_dist_norm, "hmm_state": str(wasserstein_state),
+            "strategy_type": signal["strategy_type"], "atr": float(atr), "timestamp": utils.get_utc_epoch(), "is_legend": is_legend, "is_graveyard": is_graveyard,
+            "xgboost_prob": float(x_prob), "kronos_prob": float(k_prob), "faiss_similarity": float(max_sim), "sentiment_score": float(safe_sent), "volatility_ratio": vol_ratio,
+            "entropy": float(df_ml.iloc[-1].get("order_flow_entropy", 0.0)), "hawkes_intensity": float(df_ml.iloc[-1].get("hawkes_intensity", 0.0)),
+            "uncertainty_width": float(local_meta_features.get("uncertainty_width", 0.0)), "trust_gate_failed": bool(local_meta_features.get("trust_gate_failed", False)),
+            "p_lower": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[0]), "p_upper": float(local_meta_features.get("prediction_interval", [0.5, 0.5])[1]),
         }]))
 
         norm_p = abs(meta_p - 0.5) + 0.5
-        
-        primary_dir = 1 if meta_p > 0.5 else (-1 if meta_p < 0.5 else 0)
-
         if 0.40 <= meta_p <= 0.60:
-            logging.info(f"[GATE] {symbol}: P={meta_p:.6f} falls in DEAD-ZONE (0.40-0.60). HARD BLOCKED.")
-        elif norm_p >= current_gate and primary_dir != 0:
-            signal_dir = "BUY" if meta_p > 0.5 else "SELL"
-            
-            # --- DIRECTIVE OMEGA PRE-ENTRY VETOES ---
-            if is_graveyard:
-                logging.warning(f"[{symbol}] [HARD_VETO] [GRAVEYARD_VETO] Cosine similarity to post_mortem_failure vector > 85%. Blocking signal.")
-                return
-            acc_info = mt5.account_info()
-            sym_info = mt5.symbol_info(symbol)
-            if acc_info and sym_info:
-                risk_budget = acc_info.balance * 0.02
-                point_value = sym_info.trade_tick_value / (sym_info.trade_tick_size / sym_info.point) if sym_info.trade_tick_size > 0 else sym_info.trade_tick_value
-                affordable_lot = risk_budget / (atr * point_value * 3.0 + 1e-12)
-                if affordable_lot < sym_info.volume_min:
-                    logging.warning(f"[{symbol}] AFFORDABILITY_VETO: Affordable lot size {affordable_lot:.4f} < broker min {sym_info.volume_min}. Skipping signal.")
-                    return
-            
-            k_score = active_scores.get('kronos', 0.5)
-            x_score = active_scores.get('xgb', 0.5)
-            predicted_dir = "BUY" if meta_p > 0.5 else "SELL"
-            kronos_conf = k_score if predicted_dir == "BUY" else (1.0 - k_score)
-            xgb_conf = x_score if predicted_dir == "BUY" else (1.0 - x_score)
-            if False: # kronos_conf < 0.70 or xgb_conf < 0.65:
-                logging.warning(f"[{symbol}] [HARD_VETO] [WEAK_MODEL_VETO] Kronos Conf {kronos_conf:.3f} < 0.70 or XGB Conf {xgb_conf:.3f} < 0.65. Blocking signal.")
-                return
-            
-            regime_prob = label_probs.get(wasserstein_state, 0.0)
-            if regime_prob < 0.55:
-                logging.info(f"[{symbol}] [REGIME_AWARENESS_BYPASS] HMM confidence low ({regime_prob:.3f} < 0.55). Defaulting to P_blend conviction ({meta_p:.4f}) and bypassing hard HMM regime vetoes.")
-            elif is_legend:
-                logging.info(f"[{symbol}] [LEGEND_OVERRIDE] Cosine similarity to legend_wei vector > 85%. Bypassing HMM regime/directional penalties.")
-            else:
-                is_mixts_valid = (meta_p is not None and isinstance(meta_p, (int, float)))
-                if not is_mixts_valid and regime_prob < 0.60:
-                    logging.warning(f"[{symbol}] [HARD_VETO] [REGIME_MINIMUM_VETO] HMM {wasserstein_state} probability {regime_prob:.3f} < 0.60. Blocking signal.")
-                    return
-                if (predicted_dir == "BUY" and wasserstein_state == "BEAR") or (predicted_dir == "SELL" and wasserstein_state == "BULL"):
-                    logging.warning(f"[{symbol}] [HARD_VETO] [HMM_REGIME_CONFLICT] HMM state {wasserstein_state} conflicts with predicted direction {predicted_dir}. Blocking signal.")
-                    return
-            
-            entropy_val = 0.0
-            if df_ml is not None:
-                try:
-                    entropy_val = float(df_ml.iloc[-1].get("order_flow_entropy", 0.0))
-                except:
-                    pass
-            if latest_swing is not None:
-                try:
-                    entropy_val = max(entropy_val, float(latest_swing.get('entropy', 0.0)))
-                except:
-                    pass
-            if entropy_val > 1.0:
-                data_quality_flag = "DEGRADED"
-                logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Order Flow Entropy {entropy_val:.3f} > 1.0.")
-
-            if data_quality_flag != "PRISTINE":
-                logging.warning(f"[{symbol}] [HARD_VETO] [DATA_QUALITY_VETO] Data quality is {data_quality_flag}. Blocking signal.")
-                return
-            
-            
-            with _CYCLE_LOCK:
-                _CYCLE_PENDING_SIGNALS.append({
-                    "symbol": signal["symbol"],
-                    "direction": signal_dir,
-                    "strategy_type": signal["strategy_type"],
-                    "conviction": round(float(meta_p), 6),
-                    "sl": float(signal["sl"]),
-                    "tp": float(signal["tp"]),
-                    "size_multiplier": float(signal["size_multiplier"]),
-                    "tag": signal["tag"],
-                    "xgb_p": float(x_prob),
-                    "ddqn_p": float(ddqn_p),
-                    "wasserstein_state": wasserstein_state,
-                    "atr": float(atr),
-                    "timestamp": int(datetime.now(timezone.utc).timestamp()),
-                    "version": "v29.0-IRONCLAD-CADES",
-                    "signal_type": signal["strategy_type"],
-                    "model_divergence": float(model_divergence),
-                    "vrs": float(vrs),
-                    "applied_dynamic_gate": float(current_gate)
-                })
-            logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} >= dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). CLEAR.")
-            logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={wasserstein_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")
-        else:
-            logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} < dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). Suppressed.")
- 
+            logging.info(f"[GATE] {symbol}: P={meta_p:.6f} in DEAD-ZONE.")
+        elif norm_p >= current_gate and meta_p != 0.5:
+            if not _check_hard_vetoes(symbol, meta_p, is_graveyard, is_legend, active_scores, label_probs, wasserstein_state, df_ml, latest_swing, atr, data_quality_flag):
+                with _CYCLE_LOCK:
+                    _CYCLE_PENDING_SIGNALS.append({
+                        "symbol": symbol, "direction": "BUY" if meta_p > 0.5 else "SELL", "strategy_type": signal["strategy_type"], "conviction": round(float(meta_p), 6),
+                        "sl": float(signal["sl"]), "tp": float(signal["tp"]), "size_multiplier": float(signal["size_multiplier"]), "tag": signal["tag"],
+                        "xgb_p": float(x_prob), "ddqn_p": float(ddqn_p), "wasserstein_state": wasserstein_state, "atr": float(atr),
+                        "timestamp": int(datetime.now(timezone.utc).timestamp()), "version": "v29.0-IRONCLAD-CADES", "signal_type": signal["strategy_type"],
+                        "model_divergence": float(model_divergence), "vrs": float(vrs), "applied_dynamic_gate": float(current_gate)
+                    })
         timesfm_bridge.update_risk_cache(symbol, df_m15)
-
     except Exception as e:
-        error_msg = traceback.format_exc()
-        logging.error(f"[{symbol}] Oracle update error:\n{error_msg}")
-        if isinstance(e, (NameError, ImportError, AttributeError)):
-            diag_path = Path(PROJECT_ROOT) / "pending_diagnostics"
-            diag_path.mkdir(parents=True, exist_ok=True)
-            diag_file = diag_path / f"fatal_error_{int(time.time())}.json"
-            with open(diag_file, "w") as f:
-                json.dump({
-                    "timestamp": int(time.time()),
-                    "symbol": symbol,
-                    "error_type": type(e).__name__,
-                    "message": str(e),
-                    "traceback": error_msg,
-                    "halt_required": True
-                }, f, indent=4)
-            logging.critical(f"[SRE_HALT] FATAL ERROR DETECTED. Ticket dispatched: {diag_file.name}")
-
+        logging.error(f"[{symbol}] Oracle update error:\n{traceback.format_exc()}")
 def update_slow_oracles(symbol: str, force_refresh: bool = False):
     prep = fetch_and_calculate_raw_features(symbol, force_refresh)
     if prep is not None:
