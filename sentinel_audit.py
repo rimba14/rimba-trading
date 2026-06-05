@@ -6,8 +6,8 @@ import time
 def run_command(cmd, desc):
     print(f"[*] {desc}...")
     try:
-        # Use shell=True for npx and other CLI tools
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        # Use shell=False for security (avoid command injection)
+        result = subprocess.run(cmd, shell=False, capture_output=True, text=True)
         if result.returncode == 0:
             print(f"  [PASS]")
             return True, result.stdout
@@ -28,7 +28,7 @@ def audit():
 
     # 1. TrueCourse Analysis
     # Note: We know 'claude' is missing, but we run it for compliance
-    tc_ok, tc_out = run_command("npx truecourse analyze --diff", "TrueCourse Layer Check")
+    tc_ok, tc_out = run_command(["npx", "truecourse", "analyze", "--diff"], "TrueCourse Layer Check")
     
     # 2. Heuristic Layer Audit (Internal Logic)
     print("[*] Heuristic Dependency Scan...")
@@ -45,8 +45,9 @@ def audit():
     # 3. Core Unit Tests
     test_files = ["test_connector_diag.py", "test_risk_bypass.py", "test_guard.py"]
     for test in test_files:
-        if os.path.exists(f"C:\\Sentinel_Project\\{test}"):
-            ok, out = run_command(f"python C:\\Sentinel_Project\\{test}", f"Test Suite: {test}")
+        test_path = f"C:\\Sentinel_Project\\{test}"
+        if os.path.exists(test_path):
+            ok, out = run_command(["python", test_path], f"Test Suite: {test}")
             if not ok:
                 print(f"\n[!] CRITICAL TEST FAILURE in {test}")
                 return False
