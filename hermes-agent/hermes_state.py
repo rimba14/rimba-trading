@@ -312,6 +312,7 @@ class SessionDB:
                         # name and column_type come from the hardcoded tuple above,
                         # not user input. Double-quote identifier escaping is applied
                         # as defense-in-depth; SQLite DDL cannot be parameterized.
+                        self._validate_identifier(name)
                         safe_name = name.replace('"', '""')
                         cursor.execute(f'ALTER TABLE sessions ADD COLUMN "{safe_name}" {column_type}')
                     except sqlite3.OperationalError:
@@ -329,6 +330,7 @@ class SessionDB:
                     ("codex_reasoning_items", "TEXT"),
                 ]:
                     try:
+                        self._validate_identifier(col_name)
                         safe = col_name.replace('"', '""')
                         cursor.execute(
                             f'ALTER TABLE messages ADD COLUMN "{safe}" {col_type}'
@@ -595,6 +597,17 @@ class SessionDB:
         if len(matches) == 1:
             return matches[0]
         return None
+
+    @staticmethod
+    def _validate_identifier(name: str) -> None:
+        """Validate that a string is a safe SQL identifier.
+
+        Ensures the name only contains alphanumeric characters and underscores,
+        and starts with a letter or underscore. This is used for defense-in-depth
+        when building DDL statements that cannot be parameterized.
+        """
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            raise ValueError(f"Invalid SQL identifier: {name}")
 
     # Maximum length for session titles
     MAX_TITLE_LENGTH = 100

@@ -1301,6 +1301,30 @@ class TestTitleUniqueness:
         assert db.get_session_title("nonexistent") is None
 
 
+class TestSQLIdentifierValidation:
+    def test_sql_identifier_validation(self):
+        """Verify that _validate_identifier accepts safe names and rejects unsafe ones."""
+        # Safe identifiers
+        SessionDB._validate_identifier("cache_read_tokens")
+        SessionDB._validate_identifier("reasoning")
+        SessionDB._validate_identifier("_private_col")
+        SessionDB._validate_identifier("col123")
+
+        # Unsafe identifiers
+        unsafe_names = [
+            "cache-read-tokens",  # hyphen
+            "cache read tokens",  # space
+            "123col",            # starts with digit
+            "col; DROP TABLE sessions; --", # injection attempt
+            "col' OR '1'='1",    # injection attempt
+            "\"quoted_col\"",    # contains quotes
+            "col$name",          # special character
+        ]
+        for name in unsafe_names:
+            with pytest.raises(ValueError, match="Invalid SQL identifier"):
+                SessionDB._validate_identifier(name)
+
+
 class TestTitleLineage:
     """Tests for title lineage resolution and auto-numbering."""
 
