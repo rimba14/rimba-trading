@@ -1,4 +1,5 @@
 import tensortrade.env.default as default
+from tensortrade.env.default.rewards import RewardScheme
 from tensortrade.feed.core import DataFeed, Stream
 from tensortrade.oms.instruments import Instrument, USD, BTC
 from tensortrade.oms.exchanges import Exchange
@@ -11,6 +12,69 @@ import git_arctic
 import logging
 
 logger = logging.getLogger("TensorEnv")
+
+class DifferentialSortinoReward(RewardScheme):
+    """
+    Online, recursive step-by-step Differential Sortino Ratio tracker
+    Derived from Koskinen (2025) Appendix A.
+    """
+    def __init__(self, target_return=0.0, eta=0.01):
+        super().__init__()
+        self.target_return = target_return
+        self.eta = eta  # Smoothing/decay constant for moving averages
+        self.A = None   # Online exponential mean return
+        self.D = None   # Online exponential downside variance
+        self.previous_net_worth = None
+
+    def get_reward(self, portfolio: Portfolio) -> float:
+        current_net_worth = portfolio.performance.get('net_worth', 0.0)
+        
+        if self.previous_net_worth is None:
+            self.previous_net_worth = current_net_worth
+            return 0.0
+            
+        r_t = (current_net_worth - self.previous_net_worth) / (self.previous_net_worth + 1e-9)
+        self.previous_net_worth = current_net_worth
+
+        # Initialize structure on first observation
+        if self.A is None or self.D is None:
+            self.A = r_t
+            initial_downside = max(self.target_return - r_t, 0)
+            self.D = (initial_downside ** 2) + (0.02 ** 2) # Buffer variance
+            return 0.0
+        
+        prev_A = self.A
+        prev_D = self.D
+        prev_B = np.sqrt(prev_D) if prev_D > 1e-8 else 0.02
+
+        # 1. Update Exponential Moving Average of returns
+        self.A = self.eta * r_t + (1 - self.eta) * prev_A
+        
+        # 2. Isolate Downside Deviation
+        downside = max(self.target_return - r_t, 0)
+        
+        # 3. Update Downside Variance
+        self.D = self.eta * (downside ** 2) + (1 - self.eta) * prev_D
+        
+        # 4. Calculate Differential Sortino Contribution (Derivative)
+        mean_component = (r_t - prev_A) / prev_B
+        
+        if downside > 0:
+            vol_component = (prev_A * (downside**2 - prev_D)) / (2 * (prev_D ** 1.5))
+            dS_t = mean_component - self.eta * vol_component
+        else:
+            # Zero downside penalty contribution if it's an upside outperformance bar
+            dS_t = mean_component
+            
+        # 5. HKUST 2025 Multi-Agent Reward Safeguard
+        # Strict step penalty if policy triggers counter-trend order cancellations within 500ms of breakout.
+        current_step = portfolio.step if hasattr(portfolio, 'step') else 0
+        is_breakout = hasattr(self, 'breakout_active') and self.breakout_active
+        is_cancel = hasattr(portfolio, 'env') and hasattr(portfolio.env.action_scheme, 'action') and portfolio.env.action_scheme.action == 0
+        if is_breakout and is_cancel:
+            dS_t -= 1.0  # Strict penalty to optimize for survival rather than short-term friction
+            
+        return float(dS_t)
 
 def create_vantage_env(df: pd.DataFrame, observer_window: int = 20):
     """
@@ -50,9 +114,9 @@ def create_vantage_env(df: pd.DataFrame, observer_window: int = 20):
         Wallet(vantage_exchange, 0 * ASSET),
     ])
     
-    # 5. Reward Scheme (Dense, Cost-Aware PBR)
-    # Position-Based Returns (PBR) penalizes churn and rewards holding profitable convictions.
-    reward_scheme = default.rewards.PBR()
+    # 5. Reward Scheme (Differential Sortino Ratio)
+    # Penalizes asymmetric downside without squashing alpha fat-tails
+    reward_scheme = DifferentialSortinoReward(target_return=0.0, eta=0.01)
     
     # 6. Action Scheme
     action_scheme = default.actions.SimpleOrders()

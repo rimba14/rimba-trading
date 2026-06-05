@@ -115,6 +115,16 @@ def get_medallion_size(symbol, account_info, atr, hcs, features=None, size_mult=
             "trust_gate_failed": True
         }
 
+    # v44.0: ZOMBIE_HOLD Suppression Gate
+    if features.get("zombie_state") == "ZOMBIE_HOLD":
+        return {
+            "calculated_risk_dollars": 0.0000,
+            "kelly_f": 0.0000,
+            "win_prob": 0.0,
+            "hcs": 0,
+            "zombie_blocked": True
+        }
+
     # 1. Structural Gate: If the technicals are garbage, block the trade before ML is queried.
     if hcs < 2:
         return {"calculated_risk_dollars": 0.0, "kelly_f": 0.0, "win_prob": 0.0, "hcs": hcs}

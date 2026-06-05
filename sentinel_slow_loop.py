@@ -249,7 +249,7 @@ import gitagent_mixts as mixts
 
 # -- Config --------------------------------------------------------------------
 from sentinel_config import (
-    EPISTEMIC_GATE, STALENESS_THRESHOLD, ARCTIC_TIMEOUT,
+    EPISTEMIC_GATE, STALENESS_THRESHOLD, ARCTIC_TIMEOUT, ARCTIC_URI,
     KELLY_FRACTION, PORTFOLIO_HEAT_CAP, HARD_RISK_CAP, LEVERAGE_WALL,
     WATCHLIST, REASONING_TIMEOUT,
     GROQ_GEMMA_MODEL, GEMINI_MODEL_NAME,
@@ -383,7 +383,7 @@ def _get_oracle_lib():
     global _ARCTIC, oracle_lib
     if oracle_lib is None:
         from arcticdb import Arctic
-        _ARCTIC = Arctic("lmdb://./data/arctic_cache")
+        _ARCTIC = Arctic(ARCTIC_URI)
         oracle_lib = (
             _ARCTIC["oracle_cache"]
             if "oracle_cache" in _ARCTIC.list_libraries()
@@ -392,23 +392,48 @@ def _get_oracle_lib():
     return oracle_lib
 
 def _arctic_read(key: str):
-    """ArcticDB read with hard 300 ms timeout (Phase 1)."""
+    """ArcticDB read with latency monitoring (v32.0-PROD)."""
+    global _ARCTIC, oracle_lib
     lib = _get_oracle_lib()
+    t0 = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         fut = ex.submit(lib.read, key)
         try:
-            return fut.result(timeout=ARCTIC_TIMEOUT)
+            res = fut.result(timeout=ARCTIC_TIMEOUT)
+            latency = time.perf_counter() - t0
+            if latency > 0.0015:
+                logging.warning(f"[PHOTONIC_LATENCY_WARNING] Read latency {latency*1000:.2f}ms exceeds 1.5ms threshold. Degrading to SSD LMDB.")
+                from arcticdb import Arctic
+                _ARCTIC = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+                oracle_lib = (
+                    _ARCTIC["oracle_cache"]
+                    if "oracle_cache" in _ARCTIC.list_libraries()
+                    else _ARCTIC.create_library("oracle_cache")
+                )
+            return res
         except concurrent.futures.TimeoutError:
             logging.error(f"[ARCTIC_TIMEOUT] Read '{key}' exceeded {ARCTIC_TIMEOUT*1000:.0f} ms. Returning None to skip asset.")
             return None
 
 def _arctic_write(key: str, df: pd.DataFrame):
-    """ArcticDB write with hard 300 ms timeout (Phase 1)."""
+    """ArcticDB write with latency monitoring (v32.0-PROD)."""
+    global _ARCTIC, oracle_lib
     lib = _get_oracle_lib()
+    t0 = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         fut = ex.submit(lib.write, key, df)
         try:
             fut.result(timeout=ARCTIC_TIMEOUT)
+            latency = time.perf_counter() - t0
+            if latency > 0.0015:
+                logging.warning(f"[PHOTONIC_LATENCY_WARNING] Write latency {latency*1000:.2f}ms exceeds 1.5ms threshold. Degrading to SSD LMDB.")
+                from arcticdb import Arctic
+                _ARCTIC = Arctic("lmdb://C:/Sentinel_Project/data/arctic_cache")
+                oracle_lib = (
+                    _ARCTIC["oracle_cache"]
+                    if "oracle_cache" in _ARCTIC.list_libraries()
+                    else _ARCTIC.create_library("oracle_cache")
+                )
         except concurrent.futures.TimeoutError:
             logging.error(f"[ARCTIC_TIMEOUT] Write '{key}' exceeded {ARCTIC_TIMEOUT*1000:.0f} ms.")
 
@@ -1914,6 +1939,18 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
             )
         # ────────────────────────────────────────────────────────────────────────
 
+        # HKUST 2025 Multi-Agent Collusion Regime Enforcement
+        try:
+            regime_multi_agent = int(df_ml.iloc[-1].get("REGIME_MULTI_AGENT_COLLUSION", 0)) if df_ml is not None else 0
+        except Exception:
+            regime_multi_agent = 0
+
+        if regime_multi_agent == 1:
+            if signal.get('strategy_type') == 'MOMENTUM':
+                current_gate = max(current_gate, 0.88)
+                logging.info(f"[{symbol}] [REGIME_MULTI_AGENT_COLLUSION] Breakout pattern detected. Clamped EPISTEMIC_GATE to 0.88.")
+            signal['execution_route'] = 'ICEBERG'
+
         if adjusted_conviction is not None and adjusted_conviction == 0.0:
             meta_p = 0.50
             
@@ -2102,7 +2139,8 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
                     "signal_type": signal["strategy_type"],
                     "model_divergence": float(model_divergence),
                     "vrs": float(vrs),
-                    "applied_dynamic_gate": float(current_gate)
+                    "applied_dynamic_gate": float(current_gate),
+                    "execution_route": signal.get("execution_route", "DEFAULT")
                 })
             logging.info(f"[GATE] {symbol}: norm_p={norm_p:.4f} >= dynamic_gate={current_gate:.4f} (Base={base_gate:.2f}, VRS={vrs:.2f}). CLEAR.")
             logging.info(f"[PENDING] [SIGNAL] {symbol}: {signal_dir} | P={meta_p:.6f} | norm_p={norm_p:.4f} | HMM={wasserstein_state} | DDQN={ddqn_p:.3f} | Divergence={model_divergence:.3f}")

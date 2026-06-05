@@ -12,6 +12,8 @@ import os
 
 # Explicitly load utilities to prevent NameError scope leaks
 import gitagent_utils as utils
+import torch
+from sentinel_config import PHOTONIC_FABRIC_ACTIVE, PHOTONIC_FABRIC_PATH, ARCTIC_URI
 import gitagent_sigproc as sigproc
 import gitagent_synthesis as syn
 import gitagent_transformer as trans
@@ -76,6 +78,33 @@ def _execute_candidate(cand: dict, balance: float, total_run_risk: float, net_be
     # Apply standard allocation heuristics
     return True
 
+def fetch_predictions(symbol: str) -> dict:
+    """
+    v32.0-PROD: Zero-copy direct read from HBM Photonic Fabric if active.
+    """
+    if PHOTONIC_FABRIC_ACTIVE:
+        try:
+            # Memory-mapped PyTorch Tensor zero-copy read
+            tensor_path = os.path.join(PHOTONIC_FABRIC_PATH, f"{symbol}_pred.pt")
+            if os.path.exists(tensor_path):
+                # map_location='cpu' with mmap=True enforces zero-copy
+                t = torch.load(tensor_path, map_location='cpu', mmap=True)
+                return {"final_verdict": "BUY" if t[0].item() > 0.5 else "SELL", "score": t[0].item()}
+        except Exception as e:
+            print(f"[PHOTONIC_READ_ERR] {e}")
+            pass
+            
+    # Fallback to ArcticDB SSD
+    try:
+        from arcticdb import Arctic
+        store = Arctic(ARCTIC_URI)
+        lib = store["oracle_cache"]
+        df = lib.read(f"{symbol}_meta").data
+        score = df.iloc[-1].get("xgb_p", 0.5)
+        return {"final_verdict": "BUY" if float(score) > 0.5 else "SELL", "score": float(score)}
+    except Exception:
+        return {"final_verdict": "HOLD", "score": 0.5}
+
 def run_gitagent_scan():
     """Entry point for parallel background scanning operations."""
     print("[SCAN] Running multi-threaded GitAgent market scanning suite...")
@@ -87,7 +116,8 @@ def run_gitagent_scan():
     for sym in symbols:
         atr = calculate_atr(sym)
         safe = utils.is_liquidity_safe(sym, atr)
-        print(f" -> {sym}: ATR={atr:.5f} | LiquiditySafe={safe}")
+        pred = fetch_predictions(sym)
+        print(f" -> {sym}: ATR={atr:.5f} | LiquiditySafe={safe} | HBM_Pred={pred['final_verdict']} ({pred['score']:.3f})")
     print("[SCAN] Cycle complete.")
 
 if __name__ == "__main__":

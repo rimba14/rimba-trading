@@ -26,7 +26,7 @@ import torch.nn.functional as F
 logger = logging.getLogger("OxfordDDQN")
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-STATE_DIM   = 12    # Feature vector dimension (must match engineer_features output)
+STATE_DIM   = 20    # Feature vector dimension (v36.00: 8 Spatial + 12 Temporal)
 ACTION_DIM  = 3     # Z_TIGHTEN=0, HOLD=1, Z_WIDEN=2
 HIDDEN_DIM  = 128
 LR          = 1e-4
@@ -40,43 +40,84 @@ CHECKPOINT_PATH = os.path.join(os.path.dirname(__file__), "oxford_ddqn_weights.p
 
 # ── Network Architecture ───────────────────────────────────────────────────────
 
+class ChaityShoishobEncoder(nn.Module):
+    """
+    Multi-Time Scale Spatial-Temporal State Encoder
+    Derived from Chaity & Shoishob (2025) HFT AI Architecture
+    """
+    def __init__(self, spatial_features=8, temporal_features=12, lstm_hidden=64):
+        super(ChaityShoishobEncoder, self).__init__()
+        
+        # Stream A: High-Frequency Spatial Feature Extractor (CNN Path)
+        self.spatial_cnn = nn.Sequential(
+            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(16),
+            nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+        
+        self.cnn_flat_dim = 32 * spatial_features
+        
+        # Stream B: Low-Frequency Temporal Sequence Tracker (RNN Path)
+        self.temporal_lstm = nn.LSTM(
+            input_size=temporal_features,
+            hidden_size=lstm_hidden,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.2
+        )
+        
+        # Joint Integration Matrix
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(self.cnn_flat_dim + lstm_hidden, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 64)
+        )
+
+    def forward(self, x_spatial, x_temporal):
+        x_s = x_spatial.unsqueeze(1)
+        spatial_out = self.spatial_cnn(x_s)
+        
+        lstm_out, _ = self.temporal_lstm(x_temporal)
+        temporal_out = lstm_out[:, -1, :]
+        
+        fused_context = torch.cat((spatial_out, temporal_out), dim=1)
+        unified_latent_state = self.fusion_layer(fused_context)
+        return unified_latent_state
+
 class DuelingDDQNNet(nn.Module):
     """
     Dueling DDQN architecture for enhanced value estimation.
-
-    Dueling streams:
-      - Value stream: V(s) — how good is this state?
-      - Advantage stream: A(s,a) — how much better is each action?
-    Combined: Q(s,a) = V(s) + A(s,a) - mean(A(s,a))
+    Upgraded to Spatial-Temporal Dual-Stream (v36.00).
     """
     def __init__(self, state_dim: int = STATE_DIM, action_dim: int = ACTION_DIM, hidden: int = HIDDEN_DIM):
         super().__init__()
-        self.shared = nn.Sequential(
-            nn.Linear(state_dim, hidden),
-            nn.LayerNorm(hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-            nn.LayerNorm(hidden),
-            nn.ReLU(),
-        )
+        self.encoder = ChaityShoishobEncoder(spatial_features=8, temporal_features=12, lstm_hidden=64)
+        
         # Value stream
         self.value_head = nn.Sequential(
-            nn.Linear(hidden, hidden // 2),
+            nn.Linear(64, hidden // 2),
             nn.ReLU(),
             nn.Linear(hidden // 2, 1),
         )
         # Advantage stream
         self.advantage_head = nn.Sequential(
-            nn.Linear(hidden, hidden // 2),
+            nn.Linear(64, hidden // 2),
             nn.ReLU(),
             nn.Linear(hidden // 2, action_dim),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        shared_out = self.shared(x)
+        # Split flat input into spatial (first 8) and temporal (remaining 12)
+        x_spatial = x[:, :8]
+        x_temporal = x[:, 8:].unsqueeze(1) # Add seq dimension=1
+        
+        shared_out = self.encoder(x_spatial, x_temporal)
         value      = self.value_head(shared_out)
         advantage  = self.advantage_head(shared_out)
-        # Combine: Q(s,a) = V(s) + (A(s,a) - mean_a(A(s,a)))
         q_values   = value + (advantage - advantage.mean(dim=-1, keepdim=True))
         return q_values
 

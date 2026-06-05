@@ -42,8 +42,8 @@ def calculate_cross_impact(data, other_asset_data):
 
 from jl_compression import JLCompressor
 
-# v23.3: Persistent Compressor instance
-compressor = JLCompressor(input_dim=768 + 6, target_dim=128)
+# v23.3: Persistent Compressor instance (v36.00 upgrade: 8 base dims)
+compressor = JLCompressor(input_dim=768 + 8, target_dim=128)
 
 def generate_features(ticks_df, other_asset_df=None):
     if 'price' not in ticks_df.columns and 'close' in ticks_df.columns:
@@ -63,14 +63,23 @@ def generate_features(ticks_df, other_asset_df=None):
     sentiment = calculate_nlp_sentiment(ticks_df)
     cross_impact = calculate_cross_impact(ticks_df, other_asset_df)
 
-    # Base features (6-dim)
+    # v36.00 Directive: Spatial-Temporal Dual-Stream Metrics
+    voi = (ticks_df.get('bid_sz', pd.Series(0, index=ticks_df.index)).diff().fillna(0) - 
+           ticks_df.get('ask_sz', pd.Series(0, index=ticks_df.index)).diff().fillna(0))
+    b_sz = ticks_df.get('bid_sz', pd.Series(0, index=ticks_df.index))
+    a_sz = ticks_df.get('ask_sz', pd.Series(0, index=ticks_df.index))
+    obp = b_sz / (b_sz + a_sz + 1e-9)
+
+    # Base features (8-dim)
     base_features = pd.DataFrame({
         'imbalance': imbalance,
         'spread': spread,
         'volatility': volatility,
         'macd': macd,
         'sentiment': sentiment,
-        'cross_impact': cross_impact
+        'cross_impact': cross_impact,
+        'voi': voi,
+        'obp': obp
     }).ffill().fillna(0)
     
     # v23.3 Directive: Include high-dimensional NLP Embeddings (768d)
@@ -203,6 +212,19 @@ def engineer_features(df, price_col="close", volume_col="tick_volume", frac_d=0.
     neg_p = (returns < 0).rolling(window=20, min_periods=1).mean() + 1e-9
     entropy_raw = -(pos_p * np.log2(pos_p) + neg_p * np.log2(neg_p)).fillna(0)
     df['order_flow_entropy'] = np.clip(entropy_raw, 0.0, 1.0)
+    
+    # 4. HKUST 2025 Multi-Agent Collusion Regime
+    b_sz = df.get('bid_sz', pd.Series(0, index=df.index)).fillna(0)
+    a_sz = df.get('ask_sz', pd.Series(0, index=df.index)).fillna(0)
+    resting_volume = b_sz + a_sz
+    depth_variance = resting_volume.rolling(window=20, min_periods=1).var().fillna(0)
+    
+    var_mean = depth_variance.rolling(window=20, min_periods=1).mean()
+    var_std = depth_variance.rolling(window=20, min_periods=1).std().fillna(1e-9) + 1e-9
+    z_var = (depth_variance - var_mean) / var_std
+    
+    imbalance = (b_sz - a_sz) / (resting_volume + 1e-9)
+    df['REGIME_MULTI_AGENT_COLLUSION'] = ((z_var < -1.5) & (imbalance.abs() > 0.70)).astype(int)
 
     # Inject Jitter if in Crushed Volatility regime (runs on numerical cols BEFORE pinning overdrive)
     df = gaussian_jitter_injector(df, vrs)

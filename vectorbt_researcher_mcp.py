@@ -190,6 +190,16 @@ def run_parameter_sweep(symbol, timeframe='M15', lookback_days=30):
             exits = (probs < 0.45).reshape(-1, 1) | ~test_mask.reshape(-1, 1)
             
             pf = vbt.Portfolio.from_signals(price, entries, exits, freq='15m')
+            
+            # v36.00: Optimization Gate Enforcement (PF >= 2.0, Win Rate >= 60%)
+            stats = pf.stats()
+            profit_factor = stats.get('Profit Factor', 0.0)
+            win_rate = stats.get('Win Rate [%]', 0.0) / 100.0
+            
+            if pd.isna(profit_factor) or pd.isna(win_rate) or profit_factor < 2.0 or win_rate < 0.60:
+                logging.warning(f"Optimization Gate Failed (PF={profit_factor}, WR={win_rate}). Triggering model freeze and fallback.")
+                return {"status": "rejected", "reason": "Optimization Gate Failure (PF < 2.0 or WR < 60%)"}
+                
             fold_sharpe = pf.sharpe_ratio()
             all_path_sharpes.append(fold_sharpe)
 

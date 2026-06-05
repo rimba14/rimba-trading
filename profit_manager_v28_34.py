@@ -53,6 +53,7 @@ from dotenv import load_dotenv
 from scipy import stats
 
 from agents.risk_agent import check_upcoming_tier1_events
+import pytz
 
 load_dotenv()
 
@@ -95,6 +96,70 @@ logger = logging.getLogger("ProfitManager")
 #  SHOCK DETECTOR & FAILSAFE DEFINITIONS
 # ══════════════════════════════════════════════════════════════════════════════
 from enum import Enum
+
+class ConvictionGatedExitManager:
+    """
+    Constitutional State Machine for Asymmetric Position Liquidation and Zombie Tracking.
+    Protects short-term alpha gains while preventing underwater trailing stops.
+    """
+    def __init__(self, epistemic_gate=0.82, buffer_atr_multiplier=0.3):
+        self.EPISTEMIC_GATE = epistemic_gate
+        self.BUFFER_MULT = buffer_atr_multiplier
+        self.NY_OPEN_HOUR_UTC = 13
+        self.NY_OPEN_MIN_UTC = 30
+
+    def evaluate_execution_state(self, position, current_tick, alpha_features, metadata_store):
+        ticket = position.ticket
+        symbol = position.symbol
+        pos_type = position.type
+        entry_price = position.price_open
+        
+        atr = alpha_features.get('atr', 0.0)
+        breakeven_buffer = self.BUFFER_MULT * atr
+        
+        current_price = current_tick.bid if pos_type == mt5.ORDER_TYPE_BUY else current_tick.ask
+        if pos_type == mt5.ORDER_TYPE_BUY:
+            unrealized_pnl = current_price - entry_price
+        else:
+            unrealized_pnl = entry_price - current_price
+            
+        p_current = alpha_features.get('p_blend', 0.50)
+        hmm_flipped = alpha_features.get('hmm_regime_transition', False)
+        session_violated = alpha_features.get('session_boundary_crossed', False)
+        
+        conviction_dead = (p_current < self.EPISTEMIC_GATE) or hmm_flipped or session_violated
+        current_state = metadata_store.get(ticket, {}).get('zombie_state', "NOMINAL")
+        
+        if conviction_dead:
+            if unrealized_pnl >= -breakeven_buffer:
+                logger.warning(f"[EXIT_TRIGGER] Alpha decayed on ticket {ticket}. Realized PnL: {unrealized_pnl:.2f}. Executing market close.")
+                return "ACTION_MARKET_CLOSE", "CONVICTION_DEAD_WITH_ALPHA_OR_FLAT"
+            else:
+                if current_state == "NOMINAL":
+                    logger.info(f"[ZOMBIE_ENGAGED] Position {ticket} running underwater without thesis conviction. Locking down boundaries.")
+                    metadata_store[ticket] = {
+                        'zombie_state': "ZOMBIE_HOLD",
+                        'entry_zombie_time': datetime.now(pytz.utc)
+                    }
+        
+        if metadata_store.get(ticket, {}).get('zombie_state') == "ZOMBIE_HOLD":
+            if p_current >= self.EPISTEMIC_GATE and not hmm_flipped:
+                logger.info(f"[ZOMBIE_HEALED] Conviction restored to {p_current:.3f} on ticket {ticket}. Resuming nominal monitoring.")
+                metadata_store[ticket]['zombie_state'] = "NOMINAL"
+                return "ACTION_HOLD", "THESIS_REVIVED"
+                
+            if "NAS100" in symbol:
+                now_utc = datetime.now(pytz.utc)
+                zombie_timestamp = metadata_store[ticket]['entry_zombie_time']
+                if now_utc.hour == self.NY_OPEN_HOUR_UTC and now_utc.minute >= self.NY_OPEN_MIN_UTC:
+                    if now_utc.date() > zombie_timestamp.date() or (now_utc - zombie_timestamp) > timedelta(hours=4):
+                        logger.warning(f"[HARD_EXPIRY] Zombie position {ticket} failed to recover inside current NY session cycle. Forcing liquidation.")
+                        return "ACTION_MARKET_CLOSE", "ZOMBIE_HARD_EXPIRY_NY_OPEN"
+                        
+        if metadata_store.get(ticket, {}).get('zombie_state') == "ZOMBIE_HOLD":
+            return "ACTION_LOCK_BOUNDARIES", "ZOMBIE_STATE_ACTIVE"
+            
+        return "ACTION_HOLD", "NOMINAL_MANAGEMENT"
 
 class FailsafeAction(Enum):
     MARKET_CLOSE = "MARKET_CLOSE"
@@ -1128,6 +1193,8 @@ class SentinelProfitManager:
         self.level_resolver   = StructuralLevelResolver(self._oracle)
         self.tp_engine        = TPPlacementEngine(self._oracle, self.level_resolver)
         self._tp_violation_log = []
+        self.exit_manager     = ConvictionGatedExitManager()
+        self.metadata_store   = {}
         self.hermes_agent = None
 
         self._last_regime_check: dict[str, float] = {}
@@ -1596,6 +1663,29 @@ class SentinelProfitManager:
 
             profit_r_now    = ps.profit_r(current_price, macro_atr, sl_mult)
             ps.peak_profit_r = max(ps.peak_profit_r, profit_r_now)
+
+            # Evaluate Conviction-Gated Exit (ZOMBIE_HOLD Protocol)
+            alpha_features = {
+                'atr': macro_atr,
+                'p_blend': live_p,
+                'hmm_regime_transition': (hmm_state != ps.entry_hmm) if ps.entry_hmm else False,
+                'session_boundary_crossed': False
+            }
+            
+            action, reason = self.exit_manager.evaluate_execution_state(pos, tick, alpha_features, self.metadata_store)
+            
+            # Replicate ZOMBIE_HOLD state to features cache for medallion sizing
+            if pos.ticket in self.metadata_store:
+                if self.metadata_store[pos.ticket].get("zombie_state") == "ZOMBIE_HOLD":
+                    ps.zombie_state = "ZOMBIE_HOLD" # Optional local tracking
+            
+            if action == "ACTION_MARKET_CLOSE":
+                push_exit_signal(pos, reason)
+                ps.liquidation_sent = True
+                ps.last_liquidation_ts = now
+                continue
+            elif action == "ACTION_LOCK_BOUNDARIES":
+                continue # Frozen loop, skip trailing stops completely
 
             # ENFORCED POSITION LIFE-CYCLE INVARIANT SCHEMA
             
