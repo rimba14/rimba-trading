@@ -2,9 +2,6 @@ import time
 import concurrent.futures
 
 class ThreadPoolTest:
-    def __init__(self):
-        pass
-
     def fetch_data(self, symbol):
         # mock sleep
         time.sleep(0.01)
