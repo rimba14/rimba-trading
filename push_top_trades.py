@@ -1,3 +1,4 @@
+import os
 import time
 import requests
 import logging
@@ -125,7 +126,11 @@ def push_trades():
         
         try:
             logger.info(f"Pushing {trade['symbol']} to execute_trade endpoint...")
-            resp = requests.post(URL, json=payload, timeout=10)
+            headers = {}
+            api_key = os.getenv("SENTINEL_API_KEY")
+            if api_key:
+                headers["X-API-Key"] = api_key
+            resp = requests.post(URL, json=payload, headers=headers, timeout=10)
             if resp.status_code == 200:
                 logger.info(f"[SUCCESS] {trade['symbol']} dispatched. Response: {resp.json()}")
             else:
