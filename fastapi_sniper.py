@@ -1036,7 +1036,8 @@ async def run_composite_preflight_checklist(
     current_atr = calculate_structural_atr_d1(symbol, period=14)
     point_val = info.trade_tick_value / (info.trade_tick_size / info.point) if info.trade_tick_size > 0 else info.trade_tick_value
     risk_budget = acc.balance * 0.02
-    affordable_lot = risk_budget / (current_atr * point_val * 3.0 + 1e-12)
+    multiplier = get_structural_multiplier(symbol)
+    affordable_lot = risk_budget / (current_atr * point_val * multiplier + 1e-12)
     if float(affordable_lot) < float(info.volume_min):
         return False, f"Point 2 Fail: Affordability pre-screen check failed ({affordable_lot:.4f} < broker min {info.volume_min})"
 
@@ -1177,9 +1178,9 @@ async def run_composite_preflight_checklist(
     # When the physical SL anchors to a wide ATR multiplier (FOREX: 6Ã—, Indices/Crypto: 4Ã—),
     # the conviction-scaled TP is overridden if it produces R:R < 1.0.
     # TP_min is locked to 1.5Ã— the SL distance, guaranteeing minimum 1:1.5 R:R on all swing entries.
-    distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
-    calculated_sl_dist = max(3.0 * current_atr, distance_to_fractal_sl)
-    broker_minimum_sl = info.trade_stops_level * info.point
+    multiplier = get_structural_multiplier(symbol)
+    calculated_sl_dist = current_atr * multiplier
+    broker_minimum_sl = (info.trade_stops_level * info.point) if info else 0.0001
     final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
 
     p_entry = conviction if direction == "BUY" else (1.0 - conviction)
@@ -1306,13 +1307,16 @@ def calculate_kelly_lot(symbol, conviction, acc=None):
     f_final = min(max(0, f_star * active_kelly_fraction), 0.02 if is_crypto else HARD_RISK_CAP) 
     risk_usd = acc.equity * f_final
     
-    # â”€â”€ v25.0: Align Sizing SL with Execution SL (ATR/Swing) â”€â”€
+    # â”€â”€ v25.0: Align Sizing SL with Execution SL (D1 Structural ATR) â”€â”€
     direction = "BUY" if conviction > 0.5 else "SELL"
     current_atr = calculate_structural_atr_d1(symbol, period=14)
-    distance_to_fractal_sl = calculate_fractal_swing(symbol, direction, lookback=20)
+    multiplier = get_structural_multiplier(symbol)
+
     spread = tick.ask - tick.bid
     spread_buffer = spread * 1.5
-    sl_dist_price = max(3.0 * current_atr, distance_to_fractal_sl)
+
+    # Unify to D1 Structural ATR strictly
+    sl_dist_price = current_atr * multiplier
     
     # Fallback if ATR is 0
     if sl_dist_price <= 0:
@@ -1412,6 +1416,16 @@ def calculate_ac_trajectory(
     
     return [max(0.0, float(s)) for s in child_sizes]
 
+def get_structural_multiplier(symbol: str) -> float:
+    """
+    Returns the asset-class multiplier for structural SL/TP distances.
+    v30.98: Forex (6.0), Crypto/Indices/Metals (4.0).
+    """
+    sym = symbol.upper()
+    if any(k in sym for k in ['BTC', 'ETH', 'US30', 'NAS100', 'US2000', 'SPX500', 'XAU', 'XAG']):
+        return 4.0
+    return 6.0
+
 def calculate_structural_atr_d1(symbol: str, period: int = 14) -> float:
     """
     v30.98: Fetch Daily ATR for SL/TP structural distance calculation.
@@ -1442,9 +1456,10 @@ def calculate_structural_atr_d1(symbol: str, period: int = 14) -> float:
     return d1_atr
 
 def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> Tuple[float, float]:
-    """Calculates live macroscopic ATR (H1) and distance to recent Swing High/Low.
-    NOTE v30.98: This function is for intraday sizing/routing ONLY. NOT for SL placement.
-    Use calculate_structural_atr_d1() for all structural SL/TP distances."""
+    """
+    DEPRECATED: Use calculate_structural_atr_d1 for all SL/TP distances.
+    Calculates live macroscopic ATR (H1) and distance to recent Swing High/Low.
+    """
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, lookback + 1)
     if rates is None or len(rates) < lookback + 1:
         tick = mt5.symbol_info_tick(symbol)
@@ -1477,7 +1492,10 @@ def calculate_atr_and_swing(symbol: str, direction: str, lookback: int = 20) -> 
     return current_atr, distance_to_swing
 
 def calculate_fractal_swing(symbol: str, direction: str, lookback: int = 20) -> float:
-    """v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using D1 data."""
+    """
+    DEPRECATED: Use calculate_structural_atr_d1 for all SL/TP distances.
+    v26.6: Rigid Fractal Anchoring (The 20-Bar Rule) using D1 data.
+    """
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, lookback)
     tick = mt5.symbol_info_tick(symbol)
     
@@ -1582,13 +1600,7 @@ def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
     except Exception as e:
         logger.warning(f"[{symbol}] Failed to retrieve/validate TimesFM boundaries: {e}")
 
-    def _get_asset_multiplier(sym):
-        if 'BTC' in sym or 'ETH' in sym: return 4.0
-        if 'US30' in sym or 'NAS100' in sym or 'US2000' in sym or 'SPX500' in sym: return 4.0
-        if 'XAU' in sym or 'XAG' in sym: return 4.0
-        return 6.0
-
-    constitutional_sl_distance = current_atr * _get_asset_multiplier(symbol)
+    constitutional_sl_distance = current_atr * get_structural_multiplier(symbol)
 
     if timesfm_valid:
         raw_dist = abs(entry_price - p10) if direction == "BUY" else abs(p90 - entry_price)
@@ -1660,24 +1672,17 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
 
         # Directive 1: CADES Conviction-Scaled TP & Structural SL (v23.14 Architecture)
         # Fix: Unify ATR logic across Sizing, SL, and TP strictly to D1 Structural ATR.
-        current_atr = calculate_structural_atr_d1(symbol, period=14)
-        structural_atr = current_atr
+        structural_atr = calculate_structural_atr_d1(symbol, period=14)
         
         # 1. Server-Side Hard Anchor (Institutional Risk Topology)
-        # v30.98: Use asset-class multiplier from _get_asset_multiplier (6.0 for forex)
-        def _get_asset_multiplier_inline(sym):
-            if 'BTC' in sym or 'ETH' in sym: return 4.0
-            if 'US30' in sym or 'NAS100' in sym or 'US2000' in sym or 'SPX500' in sym: return 4.0
-            if 'XAU' in sym or 'XAG' in sym: return 4.0
-            return 6.0
-
-        multiplier = _get_asset_multiplier_inline(symbol)
+        # v30.98: Use asset-class multiplier from get_structural_multiplier (6.0 for forex)
+        multiplier = get_structural_multiplier(symbol)
             
         calculated_sl_dist = structural_atr * multiplier
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
         final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
         
-        logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR v30.98: D1_ATR={structural_atr:.5f} | H1_ATR={current_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
+        logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR v30.98: D1_ATR={structural_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
         
         sl_price = price - final_sl_dist if direction == "BUY" else price + final_sl_dist
         sl_price = round(sl_price, digits)
@@ -1691,10 +1696,10 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         p_entry = max(p_entry, 0.60)
         
         # Directive 1: Implement Logarithmic TP Squashing (SRE Optimization)
-        # Linear: tp_dist = current_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
+        # Linear: tp_dist = structural_atr * (2.0 + 4.0 * ((p_entry - 0.60) / 0.40))
         normalized_p = (p_entry - 0.60) / 0.40
         tp_multiplier = 2.0 + 2.0 * math.log10(1 + 9 * normalized_p)
-        tp_dist = current_atr * tp_multiplier
+        tp_dist = structural_atr * tp_multiplier
         
         # --- NEW LOGIC: Recalculate Lot Size based on Final SL & Enforce TP Floor ---
         # Sizing Recalculation
@@ -1721,7 +1726,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         tp_price = price + tp_dist if direction == "BUY" else price - tp_dist
         tp_price = round(tp_price, digits)
         
-        logger.info(f"[{symbol}] CADES TP Scaled: P={p_entry:.4f} -> TP Dist={tp_dist/current_atr:.2f}x ATR")
+        logger.info(f"[{symbol}] CADES TP Scaled: P={p_entry:.4f} -> TP Dist={tp_dist/structural_atr:.2f}x ATR")
 
         # â”€â”€ v23.0: Almgren-Chriss Trajectory Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if lot >= AC_LARGE_ORDER_THRESHOLD:
