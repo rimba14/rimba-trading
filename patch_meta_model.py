@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 path = Path(r"C:\Sentinel_Project\math_meta_model.py")
