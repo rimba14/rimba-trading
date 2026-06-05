@@ -113,13 +113,18 @@ def calculate_currency_exposure(positions) -> Dict[str, float]:
     if not positions:
         return exposures
         
+    rate_cache = {}
+    sym_info_cache = {}
+
     for p in positions:
         try:
             symbol = p.symbol
             base, quote = parse_base_quote(symbol)
             
             # Determine contract size
-            sym_info = mt5.symbol_info(symbol)
+            if symbol not in sym_info_cache:
+                sym_info_cache[symbol] = mt5.symbol_info(symbol)
+            sym_info = sym_info_cache[symbol]
             contract_size = sym_info.trade_contract_size if sym_info else 100.0
             
             # Calculate risk in quote currency
@@ -131,7 +136,10 @@ def calculate_currency_exposure(positions) -> Dict[str, float]:
                 risk_quote = p.volume * p.price_open * contract_size * 0.02
                 
             # Convert quote to USD
-            rate = get_usd_rate(quote)
+            if quote not in rate_cache:
+                rate_cache[quote] = get_usd_rate(quote)
+            rate = rate_cache[quote]
+
             risk_usd = risk_quote * rate
             
             # Aggregate exposures directionally:
