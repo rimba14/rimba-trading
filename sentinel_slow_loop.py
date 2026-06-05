@@ -1219,7 +1219,7 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
             nan_count = df_ml.isna().sum().sum() if df_ml is not None else 0
             logging.info(f"[{symbol}] v22.4 Feature Engineering applied: [FracDiff, FFT, CS_Rank={current_rank:.2f}]. NaN Count: {nan_count}")
             if nan_count > 0:
-                logging.warning(f"[{symbol}] WARNING: NaNs detected in features:\n{df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
+                logging.warning(f"[{symbol}] WARNING: NaNs detected in features: {df_ml.isna().sum()[df_ml.isna().sum() > 0]}")
         except Exception as e:
             logging.error(f"[{symbol}] FEATURE_ENGINEERING_CRITICAL_FAILURE (Non-Fatal for Swing): {e}")
             if latest_swing is None:
@@ -1354,6 +1354,85 @@ def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -
         logging.error(f"[{symbol}] Feature extraction failed: {e}\n{traceback.format_exc()}")
         return None
 
+
+def _check_dead_market_bypass(symbol, data_quality_flag, atr):
+    """Handles dead market short-circuiting."""
+    if data_quality_flag == "DEAD_MARKET":
+        logging.info(f"[{symbol}] Dead market bypass engaged. Enforcing zero conviction and short-circuiting inference.")
+
+        with _CYCLE_LOCK:
+            _CYCLE_P_SCORES[symbol] = 0.0000
+
+        # Direct cache write to ensure readiness script sees the DEAD_MARKET state with 0.0 conviction.
+        _arctic_write(f"{symbol}_meta", pd.DataFrame([{
+            "primary_dir": 0,
+            "meta_conviction": 0.500,
+            "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
+            "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
+            "strategy_type": "MOMENTUM",
+            "atr": atr,
+            "entropy": 0.0,
+            "hawkes_intensity": 0.0,
+            "timestamp": utils.get_utc_epoch(),
+            "is_legend": False,
+            "is_graveyard": False,
+            "vpin": 0.5,
+            "rsi": 50.0,
+            "vrs": 1.0,
+            "xgb_p": 0.500,
+            "ddqn_p": 0.500
+        }]))
+        return True
+    return False
+
+def _handle_model_drift_detection(symbol, meta_p):
+    """Logic for mode collapse and drift recovery."""
+    global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
+    if float(meta_p) != 0.50:
+        _P_SCORE_HISTORY.append(float(meta_p))
+        if len(_P_SCORE_HISTORY) > 100:
+            _P_SCORE_HISTORY.pop(0)
+
+    if len(_P_SCORE_HISTORY) == 100:
+        p_std = float(np.std(_P_SCORE_HISTORY))
+        if p_std < 0.02:
+            if _DRIFT_RECOVERY_ATTEMPTS < 3:
+                _DRIFT_RECOVERY_ATTEMPTS += 1
+                logging.critical(
+                    f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). "
+                    f"Initiating Automated Drift Reset ({_DRIFT_RECOVERY_ATTEMPTS}/3)..."
+                )
+                _P_SCORE_HISTORY.clear()
+                try:
+                    _get_oracle_lib()
+                    _ARCTIC.delete_library("oracle_cache")
+                    oracle_lib = _ARCTIC.create_library("oracle_cache")
+                    _load_meta_model_with_failsafe()
+                    logging.info("[DRIFT RECOVERY] Cache purged and models rebooted.")
+                except Exception as e:
+                    logging.error(f"[DRIFT RECOVERY] Reset failed: {e}")
+            else:
+                _MODEL_DRIFT_HALT = True
+                logging.critical(
+                    f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
+                    f"is {p_std:.6f} < 0.02 limit. Recovery attempts exhausted. HALTING AUTONOMOUS TRADING IMMEDIATELY."
+                )
+
+def _safe_extract_with_lookback(sym, val, default_val, key_name):
+    if val is not None and not np.isnan(val) and not np.isinf(val):
+        return float(val)
+    try:
+        hist_item = _arctic_read(f"{sym}_meta")
+        if hist_item is not None and not hist_item.data.empty:
+            for i in range(len(hist_item.data) - 1, -1, -1):
+                hist_val = hist_item.data.iloc[i].get(key_name)
+                if hist_val is not None and not np.isnan(hist_val) and not np.isinf(hist_val):
+                    return float(hist_val)
+    except Exception:
+        pass
+    return float(default_val)
+
+
 def run_inference_for_symbol(symbol: str, prep_data: dict):
     global _MODEL_DRIFT_HALT, _P_SCORE_HISTORY, _DRIFT_RECOVERY_ATTEMPTS, oracle_lib
     global _GLOBAL_CS_RANKS, _CYCLE_P_SCORES, _CYCLE_PENDING_SIGNALS, _VRP_SPREAD
@@ -1377,31 +1456,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
 
     try:
         # Directive 1: Zero-Variance Bypass Check
-        if data_quality_flag == "DEAD_MARKET":
-            logging.info(f"[{symbol}] Dead market bypass engaged. Enforcing zero conviction and short-circuiting inference.")
-            
-            with _CYCLE_LOCK:
-                _CYCLE_P_SCORES[symbol] = 0.0000
-
-            # Direct cache write to ensure readiness script sees the DEAD_MARKET state with 0.0 conviction.
-            _arctic_write(f"{symbol}_meta", pd.DataFrame([{
-                "primary_dir": 0,
-                "meta_conviction": 0.500,
-                "wasserstein_state": "MARKET_CLOSED_OR_STAGNANT",
-                "hmm_state": "MARKET_CLOSED_OR_STAGNANT",
-                "strategy_type": "MOMENTUM",
-                "atr": atr,
-                "entropy": 0.0,
-                "hawkes_intensity": 0.0,
-                "timestamp": utils.get_utc_epoch(),
-                "is_legend": False,
-                "is_graveyard": False,
-                "vpin": 0.5,
-                "rsi": 50.0,
-                "vrs": 1.0,
-                "xgb_p": 0.500,
-                "ddqn_p": 0.500
-            }]))
+        if _check_dead_market_bypass(symbol, data_quality_flag, atr):
             return
 
         # ── Level 34 SRE: Heuristic Override & ML Bypass ──────────────────
@@ -1710,19 +1765,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
 
         _final = df_ml.iloc[-1]
 
-        def _safe_extract_with_lookback(sym, val, default_val, key_name):
-            if val is not None and not np.isnan(val) and not np.isinf(val):
-                return float(val)
-            try:
-                hist_item = _arctic_read(f"{sym}_meta")
-                if hist_item is not None and not hist_item.data.empty:
-                    for i in range(len(hist_item.data) - 1, -1, -1):
-                        hist_val = hist_item.data.iloc[i].get(key_name)
-                        if hist_val is not None and not np.isnan(hist_val) and not np.isinf(hist_val):
-                            return float(hist_val)
-            except Exception:
-                pass
-            return float(default_val)
+
 
         safe_xgb = float(x_prob) if not np.isnan(float(x_prob)) else 0.5000
         safe_kronos = float(k_prob) if not np.isnan(float(k_prob)) else 0.5000
@@ -1935,11 +1978,6 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         
         logging.info(f"[{symbol}] MixTS BLEND: Trend({w_trend:.1%})={p_trend:.3f}, Range({w_range:.1%})={p_range:.3f} -> P={meta_p:.4f} (Gate: {current_gate:.3f}, BaseGate={base_gate:.3f}, VRS={vrs:.2f})")
 
-        if float(meta_p) != 0.50:
-            _P_SCORE_HISTORY.append(float(meta_p))
-            if len(_P_SCORE_HISTORY) > 100:
-                _P_SCORE_HISTORY.pop(0)
-
         with _CYCLE_LOCK:
             _CYCLE_P_SCORES[symbol] = float(meta_p)
 
@@ -1968,30 +2006,7 @@ def run_inference_for_symbol(symbol: str, prep_data: dict):
         except Exception:
             pass
 
-        if len(_P_SCORE_HISTORY) == 100:
-            p_std = float(np.std(_P_SCORE_HISTORY))
-            if p_std < 0.02:
-                if _DRIFT_RECOVERY_ATTEMPTS < 3:
-                    _DRIFT_RECOVERY_ATTEMPTS += 1
-                    logging.critical(
-                        f"[CRITICAL MODEL DRIFT] Mode Collapse ({p_std:.6f} < 0.02 limit). "
-                        f"Initiating Automated Drift Reset ({_DRIFT_RECOVERY_ATTEMPTS}/3)..."
-                    )
-                    _P_SCORE_HISTORY.clear()
-                    try:
-                        _get_oracle_lib()
-                        _ARCTIC.delete_library("oracle_cache")
-                        oracle_lib = _ARCTIC.create_library("oracle_cache")
-                        _load_meta_model_with_failsafe()
-                        logging.info("[DRIFT RECOVERY] Cache purged and models rebooted.")
-                    except Exception as e:
-                        logging.error(f"[DRIFT RECOVERY] Reset failed: {e}")
-                else:
-                    _MODEL_DRIFT_HALT = True
-                    logging.critical(
-                        f"[CRITICAL MODEL DRIFT] Mode Collapse detected! Rolling std-dev of last 100 P-scores "
-                        f"is {p_std:.6f} < 0.02 limit. Recovery attempts exhausted. HALTING AUTONOMOUS TRADING IMMEDIATELY."
-                    )
+        _handle_model_drift_detection(symbol, meta_p)
 
         _arctic_write(f"{symbol}_meta", pd.DataFrame([{
             "primary_dir": int(primary_dir),
