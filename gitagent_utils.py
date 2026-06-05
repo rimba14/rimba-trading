@@ -139,3 +139,44 @@ def fetch_unstructured_sentiment(symbol):
     return random.uniform(-0.1, 0.1)
 
 MAX_TOTAL_POSITIONS = 30
+
+def calculate_psr(returns=None, sharpe=None, n_samples=None, skew=0.0, kurtosis=3.0, min_samples=25):
+    """
+    Centralized Probabilistic Sharpe Ratio (PSR) Calculation.
+    Supports either a list of returns or pre-calculated statistics.
+    Based on Bailey and Lopez de Prado (2012).
+    """
+    from scipy import stats
+    import numpy as np
+
+    if returns is not None:
+        arr = np.array(returns)
+        n = len(arr)
+        if n < min_samples:
+            return 1.0
+        # Sharpe ratio: mean / std
+        mean = np.mean(arr)
+        std = np.std(arr)
+        sharpe = mean / (std + 1e-9)
+        skew = stats.skew(arr)
+        # scipy.stats.kurtosis returns excess kurtosis (Fisher's definition: kurtosis - 3)
+        excess_kurt = stats.kurtosis(arr)
+        n_samples = n
+    else:
+        # If pre-calculated stats are provided, we assume kurtosis parameter is the standard definition (Normal=3)
+        excess_kurt = kurtosis - 3.0
+
+    if sharpe is None or n_samples is None:
+        return 0.0
+
+    if n_samples <= 1:
+        return 0.0
+
+    # Bailey and Lopez de Prado (2012) formula:
+    # std_error = sqrt((1 - skew*sharpe + (kurtosis-1)/4 * sharpe**2) / (n_samples - 1))
+    # where kurtosis is the non-excess kurtosis.
+    # If we have excess_kurt = kurtosis - 3, then kurtosis - 1 = excess_kurt + 2.
+
+    std_error = np.sqrt((1 - skew * sharpe + (excess_kurt + 2) / 4.0 * sharpe**2) / (n_samples - 1))
+    psr = stats.norm.cdf(sharpe / std_error)
+    return float(psr)

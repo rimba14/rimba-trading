@@ -20,11 +20,6 @@ MODEL_PATH = r"C:\Sentinel_Project\medallion_model.json"
 DIAGNOSTICS_DIR = r"C:\Sentinel_Project\pending_diagnostics"
 FEATURE_KEYS = ['W_rsi', 'W_macd', 'Wy_trend', 'B_bbpos', 'S_struct', 'WHL_vol']
 
-def calculate_psr(sharpe, n_samples):
-    from scipy.stats import norm
-    std_error = np.sqrt((1 + 0.5 * sharpe**2) / (n_samples - 1)) # Simplified PSR error
-    psr = norm.cdf(sharpe / (std_error + 1e-9))
-    return psr
 
 def run_fix():
     print("Initiating Mode Collapse Resolution Protocol...", flush=True)
@@ -84,7 +79,7 @@ def run_fix():
                     
                     avg_prec = np.mean(precisions)
                     sharpe = (avg_prec - 0.5) * 6.0 # Scaling for Sharpe proxy
-                    psr = calculate_psr(sharpe, len(df))
+                    psr = utils.calculate_psr(sharpe=sharpe, n_samples=len(df))
                     dsr = psr * 0.96 # DSR Deflation
                     
                     if dsr > best_dsr:
