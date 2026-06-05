@@ -407,6 +407,20 @@ def _arctic_read(key: str):
             logging.error(f"[ARCTIC_TIMEOUT] Read '{key}' exceeded {ARCTIC_TIMEOUT*1000:.0f} ms. Returning None to skip asset.")
             return None
 
+def _arctic_read_batch(keys: list):
+    """ArcticDB batch read with hard timeout (Phase 1 optimization)."""
+    if not keys:
+        return []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(oracle_lib.read_batch, keys)
+        try:
+            # Scale timeout linearly with batch size, but capped
+            timeout = min(ARCTIC_TIMEOUT * len(keys), 5.0)
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            logging.error(f"[ARCTIC_TIMEOUT] Batch read exceeded timeout. Returning empty list.")
+            return []
+
 def _arctic_write(key: str, df: pd.DataFrame):
     """ArcticDB write with latency monitoring (v32.0-PROD)."""
     global _ARCTIC, oracle_lib
@@ -2301,6 +2315,19 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
         
     # 2. Volatility Shock Check (> 0.5 ATR price movement)
     import MetaTrader5 as mt5
+    import arcticdb.exceptions as arctic_exc
+
+    # Bulk-load missing ATRs
+    missing_symbols = [sym for sym in watchlist if sym not in _LAST_CYCLE_ATRs]
+    if missing_symbols:
+        keys = [f"{sym}_meta" for sym in missing_symbols]
+        batch_res = _arctic_read_batch(keys)
+        for sym, res in zip(missing_symbols, batch_res):
+            if isinstance(res, arctic_exc.ArcticException) or not hasattr(res, 'data'):
+                continue
+            atr_val = float(res.data.iloc[-1].get("atr", 0.0))
+            _LAST_CYCLE_ATRs[sym] = atr_val
+
     for symbol in watchlist:
         try:
             tick = mt5.symbol_info_tick(symbol)
@@ -2308,14 +2335,7 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
                 continue
             current_price = (tick.bid + tick.ask) / 2
             
-            atr = 0.0
-            if symbol in _LAST_CYCLE_ATRs:
-                atr = _LAST_CYCLE_ATRs[symbol]
-            else:
-                meta_item = _arctic_read(f"{symbol}_meta")
-                if meta_item is not None:
-                    atr = float(meta_item.data.iloc[-1].get("atr", 0.0))
-                    _LAST_CYCLE_ATRs[symbol] = atr
+            atr = _LAST_CYCLE_ATRs.get(symbol, 0.0)
             
             if atr <= 0:
                 continue
