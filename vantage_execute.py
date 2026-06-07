@@ -43,25 +43,59 @@ class SentinelConductor:
         self.context = context_mod.ContextLayer() if context_mod else None
 
     def run_one_cycle(self, df: pd.DataFrame, cognition_factor: float):
+        import json, os
+        context_file = os.path.join(os.path.dirname(__file__), "config", "runtime_context.json")
+        system_context = {}
+        if os.path.exists(context_file):
+            try:
+                with open(context_file, "r") as f:
+                    system_context = json.load(f)
+            except: pass
+            
         p_res = self.perception.process(df)
         p_res['cognition_factor'] = cognition_factor
+        p_res['system_context'] = system_context
         r_res = self.representation.process(p_res)
         c_res = self.cognition.process(r_res)
         x_res = self.context.process(c_res) if self.context else c_res
         return {"action": c_res.get('final_verdict', 'HOLD'), "status": "OK"}, x_res
 
     def run_to_cognition(self, df: pd.DataFrame, cognition_factor: float) -> dict:
+        import json, os
+        context_file = os.path.join(os.path.dirname(__file__), "config", "runtime_context.json")
+        system_context = {}
+        if os.path.exists(context_file):
+            try:
+                with open(context_file, "r") as f:
+                    system_context = json.load(f)
+            except: pass
+            
         p_res = self.perception.process(df)
         p_res['cognition_factor'] = cognition_factor
+        p_res['system_context'] = system_context
         r_res = self.representation.process(p_res)
         c_res = self.cognition.process(r_res)
         # Reconstruct score attributes natively
         c_res['monolithic_score'] = float(c_res.get('final_score', np.random.uniform(-10.0, 10.0)))
-        c_res['agent_scores'] = {
+        agent_scores = {
             "XGBoost": float(c_res.get('xgboost_prob', 0.85)),
             "Kronos": float(c_res.get('kronos_prob', 0.60)),
             "DDQN": float(c_res.get('ddqn_prob', 0.50))
         }
+        c_res['agent_scores'] = agent_scores
+        
+        # Log Agent Decisions
+        try:
+            import log_agent_decision
+            symbol = getattr(df, 'name', 'UNKNOWN_SYMBOL')
+            if symbol == 'UNKNOWN_SYMBOL' and not df.empty and 'symbol' in df.columns:
+                symbol = df['symbol'].iloc[-1]
+            for agent, score in agent_scores.items():
+                target_dir = "BUY" if score > 0.5 else "SELL"
+                log_agent_decision.log_decision(agent, symbol, target_dir, score)
+        except Exception as e:
+            print(f"[HARNESS] Failed to log decision: {e}")
+            
         return c_res
 
 def _execute_candidate(cand: dict, balance: float, total_run_risk: float, net_beta: float, vix: float, current_sharpe: float) -> bool:

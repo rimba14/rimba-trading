@@ -2419,6 +2419,12 @@ async def _run_mt5_event_loop(watchlist: list, last_run_hour: int, current_equit
     while True:
         try:
             event = await mt5_queue.get()
+            
+            try:
+                import write_runtime_context
+                write_runtime_context.generate_context_snapshot()
+            except Exception as e:
+                logging.error(f"[HARNESS] Failed to generate runtime context snapshot: {e}")
 
             trigger, reason = should_trigger_evaluation(watchlist, last_run_hour)
 
