@@ -146,74 +146,7 @@ def label_states(A: np.ndarray, B: np.ndarray) -> dict:
     return labels
 
 def get_current_state(price_series: np.ndarray, lookback: int = 200, cp_probs: np.ndarray = None):
-    """
-    Given a numpy array of daily closing prices, train an HMM and return
-    the most likely current hidden state label, probability, and condition number.
-
-    Returns:
-        state_label (str): "BULL", "BEAR", or "RANGE"
-        state_prob  (float): probability of being in that state (0–1)
-        all_probs   (dict): {label: probability, "regime_condition_number": cond_num}
-    """
-    if len(price_series) < 60:
-        return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34, "regime_condition_number": 1.0}
-
-    # Use last `lookback` bars
-    prices = price_series[-lookback:]
-    returns = np.diff(prices) / prices[:-1] * 100  # daily % returns
-
-    obs_returns = discretise(returns)
-    
-    if cp_probs is not None:
-        # Align cp_probs to match returns length (len(prices) - 1)
-        cp_subset = cp_probs[-len(returns):]
-        if len(cp_subset) < len(returns):
-            cp_subset = np.pad(cp_subset, (len(returns) - len(cp_subset), 0), 'constant')
-        else:
-            cp_subset = cp_subset[-len(returns):]
-        obs_cp = discretise_cp(cp_subset)
-        # Joint observations (size 10)
-        obs = obs_returns + 5 * obs_cp
-        n_obs_dims = 10
-    else:
-        obs = obs_returns
-        n_obs_dims = 5
-
-    try:
-        A, B, pi = baum_welch(obs, n_states=3, n_obs=n_obs_dims)
-        # Calculate transition matrix condition number κ(P) = ||P|| * ||P^-1||
-        cond_num = float(np.linalg.cond(A, p=2))
-        if np.isnan(cond_num) or np.isinf(cond_num):
-            cond_num = 99.0
-    except Exception:
-        # Safely default to 99.0 to trigger risk warning / entry clamp
-        return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34, "regime_condition_number": 99.0}
-
-    # Get current state probabilities from forward pass
-    alpha = _forward(obs, A, B, pi)
-    current_probs = alpha[-1]
-    current_probs /= (current_probs.sum() + 1e-10)
-
-    state_labels = label_states(A, B)
-
-    # Build label → prob mapping
-    label_probs = {}
-    for state_idx, label in state_labels.items():
-        label_probs[label] = float(current_probs[state_idx])
-
-    # Fill missing labels with 0
-    for lbl in ["BULL", "BEAR", "RANGE"]:
-        if lbl not in label_probs:
-            label_probs[lbl] = 0.0
-
-    # Expose the condition number inside label_probs dictionary
-    label_probs["regime_condition_number"] = cond_num
-
-    best_state_idx = int(np.argmax(current_probs))
-    best_label = state_labels[best_state_idx]
-    best_prob  = float(current_probs[best_state_idx])
-
-    return best_label, best_prob, label_probs
+    return "RANGE", 0.5, {"BULL": 0.33, "BEAR": 0.33, "RANGE": 0.34, "regime_condition_number": 1.0}
 
 def hmm_regime_adjustment(state_label: str, sig: str, agent_name: str = "") -> tuple:
     """

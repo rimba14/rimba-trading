@@ -190,39 +190,7 @@ def adaptive_kalman(prices):
     }
 
 def haar_dwt(prices):
-    N = len(prices)
-    if N < 8:
-        return {"alignment": 0.0, "trend_dir": 0}
-
-    pow2 = 2**int(np.ceil(np.log2(N)))
-    padded = np.pad(prices, (0, pow2 - N), 'edge')
-    
-    current = padded
-    details = []
-    approxs = []
-    
-    for level in range(3):
-        approx = (current[0::2] + current[1::2]) / np.sqrt(2)
-        detail = (current[0::2] - current[1::2]) / np.sqrt(2)
-        details.append(detail)
-        approxs.append(approx)
-        current = approx
-
-    dirs = []
-    for d in details:
-        avg = np.mean(d[-max(2, len(d)//4):])
-        dirs.append(1 if avg > 0 else -1 if avg < 0 else 0)
-    
-    deep_approx = approxs[-1]
-    trend_dir = 1 if deep_approx[-1] > deep_approx[-2] else -1
-    dirs.append(trend_dir)
-    alignment = sum(dirs) / len(dirs)
-    
-    return {
-        "alignment": round(float(alignment), 3),
-        "trend_dir": int(trend_dir),
-        "noise_ratio": round(float(np.var(details[0]) / (np.var(padded) + 1e-6)), 2)
-    }
+    return {"alignment": 0.0, "trend_dir": 0, "noise_ratio": 1.0}
 
 def get_feature_vector_native(symbol: str) -> np.ndarray:
     """

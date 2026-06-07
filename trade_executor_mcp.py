@@ -114,6 +114,11 @@ def execute_trade(symbol, conviction, hmm_regime):
         stops_level = info.trade_stops_level * info.point
         sl_distance = max(sl_distance, stops_level + info.point)
 
+        # Enforce Grid Healing & 3.5x ATR Institutional Floor
+        price_proxy = tick.bid if tick else 0.0
+        minimum_allowed_distance = max(price_proxy * 0.002, base_atr * 3.5)
+        sl_distance = max(sl_distance, minimum_allowed_distance)
+
         # 5. Lot Size Calculation (based on full risk across grid)
         # We split the risk among 5 orders
         risk_per_order = risk_usd / 5.0

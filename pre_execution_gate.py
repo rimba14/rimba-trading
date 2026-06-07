@@ -254,7 +254,7 @@ def gate5_risk_cap_and_atr_floor(
         logger.error(f"Failed to calculate D1 ATR in PreExecutionGate for {symbol}: {atr_err}")
 
     if current_ATR > 0.0:
-        minimum_allowed_distance = current_ATR * 3.5  # Absolute volatility floor on D1 ATR
+        minimum_allowed_distance = max(entry_price * 0.002, current_ATR * 3.5)  # Absolute volatility floor on D1 ATR
         if sl_distance_price < minimum_allowed_distance:
             logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
                               f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")

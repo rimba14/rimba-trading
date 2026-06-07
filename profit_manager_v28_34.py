@@ -90,8 +90,10 @@ logging.basicConfig(
         ),
     ],
 )
-logger = logging.getLogger("ProfitManager")
+logger = logging.getLogger("SentinelProfitManager")
 
+# Master Architecture Veto
+VELOCITY_KILL_ENABLED = False
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SHOCK DETECTOR & FAILSAFE DEFINITIONS
@@ -109,58 +111,14 @@ class ConvictionGatedExitManager:
         self.NY_OPEN_HOUR_UTC = 13
         self.NY_OPEN_MIN_UTC = 30
 
-    def evaluate_execution_state(self, position, current_tick, alpha_features, metadata_store):
-        ticket = position.ticket
-        symbol = position.symbol
-        pos_type = position.type
-        entry_price = position.price_open
+    def evaluate_execution_state(self, symbol, p_blend, profit_points, entry_price):
+        # Strict First-Principles Exit Rule
+        if p_blend < 0.55 and profit_points > 0:
+            print(f"[THESIS DECAY EXIT] Cutting {symbol} at a profit to preserve alpha.")
+            return "IMMEDIATE_MARKET_CLOSE"
         
-        atr = alpha_features.get('atr', 0.0)
-        breakeven_buffer = self.BUFFER_MULT * atr
-        
-        current_price = current_tick.bid if pos_type == mt5.ORDER_TYPE_BUY else current_tick.ask
-        if pos_type == mt5.ORDER_TYPE_BUY:
-            unrealized_pnl = current_price - entry_price
-        else:
-            unrealized_pnl = entry_price - current_price
-            
-        p_current = alpha_features.get('p_blend', 0.50)
-        hmm_flipped = alpha_features.get('hmm_regime_transition', False)
-        session_violated = alpha_features.get('session_boundary_crossed', False)
-        
-        conviction_dead = (p_current < self.EPISTEMIC_GATE) or hmm_flipped or session_violated
-        current_state = metadata_store.get(ticket, {}).get('zombie_state', "NOMINAL")
-        
-        if conviction_dead:
-            if unrealized_pnl >= -breakeven_buffer:
-                logger.warning(f"[EXIT_TRIGGER] Alpha decayed on ticket {ticket}. Realized PnL: {unrealized_pnl:.2f}. Executing market close.")
-                return "ACTION_MARKET_CLOSE", "CONVICTION_DEAD_WITH_ALPHA_OR_FLAT"
-            else:
-                if current_state == "NOMINAL":
-                    logger.info(f"[ZOMBIE_ENGAGED] Position {ticket} running underwater without thesis conviction. Locking down boundaries.")
-                    metadata_store[ticket] = {
-                        'zombie_state': "ZOMBIE_HOLD",
-                        'entry_zombie_time': datetime.now(pytz.utc)
-                    }
-        
-        if metadata_store.get(ticket, {}).get('zombie_state') == "ZOMBIE_HOLD":
-            if p_current >= self.EPISTEMIC_GATE and not hmm_flipped:
-                logger.info(f"[ZOMBIE_HEALED] Conviction restored to {p_current:.3f} on ticket {ticket}. Resuming nominal monitoring.")
-                metadata_store[ticket]['zombie_state'] = "NOMINAL"
-                return "ACTION_HOLD", "THESIS_REVIVED"
-                
-            if "NAS100" in symbol:
-                now_utc = datetime.now(pytz.utc)
-                zombie_timestamp = metadata_store[ticket]['entry_zombie_time']
-                if now_utc.hour == self.NY_OPEN_HOUR_UTC and now_utc.minute >= self.NY_OPEN_MIN_UTC:
-                    if now_utc.date() > zombie_timestamp.date() or (now_utc - zombie_timestamp) > timedelta(hours=4):
-                        logger.warning(f"[HARD_EXPIRY] Zombie position {ticket} failed to recover inside current NY session cycle. Forcing liquidation.")
-                        return "ACTION_MARKET_CLOSE", "ZOMBIE_HARD_EXPIRY_NY_OPEN"
-                        
-        if metadata_store.get(ticket, {}).get('zombie_state') == "ZOMBIE_HOLD":
-            return "ACTION_LOCK_BOUNDARIES", "ZOMBIE_STATE_ACTIVE"
-            
-        return "ACTION_HOLD", "NOMINAL_MANAGEMENT"
+        # Otherwise, hand full authority back to the broker-side physical stops
+        return "DEFER_TO_PHYSICAL_STOPS"
 
 class FailsafeAction(Enum):
     MARKET_CLOSE = "MARKET_CLOSE"
@@ -349,7 +307,6 @@ class PositionState:
     # Regime gate
     regime_conflict_count: int = 0
 
-    current_conviction:     float = 0.50
     current_conviction:     float = 0.50
     telemetry_logger:       Any   = None
 
@@ -564,7 +521,7 @@ def normalize_stop(
         spread = 2 * info.point
 
     min_dist  = info.trade_stops_level * info.point
-    safe_pad  = min_dist + spread + 2 * info.point
+    safe_pad  = max(min_dist, 5 * info.point) + spread
 
     if is_buy:
         target = min(target, current_price - safe_pad) if is_sl else max(target, current_price + safe_pad)
@@ -653,55 +610,6 @@ def _check_macro_exits(sig: ExitSignal, pos_dir: str, sentiment: float) -> bool:
     return False
 
 
-def _score_regime_conflict(sig: ExitSignal, ps: PositionState, pos_dir: str, hmm: str, profit_r: float):
-    """Regime Conflict (scored)."""
-    is_conflict = (pos_dir == "BUY" and hmm == "BEAR") or (pos_dir == "SELL" and hmm == "BULL")
-    if is_conflict:
-        ps.regime_conflict_count += 1
-        # Higher profit → require more persistent regime conflict before exiting
-        r_gate      = max(3, int(3 + max(0, profit_r)))   # 0R→3, 3R→6, 5R→8 confirms
-        persistence = min(ps.regime_conflict_count / r_gate, 1.0)
-        sig.score  += 0.40 * persistence
-        sig.reasons.append(
-            f"REGIME({hmm} vs {pos_dir}, count={ps.regime_conflict_count}/{r_gate})"
-        )
-    else:
-        ps.regime_conflict_count = 0
-
-
-def _apply_exit_suppression(sig: ExitSignal, ps: PositionState, symbol: str, current_price: float, elapsed: float):
-    """Hysteresis Hardening (v9.5) and Event Horizon suppression gate."""
-    if sig.score > 0:
-        if elapsed < 1200:
-            logger.info(f"[HARD_HOLD] {symbol}: suppressing exit — age {elapsed:.0f}s < 20m")
-            sig.score = 0.0
-            sig.reasons = [f"SUPPRESSED_HARD_HOLD({elapsed:.0f}s)"]
-        else:
-            info = mt5.symbol_info(symbol)
-            if info:
-                min_edge = 30 * info.point
-                if ps.profit_delta(current_price) > -min_edge:
-                    logger.info(f"[HYSTERESIS] {symbol}: suppressing exit — profit delta > -30 points")
-                    sig.score = 0.0
-                    sig.reasons = [f"SUPPRESSED_MIN_EDGE({ps.profit_delta(current_price):.5f} > -{min_edge:.5f})"]
-
-    if sig.score > 0:
-        try:
-            has_event, event_desc = check_upcoming_tier1_events(symbol, threshold_hours=12.0)
-            if has_event:
-                logger.info(f"[EVENT_HORIZON_GATE] {symbol}: suppressing cognitive exits — {event_desc}")
-                sig.score   = 0.0
-                sig.reasons = [f"SUPPRESSED_PRE_EVENT({event_desc})"]
-        except Exception as e:
-            logger.warning(f"[EVENT_CHECK_ERR] {symbol}: {e}")
-
-
-def _apply_profit_dampening(sig: ExitSignal, profit_r: float):
-    """Profit-weighted dampening."""
-    if profit_r > 2.0 and sig.score > 0:
-        dampener  = max(0.30, 1.0 - (profit_r - 2.0) * 0.08)
-        sig.score *= dampener
-
 
 def compute_exit_score(
     ps:               PositionState,
@@ -748,15 +656,6 @@ def compute_exit_score(
     if _check_macro_exits(sig, pos_dir, sentiment):
         return sig
 
-    # ── 4. Regime Conflict (scored) ──────────────────────────────────────────
-    _score_regime_conflict(sig, ps, pos_dir, hmm, profit_r)
-
-    # ── 5. Suppression & Hysteresis ──────────────────────────────────────────
-    _apply_exit_suppression(sig, ps, symbol, current_price, elapsed)
-
-    # ── 6. Profit-weighted dampening ─────────────────────────────────────────
-    _apply_profit_dampening(sig, profit_r)
-
     if sig.score > 0 and not sig.hard_exit:
         sig.reason_primary = f"[SCORED_EXIT score={sig.score:.2f}]"
 
@@ -782,8 +681,23 @@ def safe_scale_out(
     current_vol = pos.volume            # live volume from current MT5 snapshot
     close_vol   = round((current_vol * fraction) / vol_step) * vol_step
     close_vol   = max(close_vol, min_vol)
+    
+    # Enforce Grid Healing & 3.5x ATR Institutional Floor
+    symbol = ps.symbol
+    current_price = tick.bid if pos.type == 0 else tick.ask
+    anchor = pos.price_open
+    base_distance = abs(anchor - current_price)
+    
+    d1_atr = calculate_atr_d1(symbol)
+    minimum_allowed_distance = max(current_price * 0.002, d1_atr * 3.5)
+    
+    if base_distance < minimum_allowed_distance:
+        if pos.type == 0:
+            anchor = current_price - minimum_allowed_distance
+        else:
+            anchor = current_price + minimum_allowed_distance
+    
     remaining   = current_vol - close_vol
-
     if remaining < min_vol:
         logger.info(
             f"[SCALE_SKIP] {ps.symbol} #{ps.ticket}: "
@@ -1704,28 +1618,14 @@ class SentinelProfitManager:
             profit_r_now    = ps.profit_r(current_price, macro_atr, sl_mult)
             ps.peak_profit_r = max(ps.peak_profit_r, profit_r_now)
 
-            # Evaluate Conviction-Gated Exit (ZOMBIE_HOLD Protocol)
-            alpha_features = {
-                'atr': macro_atr,
-                'p_blend': live_p,
-                'hmm_regime_transition': (hmm_state != ps.entry_hmm) if ps.entry_hmm else False,
-                'session_boundary_crossed': False
-            }
+            # Evaluate Conviction-Gated Exit
+            action = self.exit_manager.evaluate_execution_state(pos.symbol, live_p, pos.profit, pos.price_open)
             
-            action, reason = self.exit_manager.evaluate_execution_state(pos, tick, alpha_features, self.metadata_store)
-            
-            # Replicate ZOMBIE_HOLD state to features cache for medallion sizing
-            if pos.ticket in self.metadata_store:
-                if self.metadata_store[pos.ticket].get("zombie_state") == "ZOMBIE_HOLD":
-                    ps.zombie_state = "ZOMBIE_HOLD" # Optional local tracking
-            
-            if action == "ACTION_MARKET_CLOSE":
-                push_exit_signal(pos, reason)
+            if action == "IMMEDIATE_MARKET_CLOSE":
+                push_exit_signal(pos, "THESIS_DECAY_EXIT")
                 ps.liquidation_sent = True
                 ps.last_liquidation_ts = now
                 continue
-            elif action == "ACTION_LOCK_BOUNDARIES":
-                continue # Frozen loop, skip trailing stops completely
 
             # ENFORCED POSITION LIFE-CYCLE INVARIANT SCHEMA
             
@@ -1824,6 +1724,7 @@ class SentinelProfitManager:
                                           info=audit_cache[pos.symbol]["info"],
                                           tick=audit_cache[pos.symbol]["tick"],
                                           d1_atr=audit_cache[pos.symbol]["d1_atr"])
+                        continue # Strict routing rule: Do NOT audit these naked/swept positions
                     
                     active_audit_positions.append(pos)
 
