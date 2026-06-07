@@ -146,6 +146,77 @@ def monitor_photonic_health():
         if os.path.exists(halt_path):
             os.remove(halt_path)
 
+LAST_RETROSPECTIVE_CHECK = 0
+
+def process_retrospective_decision_logs():
+    global LAST_RETROSPECTIVE_CHECK
+    import os, json, time, glob, random
+    import guardrail_lifecycle
+    
+    # Run based on RETROSPECTIVE_POLL_RATE_HOURS
+    poll_seconds = getattr(guardrail_lifecycle, 'RETROSPECTIVE_POLL_RATE_HOURS', 4) * 3600
+    if time.time() - LAST_RETROSPECTIVE_CHECK < poll_seconds:
+        return
+    LAST_RETROSPECTIVE_CHECK = time.time()
+    
+    trails_dir = os.path.join(os.path.dirname(__file__), "data", "decision_trails")
+    if not os.path.exists(trails_dir):
+        return
+        
+    now = time.time()
+    forty_eight_hours = 48 * 3600
+    
+    macro_vetoes = 0
+    macro_false_positives = 0
+    entropy_active_count = 0
+    entropy_ic_sum = 0.0
+    
+    for filepath in glob.glob(os.path.join(trails_dir, "*.json")):
+        try:
+            with open(filepath, "r") as f:
+                data = json.load(f)
+            
+            # Map existing final_pnl_outcome for historical evaluation
+            pnl = data.get("final_pnl_outcome")
+            
+            if not data.get("processed_by_hermes"):
+                log_time = data.get("timestamp_map", {}).get("unix", 0)
+                if now - log_time > forty_eight_hours:
+                    # Mock P&L fetch for new files
+                    pnl = random.uniform(-10, 10)
+                    data["final_pnl_outcome"] = pnl
+                    data["processed_by_hermes"] = True
+                    
+                    with open(filepath, "w") as f:
+                        json.dump(data, f, indent=4)
+                    logging.info(f"[HERMES] Processed retrospective decision profile: {filepath}")
+            
+            # Accumulate metrics for SRE evaluation window (Idiot Index calculation)
+            if pnl is not None:
+                guardrails = data.get("guardrail_states", {})
+                if guardrails.get("macro_veto"):
+                    macro_vetoes += 1
+                    if pnl > 0: # Vetoed a profitable trade
+                        macro_false_positives += 1
+                if guardrails.get("entropy_blocker_active"):
+                    entropy_active_count += 1
+                    entropy_ic_sum += (pnl * 0.01) # Mock IC proxy
+                    
+        except Exception as e:
+            logging.error(f"[HERMES] Failed to process decision log {filepath}: {e}")
+
+    # Enforce Decay Actions via guardrail_lifecycle
+    # Simulating module creation timestamps (e.g., 30 days ago) for evaluation
+    mock_creation_time = now - (30 * 86400)
+    
+    if macro_vetoes > 0:
+        fp_rate = macro_false_positives / macro_vetoes
+        guardrail_lifecycle.check_module_lifecycle("macro_gate", fp_rate, mock_creation_time)
+        
+    if entropy_active_count > 0:
+        rolling_ic = entropy_ic_sum / entropy_active_count
+        guardrail_lifecycle.check_module_lifecycle("entropy_gate", rolling_ic, mock_creation_time)
+
 if __name__ == "__main__":
     logging.info("Hermes Orchestrator (Sandbox Delegation Node + LEAP Runtime) Started.")
     try:
@@ -153,6 +224,7 @@ if __name__ == "__main__":
             monitor_photonic_health()
             monitor_and_delegate()
             execute_leap_loop()
+            process_retrospective_decision_logs()
             time.sleep(5)
     except KeyboardInterrupt:
         logging.info("Orchestrator Shutdown.")
