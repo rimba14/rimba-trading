@@ -1,0 +1,18 @@
+{
+  "entry_metrics": {
+    "probability_vector": [
+      0.26520758867263794,
+      0.5417855928066108
+    ],
+    "adjusted_conviction": 0.5,
+    "information_activity_ratio": 0.5744125326229075,
+    "order_flow_bocpd_probability": 0.0,
+    "wasserstein_cluster_index": 2,
+    "volatility_ratio": 0.5744125326229075,
+    "ofi_velocity": 0.0
+  },
+  "exit_metrics": {
+    "exit_mechanism": "TERMINAL_AMNESIA_SYNC",
+    "mt5_return_code": 10009
+  }
+}

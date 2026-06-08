@@ -20,3 +20,6 @@ discord.py
 tenacity
 google-generativeai
 groq
+
+ccxt
+python-dotenv

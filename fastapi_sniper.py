@@ -629,6 +629,9 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
                     execute_exit(p.ticket, p.symbol, "Mutual Excl")
 
     # 5. Execution
+    if getattr(account_info, 'capital_constraint_warning', False):
+        signal.data_quality_flag = f"{signal.data_quality_flag}_CAPITAL_CONSTRAINT_WARNING" if signal.data_quality_flag else "CAPITAL_CONSTRAINT_WARNING"
+
     alpha_features = {
         "P": signal.conviction,
         "vpin": vpin_val,
@@ -1249,6 +1252,31 @@ async def run_composite_preflight_checklist(
             if len(crypto_positions) >= 2:
                 return False, "Point 21 Fail: RISK_ON_CRYPTO cluster cap exceeded (Max 2 concurrent positions)"
 
+    # Point 22: EM Carry-Trade Veto
+    em_exotic_pairs = {"USDMXN", "USDTRY", "USDZAR", "ZARJPY", "TRYJPY", "MXNJPY"}
+    if sym_upper in em_exotic_pairs:
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 20)
+        if rates is not None and len(rates) > 0:
+            current_close = rates[-1]['close']
+            sma_20 = sum(r['close'] for r in rates) / len(rates)
+            d1_trend = "BULL" if current_close > sma_20 else "BEAR"
+            
+            is_negative_carry = False
+            if direction == "BUY" and info.swap_long < 0:
+                is_negative_carry = True
+            elif direction == "SELL" and info.swap_short < 0:
+                is_negative_carry = True
+                
+            is_counter_trend = False
+            if direction == "BUY" and d1_trend == "BEAR":
+                is_counter_trend = True
+            elif direction == "SELL" and d1_trend == "BULL":
+                is_counter_trend = True
+                
+            if is_negative_carry and is_counter_trend:
+                if float(conviction) <= 0.90:
+                    return False, f"Point 22 Fail: [VETO] EM_COUNTER_CARRY_REJECT. {symbol} fighting D1 trend ({d1_trend}) and negative carry. Conviction {conviction:.2f} <= 0.90"
+
     # Sandbox Fuzzing Block: Safely reject fuzzer signals to prevent real execution
     is_fuzzing = payload.get("is_fuzzing", False) if payload else False
     if is_fuzzing:
@@ -1371,6 +1399,27 @@ def calculate_kelly_lot(symbol, conviction, acc=None):
         logger.warning(f"[{symbol}] Failed applying health_size_multiplier: {e}")
         
     logger.info(f"[{symbol}] DEBUG LOT: Balance={acc.balance:.2f} | MaxRisk=${max_dollar_risk:.2f} | KellyLot={kelly_lot} | AtrLot={atr_adjusted_lot} | FinalLot={lot}")
+
+    # Inject Pre-Clamp Telemetry
+    logger.info(
+        f"[SRE SIZING DIAGNOSTIC] {symbol} | "
+        f"Equity: ${acc.equity:.2f} | "
+        f"Dollar Risk: ${max_dollar_risk:.2f} | "
+        f"SL Distance (pts): {sl_dist_points:.2f} | "
+        f"Raw Kelly Fraction: {f_star:.4f} | "
+        f"Unclamped Lot Size: {lot:.6f}"
+    )
+
+    # Implement Dynamic Fractional Scaling (The Fix)
+    if lot < info.volume_min and acc.equity < 10000:
+        half_kelly_lot = lot * (0.5 / active_kelly_fraction)
+        half_kelly_lot = math.floor(half_kelly_lot / info.volume_step) * info.volume_step
+        logger.info(f"[{symbol}] [DYNAMIC SCALING] Unclamped lot {lot:.4f} < {info.volume_min}. Stepping up multiplier from {active_kelly_fraction}x to 0.5x Half-Kelly. New Lot: {half_kelly_lot:.4f}")
+        lot = half_kelly_lot
+        if lot < info.volume_min:
+            logger.warning(f"[{symbol}] CAPITAL_CONSTRAINT_WARNING: Lot still < {info.volume_min} after Half-Kelly step-up. Clamping to {info.volume_min}.")
+            setattr(acc, 'capital_constraint_warning', True)
+            lot = info.volume_min
 
     # Directive Omega: Rule 1.1 - Small Account Floor Sizing Veto
     if lot < info.volume_min:
@@ -1630,6 +1679,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
     prefix = f"SENTINEL_{SENTINEL_VERSION}_{strategy_code}"
     deal_comment = f"{prefix}_TF{entry_tf}_P{conviction:.2f}"[:31]
     
+    pending_added = False
     try:
         # Extract model scores from alpha_features for the checklist
         xgb_p = alpha_features.get("xgb_p", 0.5) if alpha_features else 0.5
@@ -1653,6 +1703,10 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
             else:
                 logger.warning(f"[{symbol}] COMPOSITE_PREFLIGHT_VETO: Trade rejected. Reason: {reason}")
             raise HTTPException(status_code=403, detail=f"COMPOSITE_PREFLIGHT_VETO: {reason}")
+
+        from pre_execution_gate import add_pending_execution
+        add_pending_execution(symbol, direction)
+        pending_added = True
 
         tick = mt5.symbol_info_tick(symbol)
         if not tick: 
@@ -1678,9 +1732,13 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         # v30.98: Use asset-class multiplier from get_structural_multiplier (6.0 for forex)
         multiplier = get_structural_multiplier(symbol)
             
-        calculated_sl_dist = structural_atr * multiplier
+        dynamic_sl_distance = structural_atr * multiplier
+        daily_atr_floor = structural_atr * 1.0 # Absolute minimum breathing room for swing trades
+        percentage_floor = price * 0.002 # 0.2% asset price floor
         broker_minimum_sl = info.trade_stops_level * info.point if info else 0.0001
-        final_sl_dist = max(calculated_sl_dist, broker_minimum_sl)
+        
+        # The stop distance MUST be the maximum of these three values
+        final_sl_dist = max(dynamic_sl_distance, daily_atr_floor, percentage_floor, broker_minimum_sl)
         
         logger.info(f"[{symbol}] INSTITUTIONAL HARD ANCHOR v30.98: D1_ATR={structural_atr:.5f} | Multiplier={multiplier}x | FinalSL={final_sl_dist:.5f}")
         
@@ -2083,6 +2141,13 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         import traceback
         logger.critical(f"[FATAL_EXECUTION_CRASH] {symbol} {direction} | Error: {e}\n{traceback.format_exc()}")
         return False
+    finally:
+        if pending_added:
+            try:
+                from pre_execution_gate import remove_pending_execution
+                remove_pending_execution(symbol, direction)
+            except Exception as e:
+                logger.error(f"[{symbol}] Failed to remove from pending queue: {e}")
 
 def execute_exit(ticket, symbol, reason):
     try:

@@ -1,0 +1,18 @@
+{
+    "session": "SYDNEY",
+    "regime": "RANGE",
+    "open_positions": 11,
+    "cluster_exposure": {
+        "CRYPTO": 0.15,
+        "EQUITY_INDEX": 0.4,
+        "FX": 0.45
+    },
+    "drawdown_today": 74.47,
+    "active_directives": [
+        "DIRECTIVE ZETA",
+        "EPISTEMIC_GATE",
+        "AMENDMENT XXV"
+    ],
+    "hardware_latency_ms": 7.61,
+    "timestamp": 1780959892.1209428
+}

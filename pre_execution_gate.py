@@ -12,6 +12,21 @@ logger = logging.getLogger("PreExecutionGate")
 MAGIC_NUMBER = 142
 MAGIC_LEGACY = 17300
 
+import threading
+pending_execution_queue = []
+_queue_lock = threading.Lock()
+
+def add_pending_execution(symbol: str, direction: str):
+    with _queue_lock:
+        pending_execution_queue.append({"symbol": symbol, "direction": direction})
+
+def remove_pending_execution(symbol: str, direction: str):
+    with _queue_lock:
+        for item in pending_execution_queue:
+            if item["symbol"] == symbol and item["direction"] == direction:
+                pending_execution_queue.remove(item)
+                break
+
 class PriceUnit:
     def __init__(self, value: float):
         if not isinstance(value, (int, float)) or value <= 0:
@@ -87,14 +102,22 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
     orders = mt5.orders_get() or ()
     pending_orders = [o for o in orders if getattr(o, 'magic', 0) in (MAGIC_NUMBER, MAGIC_LEGACY)]
     
-    all_active_exposure = open_positions + pending_orders
+    class PendingExec:
+        def __init__(self, sym, dir_str):
+            self.symbol = sym
+            self.type = 0 if str(dir_str).upper() in ["BUY", "1", "LONG"] else 1
+            
+    with _queue_lock:
+        async_pending = [PendingExec(item["symbol"], item["direction"]) for item in pending_execution_queue]
+    
+    all_active_exposure = open_positions + pending_orders + async_pending
     
     # v30.98: GLOBAL POSITION CAP — no more than 5 total positions across ALL clusters
     if len(all_active_exposure) >= 5:
         return GateResult(
             gate="GATE-0-GLOBAL-CAP",
             status=BLOCK,
-            message=f"GLOBAL POSITION CAP REACHED ({len(all_active_exposure)}/5). No new entries until positions close."
+            message=f"[VETO] CORRELATION_CEILING_REACHED (Includes Pending Async Orders) - GLOBAL POSITION CAP REACHED ({len(all_active_exposure)}/5). No new entries until positions close."
         )
     
     cluster = _get_cluster(symbol)
@@ -118,7 +141,7 @@ def gate0_correlation_cluster_limit(symbol: str, direction: str) -> GateResult:
         return GateResult(
             gate="GATE-0-CLUSTER-LIMIT",
             status=BLOCK,
-            message=f"Cluster {cluster} limit reached ({len(cluster_positions)}/{max_in_cluster}). Halting new exposure."
+            message=f"[VETO] CORRELATION_CEILING_REACHED (Includes Pending Async Orders) - Cluster {cluster} limit reached ({len(cluster_positions)}/{max_in_cluster}). Halting new exposure."
         )
     
     # v30.98: Global risk-on contagion cap
