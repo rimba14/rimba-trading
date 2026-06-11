@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 import MetaTrader5 as mt5
 
@@ -11,6 +11,10 @@ logger = logging.getLogger("PreExecutionGate")
 # Module constants
 MAGIC_NUMBER = 142
 MAGIC_LEGACY = 17300
+
+class DecayGuardVetoException(Exception):
+    """Raised when an order is vetoed by the Edge Decay Sentinel guard (v31.2)."""
+    pass
 
 import threading
 pending_execution_queue = []
@@ -330,6 +334,54 @@ def run_all_gates(
     current_heat_usd: float,
     embargo_registry: dict
 ) -> PreExecutionVerdict:
+
+    # SRE Edge Decay Sentinel Hard Breach Veto check (v31.2)
+    state_file = "oracle_cache/edge_decay_state.json"
+    try:
+        import os, json
+        if os.path.exists(state_file):
+            with open(state_file, "r", encoding="utf-8") as fh:
+                state_data = json.load(fh)
+            module_tier = state_data.get("module_tier", {})
+            
+            is_breached = False
+            breached_strategy = None
+            for strat, status in module_tier.items():
+                if status == "HARD_BREACH":
+                    is_breached = True
+                    breached_strategy = strat
+                    break
+            
+            if is_breached:
+                setup_params = {
+                    "symbol": symbol,
+                    "direction": direction,
+                    "asset_class": asset_class,
+                    "regime": regime,
+                    "ticket_ref": ticket_ref,
+                    "kelly_lots": kelly_lots,
+                    "entry_price": entry_price,
+                    "sl_distance": sl_distance,
+                    "tp_distance": tp_distance,
+                    "risk_usd": risk_usd,
+                    "equity": equity
+                }
+                logger.critical(f"[DECAY_GUARD_VETO] Blocked execution for {symbol} due to HARD_BREACH on {breached_strategy}. Params: {setup_params}")
+                
+                breach_log = {
+                    "timestamp": datetime.now(timezone.utc).isoformat() if hasattr(datetime, 'now') else str(time.time()),
+                    "symbol": symbol,
+                    "strategy": breached_strategy,
+                    "params": setup_params
+                }
+                with open("pending_diagnostics/decay_breach.json", "w", encoding="utf-8") as bh:
+                    json.dump(breach_log, bh, indent=4)
+                
+                raise DecayGuardVetoException(f"[DECAY_GUARD_VETO] Blocked execution for {symbol} due to HARD_BREACH on {breached_strategy}")
+    except DecayGuardVetoException:
+        raise
+    except Exception as e:
+        logger.warning(f"[DECAY_SRE_WARN] Pre-execution gate telemetry check skipped or failed: {e}")
 
     # Helper to return rejection
     def reject(gate_res: GateResult) -> PreExecutionVerdict:

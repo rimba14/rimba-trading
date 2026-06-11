@@ -2416,6 +2416,27 @@ async def _run_mt5_event_loop(watchlist: list, last_run_hour: int, current_equit
 
     asyncio.create_task(mock_mt5_tick_producer())
 
+    async def edge_decay_sentinel_worker():
+        try:
+            import edge_decay_sentinel
+            import sentinel_config as cfg
+            master_version = getattr(cfg, 'MASTER_VERSION', 'v30.98')
+            edge_decay_sentinel.run_edge_decay_sentinel(master_version=master_version)
+        except Exception as es_err:
+            logging.error(f"[SENTINEL_WORKER_ERR] Edge Decay Sentinel startup run failed: {es_err}")
+
+        while True:
+            await asyncio.sleep(300)
+            try:
+                import edge_decay_sentinel
+                import sentinel_config as cfg
+                master_version = getattr(cfg, 'MASTER_VERSION', 'v30.98')
+                edge_decay_sentinel.run_edge_decay_sentinel(master_version=master_version)
+            except Exception as es_err:
+                logging.error(f"[SENTINEL_WORKER_ERR] Edge Decay Sentinel loop run failed: {es_err}")
+
+    asyncio.create_task(edge_decay_sentinel_worker())
+
     while True:
         try:
             event = await mt5_queue.get()

@@ -1380,6 +1380,30 @@ def calculate_kelly_lot(symbol, conviction, acc=None):
     except Exception as e:
         logger.warning(f"[{symbol}] Target Volatility scaling failed: {e}")
         
+    # --- EDGE DECAY SENTINEL SIZING HOOK (v31.2) ---
+    edge_decay_mult = 1.0
+    state_file = "oracle_cache/edge_decay_state.json"
+    try:
+        if not os.path.exists(state_file):
+            logger.warning(f"[DECAY_SRE_WARN] Telemetry cache {state_file} is missing! Enforcing conservative fallback (0.5x risk scaling).")
+            edge_decay_mult = 0.5
+        else:
+            with open(state_file, "r", encoding="utf-8") as fh:
+                state_data = json.load(fh)
+            global_status = state_data.get("global_status", "NORMAL")
+            if global_status == "SOFT_BREACH":
+                logger.warning(f"[{symbol}] SOFT_BREACH detected in SRE Edge Decay Sentinel. Scaling down position size by 0.5x.")
+                edge_decay_mult = 0.5
+            elif global_status == "HARD_BREACH":
+                logger.critical(f"[{symbol}] HARD_BREACH detected in SRE Edge Decay Sentinel. Freezing execution.")
+                return 0.0
+    except Exception as e:
+        logger.warning(f"[DECAY_SRE_WARN] Telemetry cache {state_file} could not be read or is corrupted ({e})! Enforcing conservative fallback (0.5x risk scaling).")
+        edge_decay_mult = 0.5
+
+    lot = lot * edge_decay_mult
+    # -----------------------------------------------
+        
     # Scale lot by health_size_multiplier from dynamic_risk_params.json
     try:
         config = load_risk_config()

@@ -1241,13 +1241,38 @@ class SentinelProfitManager:
         try:
             health_mult = run_composite_health_audit()
             
+            # --- EDGE DECAY SENTINEL INTEGRATION ---
+            edge_decay_mult = 1.0
+            state_file = "oracle_cache/edge_decay_state.json"
+            try:
+                import os, json
+                if not os.path.exists(state_file):
+                    logger.warning(f"[DECAY_SRE_WARN] Telemetry cache {state_file} is missing! Enforcing conservative fallback (0.5x risk scaling).")
+                    edge_decay_mult = 0.5
+                else:
+                    with open(state_file, "r", encoding="utf-8") as fh:
+                        state_data = json.load(fh)
+                    global_status = state_data.get("global_status", "NORMAL")
+                    if global_status == "SOFT_BREACH":
+                        logger.warning(f"[HEALTH] SOFT_BREACH detected in SRE Edge Decay Sentinel. Scaling size by 0.5x.")
+                        edge_decay_mult = 0.5
+                    elif global_status == "HARD_BREACH":
+                        logger.critical(f"[HEALTH] HARD_BREACH detected in SRE Edge Decay Sentinel. Enforcing halt.")
+                        edge_decay_mult = 0.0
+            except Exception as e:
+                logger.warning(f"[DECAY_SRE_WARN] Telemetry cache {state_file} could not be read or is corrupted ({e})! Enforcing conservative fallback (0.5x risk scaling).")
+                edge_decay_mult = 0.5
+
+            # Apply multiplier
+            health_mult = health_mult * edge_decay_mult
+            
             # Read and write to dynamic_risk_params.json
             config = load_risk_config()
             config["health_size_multiplier"] = health_mult
             with open("dynamic_risk_params.json", "w", encoding="utf-8") as fh:
                 json.dump(config, fh, indent=4)
                 
-            logger.info(f"[HEALTH] Saved health_size_multiplier={health_mult} to dynamic_risk_params.json")
+            logger.info(f"[HEALTH] Saved health_size_multiplier={health_mult} (including SRE decay scaling) to dynamic_risk_params.json")
             
             if health_mult == 0.0:
                 logger.critical("[HEALTH] SRE Exec Freeze initiated due to 3 health metric failures.")

@@ -220,7 +220,39 @@ class QuarantineRegistry:
         filtered    = {}
         quarantined = {}
 
+        # --- EDGE DECAY SENTINEL QUARANTINE HOOK (v31.2) ---
+        state_file = "oracle_cache/edge_decay_state.json"
+        decay_quarantine_agents = []
+        try:
+            import os, json
+            if os.path.exists(state_file):
+                with open(state_file, "r", encoding="utf-8") as fh:
+                    state_data = json.load(fh)
+                agent_tier = state_data.get("agent_tier", {})
+                for a_name, a_status in agent_tier.items():
+                    if a_status == "QUARANTINED":
+                        decay_quarantine_agents.append(a_name.lower())
+        except Exception as e:
+            logger.warning(f"[DECAY_SRE_WARN] Telemetry agent quarantine check failed to load/parse: {e}")
+        # ---------------------------------------------------
+
         for agent_name, score in scores.items():
+            # Check dynamic SRE quarantine first
+            matched_decay = False
+            for dq_agent in decay_quarantine_agents:
+                if dq_agent in agent_name.lower() or agent_name.lower() in dq_agent:
+                    matched_decay = True
+                    break
+            
+            if matched_decay:
+                reason = "Edge Decay Quarantine (persistent hit-rate decay below 5th percentile)"
+                quarantined[agent_name] = reason
+                logger.warning(
+                    "[Quarantine] Agent '%s' dynamically quarantined by SRE Sentinel (score %.4f dropped)",
+                    agent_name, score,
+                )
+                continue
+
             state = self._agents.get(agent_name)
 
             if state is None:

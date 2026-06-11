@@ -1,18 +1,18 @@
 {
-    "session": "SYDNEY",
+    "session": "NEW_YORK",
     "regime": "RANGE",
-    "open_positions": 11,
+    "open_positions": 12,
     "cluster_exposure": {
         "CRYPTO": 0.15,
         "EQUITY_INDEX": 0.4,
         "FX": 0.45
     },
-    "drawdown_today": 74.47,
+    "drawdown_today": 350.68,
     "active_directives": [
         "DIRECTIVE ZETA",
         "EPISTEMIC_GATE",
         "AMENDMENT XXV"
     ],
-    "hardware_latency_ms": 7.61,
-    "timestamp": 1780959892.1209428
+    "hardware_latency_ms": 1.46,
+    "timestamp": 1781204639.6179626
 }
