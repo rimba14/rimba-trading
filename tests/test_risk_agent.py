@@ -5,7 +5,7 @@ import pytest
 # Mock MetaTrader5 module before importing from risk_agent
 sys.modules['MetaTrader5'] = MagicMock()
 
-from agents.risk_agent import parse_base_quote, calculate_currency_exposure
+from agents.risk_agent import parse_base_quote, calculate_currency_exposure, get_usd_rate
 
 def test_parse_base_quote_standard_forex():
     """Test standard 6-character clean forex pairs."""
@@ -51,3 +51,39 @@ def test_calculate_currency_exposure_error_path(mocker):
     mock_logger.warning.assert_called_once()
     call_arg = mock_logger.warning.call_args[0][0]
     assert "[RISK_EXPOSURE_ERR] Failed parsing position" in call_arg
+
+def test_get_usd_rate(mocker):
+    """Test get_usd_rate for various currency scenarios including USD, direct, inverse, and fallback."""
+    import MetaTrader5 as mt5
+
+    # 1. Test USD case
+    assert get_usd_rate("USD") == 1.0
+
+    # 2. Test Direct Rate (e.g. GBPUSD)
+    mock_tick_gbp = MagicMock()
+    mock_tick_gbp.bid = 1.25
+
+    def side_effect(symbol):
+        if symbol == "GBPUSD":
+            return mock_tick_gbp
+        return None
+
+    mocker.patch("MetaTrader5.symbol_info_tick", side_effect=side_effect)
+    assert get_usd_rate("GBP") == 1.25
+
+    # 3. Test Inverse Rate (e.g. USDJPY)
+    mock_tick_jpy = MagicMock()
+    mock_tick_jpy.bid = 110.0
+
+    def side_effect_inverse(symbol):
+        if symbol == "USDJPY":
+            return mock_tick_jpy
+        return None
+
+    mocker.patch("MetaTrader5.symbol_info_tick", side_effect=side_effect_inverse)
+    # 1.0 / 110.0 is approx 0.009090909
+    assert get_usd_rate("JPY") == pytest.approx(1.0 / 110.0)
+
+    # 4. Test Fallback Case
+    mocker.patch("MetaTrader5.symbol_info_tick", return_value=None)
+    assert get_usd_rate("XYZ") == 1.0
