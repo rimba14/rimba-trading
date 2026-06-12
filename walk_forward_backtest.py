@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from dataclasses import dataclass
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 
@@ -11,6 +12,16 @@ sys.path.append(str(PROJECT_ROOT))
 
 import MetaTrader5 as mt5
 import feature_engineering as feat_eng
+
+@dataclass
+class BacktestConfig:
+    """
+    Encapsulates Reality Tax parameters for backtesting.
+    """
+    flat_commission: float = 3.00
+    swap_charge: float = 5.00
+    pip_multiplier: int = 100000
+    default_spread: float = 1.2
 
 class StrategyFailed(Warning):
     """Custom warning thrown when the backtest Sharpe ratio fails to clear the Reality Tax threshold."""
@@ -120,15 +131,14 @@ def monte_carlo_path_stress(pnl_array, initial_capital=10000, n_simulations=1000
         "worst_sim_mdd": worst_shuffled_dd
     }
 
-def simulate_oos_trading(test_df, probs,
-                         flat_commission=3.00,
-                         swap_charge=5.00,
-                         pip_multiplier=100000,
-                         default_spread=1.2):
+def simulate_oos_trading(test_df, probs, config: BacktestConfig = None):
     """
     Simulates Out-Of-Sample (OOS) trading on a given fold's test data.
     Applies Reality Tax: commissions, slippage, and overnight swaps.
     """
+    if config is None:
+        config = BacktestConfig()
+
     fold_trades_pnl = []
     oos_trades_log = []
     
@@ -148,10 +158,10 @@ def simulate_oos_trading(test_df, probs,
             exit_price = close_prices[exit_idx]
 
             # Gross P&L
-            gross_pnl = direction * (exit_price - entry_price) * pip_multiplier
+            gross_pnl = direction * (exit_price - entry_price) * config.pip_multiplier
 
             # Retrieve spread in pips (points / 10 if standard MT5 broker)
-            spread_val = test_df['spread'].iloc[idx] / 10.0 if 'spread' in test_df.columns else default_spread
+            spread_val = test_df['spread'].iloc[idx] / 10.0 if 'spread' in test_df.columns else config.default_spread
 
             # ── Apply the Reality Tax ──
             # 1. Slippage penalty: 1.0x spread
@@ -164,9 +174,9 @@ def simulate_oos_trading(test_df, probs,
                     held_overnight = True
                     break
 
-            swap_penalty = swap_charge if held_overnight else 0.0
+            swap_penalty = config.swap_charge if held_overnight else 0.0
 
-            net_pnl = gross_pnl - slippage_penalty - flat_commission - swap_penalty
+            net_pnl = gross_pnl - slippage_penalty - config.flat_commission - swap_penalty
             fold_trades_pnl.append(net_pnl)
 
             oos_trades_log.append({
@@ -191,10 +201,12 @@ def run_walk_forward_audit(df, feature_cols, n_folds=5):
     oos_trades_log = []
     
     # Parameters for Reality Tax
-    flat_commission = 3.00
-    swap_charge = 5.00
-    pip_multiplier = 100000
-    default_spread = 1.2
+    bt_config = BacktestConfig(
+        flat_commission=3.00,
+        swap_charge=5.00,
+        pip_multiplier=100000,
+        default_spread=1.2
+    )
     
     print("\n--- FOLD-BY-FOLD WALK-FORWARD AUDIT ---")
     
@@ -214,11 +226,7 @@ def run_walk_forward_audit(df, feature_cols, n_folds=5):
         probs = model.predict_proba(X_test)[:, 1]
         fold_auc = roc_auc_score(y_test, probs)
         
-        fold_trades_pnl, fold_oos_log = simulate_oos_trading(test_df, probs,
-                                                            flat_commission=flat_commission,
-                                                            swap_charge=swap_charge,
-                                                            pip_multiplier=pip_multiplier,
-                                                            default_spread=default_spread)
+        fold_trades_pnl, fold_oos_log = simulate_oos_trading(test_df, probs, config=bt_config)
         
         fold_net_profit = np.sum(fold_trades_pnl) if len(fold_trades_pnl) > 0 else 0.0
         print(f" Fold {fold+1} | Train: 0-{train_end} | Test: {train_end}-{test_end} | OOS AUC: {fold_auc:.4f} | Net Trades profit: ${fold_net_profit:.2f}")
