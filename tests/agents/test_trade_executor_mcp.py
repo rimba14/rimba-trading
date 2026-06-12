@@ -1,34 +1,48 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 import sys
+import os
+import json
+import numpy as np
+from datetime import datetime
 
 # Mock dependencies before importing the module
-sys.modules['MetaTrader5'] = MagicMock()
+mt5_mock = MagicMock()
+# Define MT5 constants
+mt5_mock.ORDER_TYPE_BUY = 0
+mt5_mock.ORDER_TYPE_SELL = 1
+mt5_mock.ORDER_TYPE_BUY_LIMIT = 2
+mt5_mock.ORDER_TYPE_SELL_LIMIT = 3
+mt5_mock.TRADE_ACTION_DEAL = 1
+mt5_mock.TRADE_ACTION_PENDING = 5
+mt5_mock.ORDER_TIME_GTC = 0
+mt5_mock.ORDER_FILLING_IOC = 1
+mt5_mock.TIMEFRAME_M15 = 15
+mt5_mock.TRADE_RETCODE_DONE = 10009
+
+sys.modules['MetaTrader5'] = mt5_mock
 sys.modules['gitagent_utils'] = MagicMock()
-# Mock mcp to avoid issues with FastMCP
+
+# --- HARD MOCK MCP ---
+class MockFastMCP:
+    def __init__(self, *args, **kwargs):
+        pass
+    def tool(self, *args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    def run(self, *args, **kwargs):
+        pass
+
+mock_fastmcp_module = MagicMock()
+mock_fastmcp_module.FastMCP = MockFastMCP
 sys.modules['mcp'] = MagicMock()
 sys.modules['mcp.server'] = MagicMock()
-sys.modules['mcp.server.fastmcp'] = MagicMock()
+sys.modules['mcp.server.fastmcp'] = mock_fastmcp_module
 
 import agents.trade_executor_mcp as te
 
 def test_calculate_kelly_lot_size_happy_path():
-    # p = 0.6, equity = 10000, sl_points = 100, tick_value = 10, tick_size = 0.01, point = 0.01
-    # p_val = 0.6, q_val = 0.4, b = 1.5
-    # f_star = 0.6 - (0.4 / 1.5) = 0.6 - 0.2666... = 0.3333...
-    # f_star *= 0.25 (default KELLY_FRACTION) = 0.08333...
-    # f_star = min(0.08333..., 0.02) = 0.02
-    # risk_dollars = 10000 * 0.02 = 200
-    # point_val = 10 / (0.01 / 0.01) = 10
-    # lots = 200 / ((100 / 0.01) * 10 + 1e-12) = 200 / (10000 * 10) = 200 / 100000 = 0.002
-
-    # Wait, let's re-calculate point_val and lots carefully.
-    # point_val = tick_value / (tick_size / point)
-    # If tick_size == point, then point_val = tick_value.
-    # lots = risk_dollars / ((sl_points / point) * point_val + 1e-12)
-    # If sl_points is 100 and point is 0.01, sl_points/point = 10000.
-    # lots = 200 / (10000 * 10) = 0.002.
-
     with patch('agents.trade_executor_mcp.get_dynamic_risk_params') as mock_get_params:
         mock_get_params.return_value = {
             "epistemic_gate": 0.82,
@@ -39,19 +53,11 @@ def test_calculate_kelly_lot_size_happy_path():
         lots = te.calculate_kelly_lot_size(
             p=0.6,
             equity=10000.0,
-            sl_points=0.01, # Using small sl_points to avoid tiny lots
+            sl_points=0.01,
             tick_value=1.0,
             tick_size=0.00001,
             point=0.00001
         )
-        # p_val = 0.6, q_val = 0.4, b = 1.5
-        # f_star = 0.6 - (0.4/1.5) = 0.333...
-        # f_star *= 0.25 = 0.0833...
-        # f_star = min(0.0833, 0.02) = 0.02
-        # risk_dollars = 10000 * 0.02 = 200
-        # point_val = 1.0 / (0.00001 / 0.00001) = 1.0
-        # lots = 200 / ((0.01 / 0.00001) * 1.0) = 200 / 1000 = 0.2
-
         assert pytest.approx(lots) == 0.2
 
 def test_calculate_kelly_lot_size_sl_zero():
@@ -59,7 +65,6 @@ def test_calculate_kelly_lot_size_sl_zero():
     assert lots == 0.0
 
 def test_calculate_kelly_lot_size_low_p():
-    # p = 0.4. Should use 1.0 - 0.4 = 0.6
     with patch('agents.trade_executor_mcp.get_dynamic_risk_params') as mock_get_params:
         mock_get_params.return_value = {
             "epistemic_gate": 0.82,
@@ -75,21 +80,15 @@ def test_calculate_kelly_lot_size_low_p():
             tick_size=0.00001,
             point=0.00001
         )
-        # Should be same as p=0.6
         assert pytest.approx(lots) == 0.2
 
 def test_calculate_kelly_lot_size_max_risk_cap():
-    # Force f_star to be very high to test capping
     with patch('agents.trade_executor_mcp.get_dynamic_risk_params') as mock_get_params:
         mock_get_params.return_value = {
             "epistemic_gate": 0.82,
-            "kelly_fraction": 1.0, # Full Kelly
+            "kelly_fraction": 1.0,
             "virtual_sl_multiplier": None
         }
-        # p=0.9, q=0.1, b=1.5
-        # f_star = 0.9 - (0.1/1.5) = 0.9 - 0.0666 = 0.8333
-        # f_star *= 1.0 = 0.8333
-        # f_star = min(0.8333, 0.02) = 0.02
 
         lots = te.calculate_kelly_lot_size(
             p=0.9,
@@ -99,19 +98,15 @@ def test_calculate_kelly_lot_size_max_risk_cap():
             tick_size=0.00001,
             point=0.00001
         )
-        assert pytest.approx(lots) == 0.2 # 10000 * 0.02 / 1000 = 0.2
+        assert pytest.approx(lots) == 0.2
 
 def test_calculate_kelly_lot_size_custom_params():
     with patch('agents.trade_executor_mcp.get_dynamic_risk_params') as mock_get_params:
         mock_get_params.return_value = {
             "epistemic_gate": 0.82,
-            "kelly_fraction": 0.1, # 1/10 Kelly
+            "kelly_fraction": 0.1,
             "virtual_sl_multiplier": None
         }
-        # p=0.7, q=0.3, b=1.5
-        # f_star = 0.7 - (0.3/1.5) = 0.7 - 0.2 = 0.5
-        # f_star *= 0.1 = 0.05
-        # f_star = min(0.05, 0.02) = 0.02
 
         lots = te.calculate_kelly_lot_size(
             p=0.7,
@@ -130,18 +125,6 @@ def test_calculate_kelly_lot_size_math_variation():
             "kelly_fraction": 0.25,
             "virtual_sl_multiplier": None
         }
-        # p=0.8, q=0.2, b=1.5
-        # f_star = 0.8 - (0.2/1.5) = 0.8 - 0.1333... = 0.6666...
-        # f_star *= 0.25 = 0.1666...
-        # f_star = min(0.1666..., 0.02) = 0.02
-
-        # Change equity and sl_points
-        # risk_dollars = 50000 * 0.02 = 1000
-        # sl_points = 0.05, point = 0.0001
-        # sl_points / point = 500
-        # tick_value = 10.0, tick_size = 0.001
-        # point_val = 10.0 / (0.001 / 0.0001) = 1.0
-        # lots = 1000 / (500 * 1.0) = 2.0
 
         lots = te.calculate_kelly_lot_size(
             p=0.8,
@@ -152,3 +135,152 @@ def test_calculate_kelly_lot_size_math_variation():
             point=0.0001
         )
         assert pytest.approx(lots) == 2.0
+
+def test_execute_trade_mt5_init_fail():
+    te.mt5.initialize.return_value = False
+    result = te.execute_trade("EURUSD", 0.9, "regime_1")
+    assert "MT5 Initialization Failed" in result
+    te.mt5.initialize.return_value = True
+
+def test_execute_trade_epistemic_gate_rejection():
+    with patch('agents.trade_executor_mcp.get_dynamic_risk_params') as mock_params:
+        mock_params.return_value = {"epistemic_gate": 0.82, "kelly_fraction": 0.25}
+        result = te.execute_trade("EURUSD", 0.6, "regime_1")
+        data = json.loads(result)
+        assert data["status"] == "REJECTED"
+        assert "below 0.820 threshold" in data["reason"]
+
+def test_execute_trade_symbol_not_found():
+    te.mt5.symbol_info.return_value = None
+    result = te.execute_trade("NONEXISTENT", 0.9, "regime_1")
+    assert "Symbol NONEXISTENT not found" in result
+
+def test_execute_trade_amnesia_lock():
+    mock_pos = MagicMock()
+    mock_pos.magic = 142
+    te.mt5.positions_get.return_value = [mock_pos]
+    te.mt5.symbol_info.return_value = MagicMock()
+
+    result = te.execute_trade("EURUSD", 0.9, "regime_1")
+    data = json.loads(result)
+    assert data["status"] == "REJECTED"
+    assert "Amnesia Lock" in data["reason"]
+    te.mt5.positions_get.return_value = []
+
+def test_execute_trade_portfolio_heat_rejection():
+    te.mt5.symbol_info.return_value = MagicMock()
+    te.mt5.symbol_info_tick.return_value = MagicMock()
+    account_mock = MagicMock()
+    account_mock.equity = 10000
+    te.mt5.account_info.return_value = account_mock
+
+    pos = MagicMock()
+    pos.symbol = "EURUSD"
+    pos.magic = 142
+    pos.price_open = 1.1000
+    pos.sl = 1.0000
+    pos.volume = 10.0
+
+    te.mt5.positions_get.side_effect = [[], [pos]]
+
+    sym_info = MagicMock()
+    sym_info.point = 0.0001
+    sym_info.trade_tick_value = 1.0
+    sym_info.trade_tick_size = 0.0001
+    te.mt5.symbol_info.return_value = sym_info
+
+    result = te.execute_trade("EURUSD", 0.9, "regime_1")
+    data = json.loads(result)
+    assert data["status"] == "REJECTED"
+    assert "Portfolio Heat > 20%" in data["reason"]
+    te.mt5.positions_get.side_effect = None
+    te.mt5.positions_get.return_value = []
+
+def test_execute_trade_leverage_wall_rejection():
+    te.mt5.symbol_info.return_value = MagicMock()
+    te.mt5.symbol_info_tick.return_value = MagicMock()
+    account_mock = MagicMock()
+    account_mock.equity = 10000
+    te.mt5.account_info.return_value = account_mock
+
+    pos = MagicMock()
+    pos.symbol = "EURUSD"
+    pos.magic = 999
+    pos.price_open = 1.0
+    pos.volume = 2.0
+
+    te.mt5.positions_get.side_effect = [[], [pos]]
+
+    sym_info = MagicMock()
+    sym_info.trade_contract_size = 100000
+    te.mt5.symbol_info.return_value = sym_info
+
+    result = te.execute_trade("EURUSD", 0.9, "regime_1")
+    data = json.loads(result)
+    assert data["status"] == "REJECTED"
+    assert "Leverage Wall > 10x" in data["reason"]
+    te.mt5.positions_get.side_effect = None
+    te.mt5.positions_get.return_value = []
+
+def test_execute_trade_insufficient_data():
+    te.mt5.symbol_info.return_value = MagicMock()
+    te.mt5.symbol_info_tick.return_value = MagicMock()
+
+    account_mock = MagicMock()
+    account_mock.equity = 10000
+    te.mt5.account_info.return_value = account_mock
+    te.mt5.positions_get.return_value = []
+
+    te.mt5.copy_rates_from_pos.return_value = None
+    result = te.execute_trade("EURUSD", 0.9, "regime_1")
+    assert "Insufficient M15 data" in result
+
+def test_execute_trade_success():
+    te.mt5.initialize.return_value = True
+
+    sym_info = MagicMock()
+    sym_info.point = 0.00001
+    sym_info.volume_min = 0.01
+    sym_info.volume_max = 100.0
+    sym_info.volume_step = 0.01
+    sym_info.trade_tick_value = 1.0
+    sym_info.trade_tick_size = 0.00001
+    sym_info.trade_contract_size = 100000
+    sym_info.trade_stops_level = 5
+    te.mt5.symbol_info.return_value = sym_info
+
+    tick = MagicMock()
+    tick.ask = 1.1005
+    tick.bid = 1.1000
+    te.mt5.symbol_info_tick.return_value = tick
+
+    account = MagicMock()
+    account.equity = 10000.0
+    te.mt5.account_info.return_value = account
+
+    te.mt5.positions_get.return_value = []
+
+    rates = np.zeros(100, dtype=[('high', '<f8'), ('low', '<f8'), ('close', '<f8')])
+    rates['high'] = 1.1010
+    rates['low'] = 1.1000
+    rates['close'] = 1.1005
+    te.mt5.copy_rates_from_pos.return_value = rates
+
+    order_res = MagicMock()
+    order_res.retcode = 10009
+    order_res.order = 123456
+    te.mt5.order_send.return_value = order_res
+
+    with patch('agents.trade_executor_mcp.get_asset_multiplier', return_value=4.0),          patch('agents.trade_executor_mcp.get_dynamic_risk_params', return_value={"epistemic_gate": 0.82, "kelly_fraction": 0.25, "virtual_sl_multiplier": None}),          patch('builtins.open', mock_open()) as mocked_file,          patch('os.path.exists', return_value=True),          patch('agents.trade_executor_mcp.notifier.send_execution_alert') as mock_alert:
+
+        result = te.execute_trade("EURUSD", 0.9, "regime_1")
+
+        data = json.loads(result)
+        assert data["status"] == "EXECUTED"
+        assert data["symbol"] == "EURUSD"
+        assert data["total_lots"] > 0
+        assert len(data["grid"]) == 5
+
+        assert te.mt5.order_send.call_count == 5
+        mock_alert.assert_called_once()
+        mocked_file.assert_called_with("C:/Sentinel_Project/simulated_ledger.csv", "a", encoding='utf-8')
