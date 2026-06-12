@@ -2,9 +2,11 @@ import sys
 from unittest.mock import MagicMock, patch
 import pytest
 
-# Mock MetaTrader5 before importing the module
+# Mock MetaTrader5 and arcticdb before importing the module
 sys.modules['MetaTrader5'] = MagicMock()
+sys.modules['arcticdb'] = MagicMock()
 import MetaTrader5 as mt5
+import arcticdb
 
 import execute_highest_conviction as ehc
 
@@ -61,8 +63,17 @@ def test_calculate_sl_tp_lot():
     ]
     # ATR = 0.02 (approx)
 
+    ctx = ehc.TradeContext(
+        symbol="EURUSD",
+        direction="BUY",
+        tick=tick,
+        info=info,
+        acc=acc,
+        rates=rates
+    )
+
     with patch('execute_highest_conviction.calculate_atr_manual', return_value=0.01):
-        sl, tp, lot = ehc.calculate_sl_tp_lot("EURUSD", "BUY", tick, info, acc, rates)
+        sl, tp, lot = ehc.calculate_sl_tp_lot(ctx)
         assert sl is not None
         assert tp is not None
         assert lot > 0
