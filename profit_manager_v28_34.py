@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Optional
 import threading
 import signal
-from gitagent_types import TelemetryState
+from gitagent_types import TelemetryState, CognitiveState, RuntimeTelemetry
 import gitagent_utils as utils
 
 import numpy as np
@@ -1173,13 +1173,15 @@ class SentinelProfitManager:
                             wasserstein_idx = 1
                             
                 sl.capture_entry_cognitive_state(
-                    raw_probability_vector=[xgb_p, kronos_p],
-                    adjusted_conviction=conviction,
-                    activity_ratio=vol_ratio,
-                    bocpd_prob=ofi_vel,
-                    wasserstein_idx=wasserstein_idx,
-                    volatility_ratio=vol_ratio,
-                    ofi_velocity=ofi_vel
+                    CognitiveState(
+                        raw_probability_vector=[xgb_p, kronos_p],
+                        adjusted_conviction=conviction,
+                        activity_ratio=vol_ratio,
+                        bocpd_prob=ofi_vel,
+                        wasserstein_idx=wasserstein_idx,
+                        volatility_ratio=vol_ratio,
+                        ofi_velocity=ofi_vel
+                    )
                 )
             except Exception as logger_err:
                 logger.error(f"[LOGGER_ERR] Failed to capture cognitive state for ticket {pos.ticket}: {logger_err}")
@@ -1596,15 +1598,17 @@ class SentinelProfitManager:
 
             if hasattr(ps, 'telemetry_logger') and ps.telemetry_logger:
                 ps.telemetry_logger.capture_runtime_telemetry(
-                    bar_step=int(now - ps.entry_time) // 60,
-                    current_pnl=pos.profit,
-                    condition_number=float(oracle.get("matrix_condition", 0.0)),
-                    shaps={},
-                    price=pos.price_current,
-                    sl=pos.sl,
-                    tp=pos.tp,
-                    hmm_state=hmm_state,
-                    conviction=ps.current_conviction
+                    RuntimeTelemetry(
+                        bar_step=int(now - ps.entry_time) // 60,
+                        current_pnl=pos.profit,
+                        condition_number=float(oracle.get("matrix_condition", 0.0)),
+                        shaps={},
+                        price=pos.price_current,
+                        sl=pos.sl,
+                        tp=pos.tp,
+                        hmm_state=hmm_state,
+                        conviction=ps.current_conviction
+                    )
                 )
 
             # v28.35: Fetch/Cache symbol info, tick, and D1 ATR
