@@ -68,6 +68,22 @@ class GateResult:
     status: str
     message: str
 
+@dataclass
+class GateContext:
+    symbol: str
+    direction: str
+    asset_class: str
+    regime: str
+    ticket_ref: str
+    kelly_lots: float
+    entry_price: float
+    sl_distance: float
+    tp_distance: float
+    risk_usd: float
+    equity: float
+    current_heat_usd: float
+    embargo_registry: dict
+
 def _get_cluster(symbol: str) -> str:
     s = symbol.upper()
     crypto_keys = {"BTC", "ETH", "SOL", "AVAX", "LINK", "LTC", "BCH", "XRP", "ADA", "DOT", "MATIC", "DOGE", "UNI", "ATOM", "TRX"}
@@ -319,21 +335,7 @@ def gate8_amnesia_lock(symbol: str, embargo_registry: dict) -> GateResult:
         return GateResult(gate="GATE-8", status=BLOCK, message=f"Symbol {symbol} is currently in amnesia lock registry")
     return GateResult(gate="GATE-8", status=ALLOW, message="Passed amnesia lock.")
 
-def run_all_gates(
-    symbol: str,
-    direction: str,
-    asset_class: str,
-    regime: str,
-    ticket_ref: str,
-    kelly_lots: float,
-    entry_price: float,
-    sl_distance: float,
-    tp_distance: float,
-    risk_usd: float,
-    equity: float,
-    current_heat_usd: float,
-    embargo_registry: dict
-) -> PreExecutionVerdict:
+def run_all_gates(context: GateContext) -> PreExecutionVerdict:
 
     # SRE Edge Decay Sentinel Hard Breach Veto check (v31.2)
     state_file = "oracle_cache/edge_decay_state.json"
@@ -354,30 +356,30 @@ def run_all_gates(
             
             if is_breached:
                 setup_params = {
-                    "symbol": symbol,
-                    "direction": direction,
-                    "asset_class": asset_class,
-                    "regime": regime,
-                    "ticket_ref": ticket_ref,
-                    "kelly_lots": kelly_lots,
-                    "entry_price": entry_price,
-                    "sl_distance": sl_distance,
-                    "tp_distance": tp_distance,
-                    "risk_usd": risk_usd,
-                    "equity": equity
+                    "symbol": context.symbol,
+                    "direction": context.direction,
+                    "asset_class": context.asset_class,
+                    "regime": context.regime,
+                    "ticket_ref": context.ticket_ref,
+                    "kelly_lots": context.kelly_lots,
+                    "entry_price": context.entry_price,
+                    "sl_distance": context.sl_distance,
+                    "tp_distance": context.tp_distance,
+                    "risk_usd": context.risk_usd,
+                    "equity": context.equity
                 }
-                logger.critical(f"[DECAY_GUARD_VETO] Blocked execution for {symbol} due to HARD_BREACH on {breached_strategy}. Params: {setup_params}")
+                logger.critical(f"[DECAY_GUARD_VETO] Blocked execution for {context.symbol} due to HARD_BREACH on {breached_strategy}. Params: {setup_params}")
                 
                 breach_log = {
                     "timestamp": datetime.now(timezone.utc).isoformat() if hasattr(datetime, 'now') else str(time.time()),
-                    "symbol": symbol,
+                    "symbol": context.symbol,
                     "strategy": breached_strategy,
                     "params": setup_params
                 }
                 with open("pending_diagnostics/decay_breach.json", "w", encoding="utf-8") as bh:
                     json.dump(breach_log, bh, indent=4)
                 
-                raise DecayGuardVetoException(f"[DECAY_GUARD_VETO] Blocked execution for {symbol} due to HARD_BREACH on {breached_strategy}")
+                raise DecayGuardVetoException(f"[DECAY_GUARD_VETO] Blocked execution for {context.symbol} due to HARD_BREACH on {breached_strategy}")
     except DecayGuardVetoException:
         raise
     except Exception as e:
@@ -385,33 +387,33 @@ def run_all_gates(
 
     # Helper to return rejection
     def reject(gate_res: GateResult) -> PreExecutionVerdict:
-        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: Gate {gate_res.gate} Failed: {gate_res.message}")
+        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{context.ticket_ref}]: Gate {gate_res.gate} Failed: {gate_res.message}")
 
     # GATE-0: Cross-Asset Correlation Cluster Limiter
-    gate0_res = gate0_correlation_cluster_limit(symbol, direction)
+    gate0_res = gate0_correlation_cluster_limit(context.symbol, context.direction)
     if gate0_res.status == BLOCK:
         return reject(gate0_res)
 
     # Enforce strict parameter type-safety and dimension checking
     try:
-        PriceUnit(entry_price)
-        PipDistance(sl_distance, entry_price)
-        PipDistance(tp_distance, entry_price)
-        LotVolume(kelly_lots)
+        PriceUnit(context.entry_price)
+        PipDistance(context.sl_distance, context.entry_price)
+        PipDistance(context.tp_distance, context.entry_price)
+        LotVolume(context.kelly_lots)
     except (TypeError, ValueError) as type_err:
-        logger.error(f"Type-Safety Gate Violation for {symbol}: {type_err}")
-        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{ticket_ref}]: Type-Safety Violation: {type_err}")
+        logger.error(f"Type-Safety Gate Violation for {context.symbol}: {type_err}")
+        return PreExecutionVerdict(approved=False, _summary=f"BLOCK [{context.ticket_ref}]: Type-Safety Violation: {type_err}")
 
     # List of gates to run
     gates = [
-        lambda: gate1_ecn_conflict(symbol, kelly_lots, equity),
-        lambda: gate2_leverage_wall(symbol, kelly_lots, entry_price, equity),
-        lambda: gate3_rr_ratio(sl_distance, tp_distance, regime),
-        lambda: gate4_contamination_check(symbol),
-        lambda: gate5_risk_cap_and_atr_floor(symbol, direction, entry_price, sl_distance, risk_usd, equity),
-        lambda: gate6_portfolio_heat(risk_usd, current_heat_usd, equity),
-        lambda: gate7_weekend_blackout(asset_class),
-        lambda: gate8_amnesia_lock(symbol, embargo_registry)
+        lambda: gate1_ecn_conflict(context.symbol, context.kelly_lots, context.equity),
+        lambda: gate2_leverage_wall(context.symbol, context.kelly_lots, context.entry_price, context.equity),
+        lambda: gate3_rr_ratio(context.sl_distance, context.tp_distance, context.regime),
+        lambda: gate4_contamination_check(context.symbol),
+        lambda: gate5_risk_cap_and_atr_floor(context.symbol, context.direction, context.entry_price, context.sl_distance, context.risk_usd, context.equity),
+        lambda: gate6_portfolio_heat(context.risk_usd, context.current_heat_usd, context.equity),
+        lambda: gate7_weekend_blackout(context.asset_class),
+        lambda: gate8_amnesia_lock(context.symbol, context.embargo_registry)
     ]
 
     for gate_func in gates:

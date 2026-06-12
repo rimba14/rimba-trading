@@ -8,7 +8,7 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import edge_decay_sentinel
-from pre_execution_gate import run_all_gates, DecayGuardVetoException
+from pre_execution_gate import run_all_gates, DecayGuardVetoException, GateContext
 from agent_quarantine import registry
 
 class TestEdgeDecaySentinel(unittest.TestCase):
@@ -89,13 +89,14 @@ class TestEdgeDecaySentinel(unittest.TestCase):
         
         # Call run_all_gates and assert DecayGuardVetoException
         with self.assertRaises(DecayGuardVetoException):
-            run_all_gates(
+            context = GateContext(
                 symbol="EURUSD", direction="BUY", asset_class="FOREX",
                 regime="BULL", ticket_ref="12345", kelly_lots=0.1,
                 entry_price=1.1000, sl_distance=0.0100, tp_distance=0.0200,
                 risk_usd=100.0, equity=10000.0, current_heat_usd=200.0,
                 embargo_registry={}
             )
+            run_all_gates(context)
             
         # Verify pending_diagnostics/decay_breach.json was generated
         diag_file = "pending_diagnostics/decay_breach.json"

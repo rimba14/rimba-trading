@@ -219,7 +219,7 @@ import MetaTrader5 as mt5
 import xgboost as xgb
 import shap
 
-from pre_execution_gate import run_all_gates
+from pre_execution_gate import run_all_gates, GateContext
 import MetaTrader5 as mt5
 import requests
 import copy
@@ -876,7 +876,7 @@ _LAST_UPDATE: Dict[str, float] = {}
 ORACLE_COOLDOWN = 60.0
 
 
-from pre_execution_gate import run_all_gates
+from pre_execution_gate import run_all_gates, GateContext
 import MetaTrader5 as mt5
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -941,15 +941,22 @@ def push_to_orchestrator(payload: Dict[str, Any]):
         current_portfolio_heat = current_equity * 0.05 # Placeholder approximation for the gate
         amnesia_lock_registry = {} # Placeholder
 
-        verdict = run_all_gates(
-            symbol=symbol, direction=direction, asset_class=asset_class,
-            regime=regime_key, ticket_ref=str(ticket_ref),
-            kelly_lots=kelly_lots, entry_price=entry_price,
-            sl_distance=sl_distance, tp_distance=tp_distance,
-            risk_usd=risk_usd, equity=current_equity,
+        context = GateContext(
+            symbol=symbol,
+            direction=direction,
+            asset_class=asset_class,
+            regime=regime_key,
+            ticket_ref=str(ticket_ref),
+            kelly_lots=kelly_lots,
+            entry_price=entry_price,
+            sl_distance=sl_distance,
+            tp_distance=tp_distance,
+            risk_usd=risk_usd,
+            equity=current_equity,
             current_heat_usd=current_portfolio_heat,
             embargo_registry=amnesia_lock_registry,
         )
+        verdict = run_all_gates(context)
 
         if not verdict.approved:
             logging.error(f"[GATE_LAYER] SIGNAL BLOCKED: {verdict.summary()}")
