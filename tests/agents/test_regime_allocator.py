@@ -124,3 +124,35 @@ def test_get_market_regime_invalid_json():
 
     parsed_result = json.loads(result_json)
     assert "error" in parsed_result
+
+def test_get_market_regime_volatile():
+    # Test State 3: VOLATILE via get_market_regime
+    fft_data = {"anomaly_detected": True, "volatility_sigma": 1.0}
+    result_json = get_market_regime("BTCUSD", "BULL", json.dumps(fft_data))
+    assert json.loads(result_json)["regime"] == "VOLATILE"
+
+    fft_data_sigma = {"anomaly_detected": False, "volatility_sigma": 5.0}
+    result_json_sigma = get_market_regime("BTCUSD", "BULL", json.dumps(fft_data_sigma))
+    assert json.loads(result_json_sigma)["regime"] == "VOLATILE"
+
+def test_get_market_regime_trend():
+    # Test State 2: TREND via get_market_regime
+    fft_data = {"anomaly_detected": False, "volatility_sigma": 1.0}
+    result_json = get_market_regime("BTCUSD", "BEAR", json.dumps(fft_data))
+    assert json.loads(result_json)["regime"] == "TREND"
+
+def test_get_market_regime_uncertain():
+    # Test Default Fallback via get_market_regime
+    fft_data = {"anomaly_detected": False, "volatility_sigma": 1.0}
+    result_json = get_market_regime("BTCUSD", "MYSTERIOUS_STATE", json.dumps(fft_data))
+    assert json.loads(result_json)["regime"] == "UNCERTAIN"
+
+def test_get_market_regime_missing_keys():
+    # Test missing keys in JSON input
+    fft_data = {"volatility_sigma": 1.0} # Missing anomaly_detected
+    result_json = get_market_regime("BTCUSD", "RANGE", json.dumps(fft_data))
+    assert json.loads(result_json)["regime"] == "RANGE"
+
+    fft_data_empty = {}
+    result_json_empty = get_market_regime("BTCUSD", "RANGE", json.dumps(fft_data_empty))
+    assert json.loads(result_json_empty)["regime"] == "RANGE"
