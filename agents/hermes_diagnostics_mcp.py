@@ -38,8 +38,11 @@ def resolve_diagnostic(filename: str) -> str:
     """Removes a diagnostic file from the queue once processed."""
     path = os.path.join(DIAGNOSTICS_DIR, filename)
     if os.path.exists(path):
-        os.remove(path)
-        return json.dumps({"status": "success", "message": f"Resolved {filename}"})
+        try:
+            os.remove(path)
+            return json.dumps({"status": "success", "message": f"Resolved {filename}"})
+        except Exception as e:
+            return json.dumps({"status": "error", "message": f"FAILED_TO_DELETE: {str(e)}"})
     return json.dumps({"status": "error", "message": "FILE_NOT_FOUND"})
 
 @mcp.tool()

@@ -2,7 +2,8 @@ import sys
 import os
 from unittest.mock import MagicMock, patch, mock_open
 
-# Mock FastMCP
+# Mock FastMCP and requests
+sys.modules['requests'] = MagicMock()
 sys.modules['mcp.server.fastmcp'] = MagicMock()
 fast_mcp_mock = MagicMock()
 def mock_tool(*args, **kwargs):
@@ -19,7 +20,44 @@ import pytest
 import json
 import datetime
 
-from agents.hermes_diagnostics_mcp import apply_sre_patch, send_sre_webhook
+from agents.hermes_diagnostics_mcp import apply_sre_patch, send_sre_webhook, resolve_diagnostic, DIAGNOSTICS_DIR
+
+def test_resolve_diagnostic_success():
+    with patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists, \
+         patch("agents.hermes_diagnostics_mcp.os.remove") as mock_remove:
+
+        mock_exists.return_value = True
+        filename = "test.json"
+
+        result_json = resolve_diagnostic(filename)
+        result = json.loads(result_json)
+
+        assert result["status"] == "success"
+        assert f"Resolved {filename}" in result["message"]
+        mock_remove.assert_called_once_with(os.path.join(DIAGNOSTICS_DIR, filename))
+
+def test_resolve_diagnostic_not_found():
+    with patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists:
+        mock_exists.return_value = False
+
+        result_json = resolve_diagnostic("missing.json")
+        result = json.loads(result_json)
+
+        assert result["status"] == "error"
+        assert result["message"] == "FILE_NOT_FOUND"
+
+def test_resolve_diagnostic_exception():
+    with patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists, \
+         patch("agents.hermes_diagnostics_mcp.os.remove", side_effect=OSError("Mocked OS Error")):
+
+        mock_exists.return_value = True
+
+        result_json = resolve_diagnostic("test.json")
+        result = json.loads(result_json)
+
+        assert result["status"] == "error"
+        assert "FAILED_TO_DELETE" in result["message"]
+        assert "Mocked OS Error" in result["message"]
 
 def test_apply_sre_patch_permission_denied():
     with patch("agents.hermes_diagnostics_mcp.os.path.abspath") as mock_abspath:
