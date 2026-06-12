@@ -8,6 +8,16 @@ import logging
 import traceback
 import torch
 import safetensors
+from dataclasses import dataclass
+
+@dataclass
+class KronosInferenceInputs:
+    """Container for preprocessed model inputs and normalization stats."""
+    s1_ids: torch.Tensor
+    s2_ids: torch.Tensor
+    stamp_tensor: torch.Tensor
+    x_mean: np.ndarray
+    x_std: np.ndarray
 
 # Inject Kronos Repo Path
 KRONOS_REPO_PATH = r"C:\Sentinel_Project\kronos_repo"
@@ -243,12 +253,18 @@ class KronosBridge:
             stamp = np.pad(stamp, ((512 - len(stamp), 0), (0, 0)), mode='edge')
         stamp_tensor = torch.from_numpy(stamp[np.newaxis, :]).float()
 
-        return s1_ids, s2_ids, stamp_tensor, x_mean, x_std
+        return KronosInferenceInputs(
+            s1_ids=s1_ids,
+            s2_ids=s2_ids,
+            stamp_tensor=stamp_tensor,
+            x_mean=x_mean,
+            x_std=x_std
+        )
 
-    def _calculate_signal(self, s1_ids, s2_ids, stamp_tensor, x_mean, x_std, ohlcv_df):
+    def _calculate_signal(self, inputs: KronosInferenceInputs, ohlcv_df: pd.DataFrame):
         """Executes inference and calculates volatility-adjusted signal."""
         with torch.no_grad():
-            outputs = self.model(s1_ids, s2_ids, stamp_tensor)
+            outputs = self.model(inputs.s1_ids, inputs.s2_ids, inputs.stamp_tensor)
 
         s1_logits, s2_logits = outputs[0][:, -1, :], outputs[1][:, -1, :]
         next_s1, next_s2 = torch.argmax(s1_logits, dim=-1, keepdim=True), torch.argmax(s2_logits, dim=-1, keepdim=True)
@@ -261,7 +277,7 @@ class KronosBridge:
                 predicted_close = float(pred_tensor[0, 0, 3])
 
                 # Reverse Z-score
-                pred_close_raw = predicted_close * x_std[3] + x_mean[3]
+                pred_close_raw = predicted_close * inputs.x_std[3] + inputs.x_mean[3]
                 curr_close_raw = ohlcv_df['close'].iloc[-1]
                 mu = (pred_close_raw - curr_close_raw) / (curr_close_raw + 1e-9)
 
@@ -307,12 +323,10 @@ class KronosBridge:
                 df['tick_volume'] = 0.0
 
             # 1. Prepare Inputs
-            s1_ids, s2_ids, stamp_tensor, x_mean, x_std = self._prepare_inputs(df)
+            inputs = self._prepare_inputs(df)
             
             # 2. Execute Inference & Calculate Signal
-            kronos_raw, base_atr, mu, signal = self._calculate_signal(
-                s1_ids, s2_ids, stamp_tensor, x_mean, x_std, df
-            )
+            kronos_raw, base_atr, mu, signal = self._calculate_signal(inputs, df)
             
             # 3. Auxiliary Metrics
             vol_pct, existing_xgb = self._get_aux_metrics(symbol, df)
