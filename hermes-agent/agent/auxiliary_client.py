@@ -2199,34 +2199,86 @@ def _refresh_nous_auxiliary_client(
 
 
 def neuter_async_httpx_del() -> None:
-    """Monkey-patch ``AsyncHttpxClientWrapper.__del__`` to be a no-op.
+    """Improve ``AsyncHttpxClientWrapper.__del__`` to be runtime-aware and cross-loop safe.
 
-    The OpenAI SDK's ``AsyncHttpxClientWrapper.__del__`` schedules
-    ``self.aclose()`` via ``asyncio.get_running_loop().create_task()``.
-    When an ``AsyncOpenAI`` client is garbage-collected while
-    prompt_toolkit's event loop is running (the common CLI idle state),
-    the ``aclose()`` task runs on prompt_toolkit's loop but the
-    underlying TCP transport is bound to a *different* loop (the worker
-    thread's loop that the client was originally created on).  If that
-    loop is closed or its thread is dead, the transport's
-    ``self._loop.call_soon()`` raises ``RuntimeError("Event loop is
-    closed")``, which prompt_toolkit surfaces as "Unhandled exception
-    in event loop ... Press ENTER to continue...".
+    This addresses the OpenAI SDK's internal TODO:
+    ``# TODO(someday): support non asyncio runtimes here``
 
-    Neutering ``__del__`` is safe because:
-    - Cached clients are explicitly cleaned via ``_force_close_async_httpx``
-      on stale-loop detection and ``shutdown_cached_clients`` on exit.
-    - Uncached clients' TCP connections are cleaned up by the OS when the
-      process exits.
-    - The OpenAI SDK itself marks this as a TODO (``# TODO(someday):
-      support non asyncio runtimes here``).
+    The original ``__del__`` implementation:
+    1. Only supports asyncio.
+    2. Unconditionally schedules ``self.aclose()`` on whatever loop is
+       currently running.
+    3. If the current loop is NOT the loop the client was created on,
+       httpx's transport crashes when trying to use its own closed/different
+       loop, causing "Unhandled exception in event loop" in the CLI.
+
+    Our improved implementation:
+    1. Captures the creation loop via ``AsyncHttpxClientWrapper.__init__``.
+    2. Uses ``sniffio`` to detect the active async runtime.
+    3. Only schedules cleanup if we are in asyncio and the current loop
+       matches the creation loop.
+    4. Safely returns early otherwise, preventing cross-loop crashes
+       while still attempting cleanup where safe.
 
     Call this once at CLI startup, before any ``AsyncOpenAI`` clients are
     created.
     """
     try:
+        import asyncio
+
+        import sniffio
         from openai._base_client import AsyncHttpxClientWrapper
-        AsyncHttpxClientWrapper.__del__ = lambda self: None  # type: ignore[assignment]
+
+        if getattr(AsyncHttpxClientWrapper, "_hermes_patched", False):
+            return
+
+        # 1. Capture the creation loop by monkey-patching __init__
+        # AsyncHttpxClientWrapper usually inherits __init__ from its parent
+        original_init = AsyncHttpxClientWrapper.__init__
+
+        def patched_init(self, *args, **kwargs):
+            try:
+                self._hermes_creation_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._hermes_creation_loop = None
+            original_init(self, *args, **kwargs)
+
+        AsyncHttpxClientWrapper.__init__ = patched_init  # type: ignore[assignment]
+
+        # 2. Runtime-aware and cross-loop safe __del__
+        def patched_del(self) -> None:
+            if getattr(self, "is_closed", True):
+                return
+
+            try:
+                # Address TODO(someday): support non asyncio runtimes here
+                try:
+                    runtime = sniffio.current_async_library()
+                except sniffio.AsyncLibraryNotFoundError:
+                    # Not in an async context, can't schedule aclose()
+                    return
+
+                if runtime != "asyncio":
+                    # If we're on Trio/other, we don't know how to safely
+                    # schedule aclose() here yet (SDK TODO).
+                    return
+
+                # Asyncio path: only cleanup if we're on the original loop
+                current_loop = asyncio.get_running_loop()
+                creation_loop = getattr(self, "_hermes_creation_loop", None)
+
+                if (
+                    current_loop is not None
+                    and current_loop is creation_loop
+                    and not current_loop.is_closed()
+                ):
+                    current_loop.create_task(self.aclose())
+            except Exception:
+                pass
+
+        AsyncHttpxClientWrapper.__del__ = patched_del  # type: ignore[assignment]
+        AsyncHttpxClientWrapper._hermes_patched = True  # type: ignore[attr-defined]
+
     except (ImportError, AttributeError):
         pass  # Graceful degradation if the SDK changes its internals
 
