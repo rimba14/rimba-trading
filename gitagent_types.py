@@ -1,6 +1,30 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import datetime
+
+@dataclass
+class CognitiveState:
+    """Encapsulates entry cognitive state metrics."""
+    raw_probability_vector: list
+    adjusted_conviction: float
+    activity_ratio: float
+    bocpd_prob: float
+    wasserstein_idx: int
+    volatility_ratio: float = 0.0
+    ofi_velocity: float = 0.0
+
+@dataclass
+class RuntimeTelemetry:
+    """Encapsulates runtime telemetry metrics."""
+    bar_step: int
+    current_pnl: float
+    condition_number: float
+    shaps: Dict[str, float]
+    price: float = 0.0
+    sl: float = 0.0
+    tp: float = 0.0
+    hmm_state: str = "UNKNOWN"
+    conviction: float = 0.0
 
 @dataclass
 class ProposedTradePayload:
@@ -54,4 +78,3 @@ class TelemetryState:
     @classmethod
     def get_logs(cls):
         return cls._audit_logs
-
