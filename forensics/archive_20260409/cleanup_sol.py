@@ -6,8 +6,16 @@ def close_by_ticket(ticket):
     if not pos: return False
     p = pos[0]
     from gitagent_action_layer import get_action_layer
+    from gitagent_types import SmartTradeRequest
     al = get_action_layer()
-    res = al.execute_smart_trade(p.symbol, mt5.ORDER_TYPE_SELL if p.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY, p.volume, comment="Final Phase 84 Cleanup", position_ticket=p.ticket)
+    req = SmartTradeRequest(
+        symbol=p.symbol,
+        side=mt5.ORDER_TYPE_SELL if p.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
+        volume=p.volume,
+        comment="Final Phase 84 Cleanup",
+        position_ticket=p.ticket
+    )
+    res = al.execute_smart_trade(req)
     return res and res.retcode == mt5.TRADE_RETCODE_DONE
 
 

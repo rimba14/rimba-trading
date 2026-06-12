@@ -70,7 +70,15 @@ def attempt_scale_out():
         }
         
         from gitagent_action_layer import get_action_layer
-        res = get_action_layer().execute_smart_trade(pos.symbol, mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY, float(close_vol), comment="Phase 3 US Scale Out", position_ticket=pos.ticket)
+        from gitagent_types import SmartTradeRequest
+        req = SmartTradeRequest(
+            symbol=pos.symbol,
+            side=mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY,
+            volume=float(close_vol),
+            comment="Phase 3 US Scale Out",
+            position_ticket=pos.ticket
+        )
+        res = get_action_layer().execute_smart_trade(req)
         
         if res and (res.retcode == 10009 or res.retcode == 10011): # DONE or REQUEST_PLACED
             log(f"SUCCESS: Scaled out {close_vol} lots of {pos.symbol} (Ticket: {pos.ticket})")

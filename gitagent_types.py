@@ -1,6 +1,21 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Any
 import datetime
+
+@dataclass
+class SmartTradeRequest:
+    """
+    Encapsulates parameters for the ActionLayer.execute_smart_trade method.
+    """
+    symbol: str
+    side: Any  # Supports "BUY", "SELL", or mt5.ORDER_TYPE constants
+    volume: float
+    current_price: float = 0.0
+    atr: float = 0.0
+    tps: float = 0.0
+    equity: float = 0.0
+    position_ticket: Optional[int] = None
+    comment: Optional[str] = None
 
 @dataclass
 class ProposedTradePayload:

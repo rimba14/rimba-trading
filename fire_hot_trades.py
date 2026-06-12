@@ -100,8 +100,16 @@ for sym in targets:
     
     print(f"[BYPASS] Firing {sym} BUY @ {price}...")
     from gitagent_action_layer import get_action_layer
+    from gitagent_types import SmartTradeRequest
     al = get_action_layer()
-    result = al.execute_smart_trade(sym, mt5.ORDER_TYPE_BUY, lot, snapshot['sl_barrier'], snapshot['tp_barrier'], "v10.6 Sentinel Bypass")
+    req = SmartTradeRequest(
+        symbol=sym,
+        side=mt5.ORDER_TYPE_BUY,
+        volume=lot,
+        atr=(snapshot['tp_barrier'] - snapshot['sl_barrier']) / 5.0, # Estimating ATR from barriers for compatibility
+        comment="v10.6 Sentinel Bypass"
+    )
+    result = al.execute_smart_trade(req)
     
     if result and result.retcode == mt5.TRADE_RETCODE_DONE:
         POSITION_THESIS[str(result.order)] = snapshot

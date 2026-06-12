@@ -31,7 +31,15 @@ def hard_close():
         
         # Attempt close using risk-gated ActionLayer
         from gitagent_action_layer import get_action_layer
-        result = get_action_layer().execute_smart_trade(symbol, order_type, volume, comment="HARD_CLOSE_OUTLIER", position_ticket=pos.ticket)
+        from gitagent_types import SmartTradeRequest
+        req = SmartTradeRequest(
+            symbol=symbol,
+            side=order_type,
+            volume=volume,
+            comment="HARD_CLOSE_OUTLIER",
+            position_ticket=pos.ticket
+        )
+        result = get_action_layer().execute_smart_trade(req)
         
         if result and result.retcode == mt5.TRADE_RETCODE_DONE:
             print(f"SUCCESS: Closed Ticket {tkt}")

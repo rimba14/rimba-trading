@@ -11,7 +11,14 @@ tick = mt5.symbol_info_tick(symbol)
 def test_order(comment_val):
     print(f"\nTesting with comment: '{comment_val}' (type: {type(comment_val)})")
     from gitagent_action_layer import get_action_layer
-    result = get_action_layer().execute_smart_trade(symbol, mt5.ORDER_TYPE_BUY, 0.01, comment=comment_val)
+    from gitagent_types import SmartTradeRequest
+    req = SmartTradeRequest(
+        symbol=symbol,
+        side=mt5.ORDER_TYPE_BUY,
+        volume=0.01,
+        comment=comment_val
+    )
+    result = get_action_layer().execute_smart_trade(req)
     if result is None:
         err = mt5.last_error()
         print(f"FAILED. Error: {err}")
