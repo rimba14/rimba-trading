@@ -38,6 +38,11 @@ orders_ledger.csv
 # Ngrok config
 ngrok.yml
 
+# Testing artifacts
+.coverage
+.pytest_cache/
+htmlcov/
+
 # Windows Boot Files (Security Hygiene)
 BOOTNXT
 bootTel.dat
