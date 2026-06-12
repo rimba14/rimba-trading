@@ -73,7 +73,8 @@ def test_execute_trade_success(mock_order_send):
     mock_result.retcode = mt5.TRADE_RETCODE_DONE
     mock_order_send.return_value = mock_result
 
-    success = ehc.execute_trade("EURUSD", "BUY", 0.1, 1.1000, 1.0900, 1.1150)
+    req = ehc.TradeRequest("EURUSD", "BUY", 0.1, 1.1000, 1.0900, 1.1150)
+    success = ehc.execute_trade(req)
     assert success is True
     assert mock_order_send.called
 
@@ -88,6 +89,7 @@ def test_execute_trade_retry(mock_order_send):
 
     mock_order_send.side_effect = [mock_result_fail, mock_result_success]
 
-    success = ehc.execute_trade("EURUSD", "BUY", 0.1, 1.1000, 1.0900, 1.1150)
+    req = ehc.TradeRequest("EURUSD", "BUY", 0.1, 1.1000, 1.0900, 1.1150)
+    success = ehc.execute_trade(req)
     assert success is True
     assert mock_order_send.call_count == 2

@@ -2,6 +2,16 @@ import MetaTrader5 as mt5
 from arcticdb import Arctic
 import math
 import sys
+from dataclasses import dataclass
+
+@dataclass
+class TradeRequest:
+    symbol: str
+    direction: str
+    lot: float
+    price: float
+    sl: float
+    tp: float
 
 def get_candidate_trades(lib):
     """Iterates over Arctic library and extracts candidate trades sorted by conviction."""
@@ -93,17 +103,17 @@ def calculate_sl_tp_lot(sym, direction, tick, info, acc, rates):
 
     return sl, tp, lot
 
-def execute_trade(sym, direction, lot, price, sl, tp):
+def execute_trade(req: TradeRequest):
     """Sends a trade order to MT5 with filling mode retries."""
-    action_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+    action_type = mt5.ORDER_TYPE_BUY if req.direction == "BUY" else mt5.ORDER_TYPE_SELL
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": sym,
-        "volume": lot,
+        "symbol": req.symbol,
+        "volume": req.lot,
         "type": action_type,
-        "price": price,
-        "sl": sl,
-        "tp": tp,
+        "price": req.price,
+        "sl": req.sl,
+        "tp": req.tp,
         "deviation": 20,
         "magic": 777777,
         "comment": "Sentinel Force Trade",
@@ -119,7 +129,7 @@ def execute_trade(sym, direction, lot, price, sl, tp):
         return False
 
     if result.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f" -> SUCCESS: Executed {sym} {direction} at {price:.5f}")
+        print(f" -> SUCCESS: Executed {req.symbol} {req.direction} at {req.price:.5f}")
         return True
 
     print(f" -> Execution failed: {result.retcode} - {result.comment}")
@@ -130,7 +140,7 @@ def execute_trade(sym, direction, lot, price, sl, tp):
             request["type_filling"] = alt_filling
             result = mt5.order_send(request)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                print(f" -> SUCCESS on retry: Executed {sym} {direction} at {price:.5f} with fill mode {alt_filling}")
+                print(f" -> SUCCESS on retry: Executed {req.symbol} {req.direction} at {req.price:.5f} with fill mode {alt_filling}")
                 return True
     return False
 
@@ -193,7 +203,16 @@ def main():
         price = tick.ask if direction == "BUY" else tick.bid
         print(f" -> Prepared order: {direction} {lot} lots at {price:.5f} | SL: {sl} | TP: {tp}")
         
-        if execute_trade(sym, direction, lot, price, sl, tp):
+        req = TradeRequest(
+            symbol=sym,
+            direction=direction,
+            lot=lot,
+            price=price,
+            sl=sl,
+            tp=tp
+        )
+
+        if execute_trade(req):
             executed_any = True
             break
             
