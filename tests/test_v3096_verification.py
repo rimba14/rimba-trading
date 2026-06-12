@@ -8,10 +8,16 @@ import shutil
 import pytest
 from unittest import mock
 
-sys.path.insert(0, r"C:\Sentinel_Project")
-os.chdir(r"C:\Sentinel_Project")
+# sys.path.insert(0, r"C:\Sentinel_Project")
+# os.chdir(r"C:\Sentinel_Project")
+
+from unittest.mock import MagicMock
+import sys
+# Mock MetaTrader5 before importing pre_execution_gate
+sys.modules["MetaTrader5"] = MagicMock()
 
 import pre_execution_gate as peg
+from pre_execution_gate import GateContext
 import sentinel_config as cfg
 import MetaTrader5 as mt5
 
@@ -76,28 +82,32 @@ def test_atr_floor_rejection():
     
     with mock.patch("pre_execution_gate.mt5.copy_rates_from_pos", return_value=mock_rates_arr) as mock_rates_func, \
          mock.patch("pre_execution_gate.mt5.initialize", return_value=True), \
+         mock.patch("pre_execution_gate.mt5.positions_get", return_value=[]), \
+         mock.patch("pre_execution_gate.mt5.orders_get", return_value=[]), \
          mock.patch("pre_execution_gate.mt5.symbol_info", return_value=mock.Mock(trade_contract_size=100000.0)):
         
         # Test Case 1: SL distance 0.0020 (< 3.5 * ATR) -> Should fail
-        verdict_fail = peg.run_all_gates(
+        ctx_fail = GateContext(
             symbol="EURUSD", direction="BUY", asset_class="FOREX",
-            regime="BULL", ticket_ref="TEST_123", kelly_lots=0.01,
+            regime="BULL", kelly_lots=0.01,
             entry_price=1.1000, sl_distance=0.0020, tp_distance=0.0050,
             risk_usd=10.0, equity=1000.0, current_heat_usd=50.0,
             embargo_registry={}
         )
+        verdict_fail = peg.run_all_gates(ctx_fail, ticket_ref="TEST_123")
         assert not verdict_fail.approved
         assert "falls below ATR Floor" in verdict_fail.summary()
         print("[OK] ATR Floor check successfully rejected non-compliant Stop Loss.")
 
         # Test Case 2: SL distance 0.0040 (>= 3.5 * ATR) -> Should pass
-        verdict_pass = peg.run_all_gates(
+        ctx_pass = GateContext(
             symbol="EURUSD", direction="BUY", asset_class="FOREX",
-            regime="BULL", ticket_ref="TEST_456", kelly_lots=0.01,
+            regime="BULL", kelly_lots=0.01,
             entry_price=1.1000, sl_distance=0.0040, tp_distance=0.0100,
             risk_usd=10.0, equity=1000.0, current_heat_usd=50.0,
             embargo_registry={}
         )
+        verdict_pass = peg.run_all_gates(ctx_pass, ticket_ref="TEST_456")
         assert verdict_pass.approved
         print("[OK] Compliance verification passed for valid Stop Loss.")
 

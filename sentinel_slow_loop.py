@@ -941,15 +941,22 @@ def push_to_orchestrator(payload: Dict[str, Any]):
         current_portfolio_heat = current_equity * 0.05 # Placeholder approximation for the gate
         amnesia_lock_registry = {} # Placeholder
 
-        verdict = run_all_gates(
-            symbol=symbol, direction=direction, asset_class=asset_class,
-            regime=regime_key, ticket_ref=str(ticket_ref),
-            kelly_lots=kelly_lots, entry_price=entry_price,
-            sl_distance=sl_distance, tp_distance=tp_distance,
-            risk_usd=risk_usd, equity=current_equity,
+        from pre_execution_gate import GateContext
+        ctx = GateContext(
+            symbol=symbol,
+            direction=direction,
+            asset_class=asset_class,
+            regime=regime_key,
+            kelly_lots=kelly_lots,
+            entry_price=entry_price,
+            sl_distance=sl_distance,
+            tp_distance=tp_distance,
+            risk_usd=risk_usd,
+            equity=current_equity,
             current_heat_usd=current_portfolio_heat,
-            embargo_registry=amnesia_lock_registry,
+            embargo_registry=amnesia_lock_registry
         )
+        verdict = run_all_gates(ctx, ticket_ref=str(ticket_ref))
 
         if not verdict.approved:
             logging.error(f"[GATE_LAYER] SIGNAL BLOCKED: {verdict.summary()}")
