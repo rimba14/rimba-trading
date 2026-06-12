@@ -30,6 +30,20 @@ from tp_placement_engine import (
     ASSET_CLASS_TIME_STOP,
     AssetClass,
 )
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass
+class PositionRegistration:
+    ticket:    int
+    symbol:    str
+    entry:     float
+    sl:        float
+    tp:        float
+    direction: int
+    lots:      float
+    open_time: Any
 
 
 # ===========================================================================
@@ -68,14 +82,7 @@ class ProfitManager:
 
     def register_position(
         self,
-        ticket:    int,
-        symbol:    str,
-        entry:     float,
-        sl:        float,
-        tp:        float,
-        direction: int,
-        lots:      float,
-        open_time,
+        reg: PositionRegistration,
     ) -> bool:
         """
         Returns True if position was successfully registered.
@@ -88,50 +95,52 @@ class ProfitManager:
 
         # ---- [DIRECTIVE ZETA Gate 1] --------------------------------------
         validation: TPValidationResult = self.tp_engine.validate_tp_placement(
-            symbol=symbol,
-            entry=entry,
-            sl=sl,
-            proposed_tp=tp,
-            direction=direction,
+            symbol=reg.symbol,
+            entry=reg.entry,
+            sl=reg.sl,
+            proposed_tp=reg.tp,
+            direction=reg.direction,
         )
 
         if not validation.is_valid:
-            self._emit_tp_gate_reject(ticket, symbol, validation)
+            self._emit_tp_gate_reject(reg.ticket, reg.symbol, validation)
             return False
 
+        tp = reg.tp
         if validation.adjusted:
             # TP was moved to comply with ceiling — update on broker before registering
             adjusted_tp = validation.final_tp
-            success = self._modify_tp_on_broker(ticket, adjusted_tp)
+            success = self._modify_tp_on_broker(reg.ticket, adjusted_tp)
             if not success:
-                self._emit_tp_adjustment_failure(ticket, symbol, adjusted_tp)
+                self._emit_tp_adjustment_failure(reg.ticket, reg.symbol, adjusted_tp)
                 # Continue with registration using adjusted TP even if broker
                 # modification failed — the Slow Loop will retry on next cycle
                 import logging
                 logging.getLogger("CADES.ProfitManager").warning(
-                    f"[PositionRegistry] TP modification failed on broker for #{ticket} "
-                    f"{symbol}. Registering with adjusted TP {adjusted_tp:.5f} "
+                    f"[PositionRegistry] TP modification failed on broker for #{reg.ticket} "
+                    f"{reg.symbol}. Registering with adjusted TP {adjusted_tp:.5f} "
                     f"and scheduling retry."
                 )
             tp = adjusted_tp   # use adjusted TP for internal state
+            reg.tp = adjusted_tp
 
         for w in validation.warnings:
             import logging
             logging.getLogger("CADES.ProfitManager").warning(
-                f"[ZETA WARNING] #{ticket} {symbol}: {w}"
+                f"[ZETA WARNING] #{reg.ticket} {reg.symbol}: {w}"
             )
         # -------------------------------------------------------------------
 
         # ---- [EXISTING registration logic — keep as-is] ------------------
-        # state = PositionState(ticket=ticket, symbol=symbol, ...)
-        # self.position_registry[ticket] = state
+        # state = PositionState(ticket=reg.ticket, symbol=reg.symbol, ...)
+        # self.position_registry[reg.ticket] = state
         # ...
         # ------------------------------------------------------------------
 
         # ---- [DIRECTIVE ZETA — store validation result in PositionState] --
         # state.zeta_validation   = validation
         # state.time_stop_days    = validation.time_stop_days
-        # state.entry_time        = open_time
+        # state.entry_time        = reg.open_time
         # -------------------------------------------------------------------
 
         return True

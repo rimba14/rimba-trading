@@ -48,14 +48,17 @@ logger.info(f"ZETA startup audit: {summary}")
 In your signal pipeline (wherever you currently call mt5_bridge.open_position()),
 add the gate BEFORE the broker call:
 ```python
-result = profit_manager.tp_engine.validate_tp_placement(
-    symbol=symbol, entry=entry, sl=sl,
-    proposed_tp=proposed_tp, direction=direction
+from profit_manager_tp_patch import PositionRegistration
+
+reg = PositionRegistration(
+    ticket=ticket, symbol=symbol, entry=entry, sl=sl, tp=proposed_tp,
+    direction=direction, lots=lots, open_time=open_time
 )
-if not result.is_valid:
-    logger.error(f"TP_GATE_REJECT: {result.rejection_reason}")
+success = profit_manager.register_position(reg)
+if not success:
+    logger.error("TP_GATE_REJECT or registration failed")
     return   # block the entry
-tp_to_use = result.final_tp  # use this — it may have been adjusted
+tp_to_use = reg.tp  # updated to adjusted TP if applicable
 ```
 
 ---
