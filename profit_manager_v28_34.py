@@ -318,6 +318,8 @@ class PositionState:
     peak_price:    float = 0.0
     peak_profit_r: float = 0.0
 
+    zeta_status:   str = ""
+
     def is_buy(self) -> bool:
         return self.direction == 0
 
@@ -610,6 +612,41 @@ def _check_macro_exits(sig: ExitSignal, pos_dir: str, sentiment: float) -> bool:
     return False
 
 
+def _score_regime_conflict(ps: PositionState, hmm: str, is_buy: bool) -> float:
+    """Soft regime conflict scoring (for non-crypto)."""
+    score = 0.0
+    if (is_buy and hmm == "BEAR") or (not is_buy and hmm == "BULL"):
+        ps.regime_conflict_count += 1
+        if ps.regime_conflict_count >= 3:
+            score += 0.40
+    else:
+        ps.regime_conflict_count = 0
+    return score
+
+
+def _apply_exit_suppression(sig: ExitSignal, ps: PositionState, elapsed: int, symbol: str) -> bool:
+    """Constitutional Exit Suppressions (Hard Hold and Event Horizon)."""
+    # 1. Hysteresis Suppression (Hard Hold for 20 mins)
+    if elapsed < 1200:
+        sig.score = 0.0
+        sig.reasons.append(f"SUPPRESSED_HARD_HOLD: elapsed {elapsed}s < 1200s")
+        return True
+
+    # 2. Event Horizon Suppression
+    has_event, event_desc = check_upcoming_tier1_events(symbol, threshold_hours=2.0)
+    if has_event:
+        sig.score = 0.0
+        sig.reasons.append(f"SUPPRESSED_PRE_EVENT: {event_desc}")
+        return True
+    return False
+
+
+def _apply_profit_dampening(score: float, profit_r: float) -> float:
+    """Prevents premature exit when position is in strong profit (> 2.0R)."""
+    if profit_r > 2.0:
+        return score * 0.5
+    return score
+
 
 def compute_exit_score(
     ps:               PositionState,
@@ -655,6 +692,22 @@ def compute_exit_score(
     # ── 3. Macro Shock / Sentiment Kill (HARD EXIT) ──────────────────────────
     if _check_macro_exits(sig, pos_dir, sentiment):
         return sig
+
+    # ── 4. Soft Exit Scoring ────────────────────────────────────────────────
+    # Regime Conflict
+    sig.score += _score_regime_conflict(ps, hmm, is_buy)
+
+    # Thesis Decay (non-crypto fallback)
+    thesis_p = live_p if is_buy else (1.0 - live_p)
+    if thesis_p < 0.52:
+        sig.score += 0.35
+        sig.reasons.append(f"Thesis decay: P={thesis_p:.3f}")
+
+    # Profit Dampening
+    sig.score = _apply_profit_dampening(sig.score, profit_r)
+
+    # Exit Suppression (Locks)
+    _apply_exit_suppression(sig, ps, elapsed, symbol)
 
     if sig.score > 0 and not sig.hard_exit:
         sig.reason_primary = f"[SCORED_EXIT score={sig.score:.2f}]"
