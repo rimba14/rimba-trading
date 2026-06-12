@@ -1312,14 +1312,17 @@ class SessionDB:
         # Done in batches so we don't hold the lock across N sequential queries
         # and we avoid N+1 query execution.
 
-        # Initialize context for all matches
+        # Initialize context for all matches and create a mapping for O(1) lookups
+        match_map = {}
         for match in matches:
             match["context"] = []
+            match_map[match["id"]] = match
 
-        target_ids = [m["id"] for m in matches]
+        target_ids = list(match_map.keys())
 
         if target_ids:
-            chunk_size = 200
+            # SQLite default limit for parameters is 999
+            chunk_size = 900
             for i in range(0, len(target_ids), chunk_size):
                 chunk = target_ids[i:i + chunk_size]
                 placeholders = ",".join("?" for _ in chunk)
@@ -1361,19 +1364,13 @@ class SessionDB:
                         ctx_cursor = self._conn.execute(query, chunk)
                         rows = ctx_cursor.fetchall()
 
-                    context_by_id = {}
                     for r in rows:
                         tid = r["target_id"]
-                        if tid not in context_by_id:
-                            context_by_id[tid] = []
-                        context_by_id[tid].append({
-                            "role": r["role"],
-                            "content": (r["content"] or "")[:200]
-                        })
-
-                    for match in matches:
-                        if match["id"] in context_by_id:
-                            match["context"] = context_by_id[match["id"]]
+                        if tid in match_map:
+                            match_map[tid]["context"].append({
+                                "role": r["role"],
+                                "content": (r["content"] or "")[:200]
+                            })
                 except Exception:
                     pass
 
