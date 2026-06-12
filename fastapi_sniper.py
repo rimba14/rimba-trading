@@ -24,6 +24,7 @@ if sys.stderr.encoding != 'utf-8':
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import dataclass
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from pydantic import BaseModel
 import uvicorn
@@ -44,6 +45,16 @@ from sentinel_config import (
 )
 
 GO_CLI_BINARY = r"C:\Sentinel_Project\go_engine\mt5-pp-cli.exe"
+
+@dataclass
+class RiskContext:
+    symbol: str
+    direction: str
+    wasserstein_state: str
+    incoming_notional: float
+    xgb_p: float = 0.5
+    ddqn_p: float = 0.5
+    conviction: float = 0.5
 
 class CachedAccountInfo:
     def __init__(self, data):
@@ -598,7 +609,16 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     logger.info(f"DEBUG BYPASS EVAL: signal.override_lot={signal.override_lot}, type={type(signal.override_lot)}")
     if not signal.override_lot or float(signal.override_lot) <= 0:
         logger.info("DEBUG BYPASS: Did NOT bypass! Executing check_risk_gates...")
-        if not await check_risk_gates_async(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction, acc=account_info):
+        risk_ctx = RiskContext(
+            symbol=signal.symbol,
+            direction=signal.direction,
+            wasserstein_state=signal.wasserstein_state,
+            incoming_notional=incoming_notional,
+            xgb_p=signal.xgb_p,
+            ddqn_p=signal.ddqn_p,
+            conviction=signal.conviction
+        )
+        if not await check_risk_gates_async(risk_ctx, acc=account_info):
             return {"status": "rejected", "detail": "Risk gate block"}
     else:
         logger.info("DEBUG BYPASS: Bypassing check_risk_gates successfully!")
@@ -711,7 +731,15 @@ def extract_conviction_from_comment(comment: str) -> float:
         pass
     return 0.5
 
-def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5, acc=None):
+def check_risk_gates(ctx: RiskContext, acc=None):
+    symbol = ctx.symbol
+    direction = ctx.direction
+    wasserstein_state = ctx.wasserstein_state
+    incoming_notional = ctx.incoming_notional
+    xgb_p = ctx.xgb_p
+    ddqn_p = ctx.ddqn_p
+    conviction = ctx.conviction
+
     # A. Weekend Blackout
     if is_weekend_blackout(symbol):
         logger.warning(f"[{symbol}] Signal REJECTED: Weekend Blackout")
@@ -809,7 +837,7 @@ def check_risk_gates(symbol, direction, wasserstein_state, incoming_notional, xg
 
     return True
 
-async def check_risk_gates_async(symbol, direction, wasserstein_state, incoming_notional, xgb_p=0.5, ddqn_p=0.5, conviction=0.5, acc=None):
+async def check_risk_gates_async(ctx: RiskContext, acc=None):
     """
     Non-blocking async version of risk gates.
     Offloads synchronous risk logic to thread.
@@ -818,8 +846,8 @@ async def check_risk_gates_async(symbol, direction, wasserstein_state, incoming_
         acc = await get_cached_account_info_async()
     return await asyncio.to_thread(
         check_risk_gates,
-        symbol, direction, wasserstein_state, incoming_notional,
-        xgb_p, ddqn_p, conviction, acc
+        ctx,
+        acc
     )
 
 # --- DIRECTIVE OMEGA HELPERS & LAYER 5 COMPOSITE PRE-FLIGHT CHECKLIST ---
