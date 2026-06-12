@@ -62,6 +62,17 @@ MIN_TRAINING_EPISODES = 500     # Agents below this stay quarantined
 MIN_AGENT_VERSION     = "1.0"   # Optional: gate on version string
 
 
+# ── Agent update ──────────────────────────────────────────────────────────────
+
+@dataclass
+class AgentUpdate:
+    """Encapsulates partial updates for an agent's state."""
+    is_initialized:    Optional[bool] = None
+    training_episodes: Optional[int]  = None
+    version:           Optional[str]  = None
+    notes:             Optional[str]  = None
+
+
 # ── Agent state ───────────────────────────────────────────────────────────────
 
 @dataclass
@@ -167,11 +178,8 @@ class QuarantineRegistry:
 
     def update(
         self,
-        name:              str,
-        is_initialized:    Optional[bool] = None,
-        training_episodes: Optional[int]  = None,
-        version:           Optional[str]  = None,
-        notes:             Optional[str]  = None,
+        name:    str,
+        updates: "AgentUpdate",
     ) -> None:
         """
         Partial update for an already-registered agent.
@@ -181,10 +189,10 @@ class QuarantineRegistry:
             raise KeyError(f"Agent '{name}' not registered. Call register() first.")
 
         state = self._agents[name]
-        if is_initialized    is not None: state.is_initialized    = is_initialized
-        if training_episodes is not None: state.training_episodes = training_episodes
-        if version           is not None: state.version           = version
-        if notes             is not None: state.notes             = notes
+        if updates.is_initialized    is not None: state.is_initialized    = updates.is_initialized
+        if updates.training_episodes is not None: state.training_episodes = updates.training_episodes
+        if updates.version           is not None: state.version           = updates.version
+        if updates.notes             is not None: state.notes             = updates.notes
         state.last_updated = datetime.now(timezone.utc).isoformat()
 
         was_quarantined = not state.is_qualified
