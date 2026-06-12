@@ -35,7 +35,7 @@ STOP_LOSS_PCT = -3.0
 
 # Initialize Agents
 risk_agent = RiskAgent(ACCOUNT_ADDRESS)
-strategy_agent = StrategyAgent(SYMBOL, INTERVAL, account)
+strategy_agent = StrategyAgent(SYMBOL, INTERVAL)
 trading_agent = TradingAgent(SYMBOL, model="qwen")
 
 
