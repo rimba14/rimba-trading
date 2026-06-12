@@ -9,7 +9,7 @@ from sklearn.metrics import roc_auc_score
 PROJECT_ROOT = Path(r"C:\Sentinel_Project")
 sys.path.append(str(PROJECT_ROOT))
 
-from agent_quarantine import registry, AgentState
+from agent_quarantine import registry, AgentState, AgentUpdate
 
 def generate_holdout_set(n_samples=200):
     """Generates a clean out-of-sample holdout dataset mimicking feature_engineering.py."""
@@ -93,7 +93,7 @@ def main():
     
     # officially demote DDQN in agent_quarantine.py
     try:
-        registry.update("ddqn", is_initialized=False, notes="Edge Decay: AUC < 0.55")
+        registry.update("ddqn", AgentUpdate(is_initialized=False, notes="Edge Decay: AUC < 0.55"))
         print("  [OK] Officially demoted DDQN to QUARANTINED in agent registry.")
     except Exception as e:
         print(f"  [ERROR] Failed to update agent registry: {e}")

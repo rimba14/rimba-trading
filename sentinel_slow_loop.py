@@ -363,14 +363,14 @@ except Exception as _e:
     logging.warning(f"[ROUTER] Math Meta-Model unavailable: {_e}")
 
 # -- Agent Quarantine (v27.0) --------------------------------------------------
-from agent_quarantine import registry, register_default_agents
+from agent_quarantine import registry, register_default_agents, AgentUpdate
 register_default_agents()
 # Ensure local agent states are updated based on file presence
 from rl_agents.oxford_ddqn import CHECKPOINT_PATH
 if os.path.exists(CHECKPOINT_PATH):
-    registry.update("ddqn", is_initialized=True, training_episodes=1000) # Proxy
+    registry.update("ddqn", AgentUpdate(is_initialized=True, training_episodes=1000)) # Proxy
 else:
-    registry.update("ddqn", is_initialized=False, training_episodes=0)
+    registry.update("ddqn", AgentUpdate(is_initialized=False, training_episodes=0))
 
 # -- ArcticDB Singleton (300 ms timeout enforced via ThreadPoolExecutor) -------
 _ARCTIC = None
