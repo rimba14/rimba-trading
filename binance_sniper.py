@@ -90,7 +90,7 @@ async def execute_trade(signal: TradeSignal):
         if current_price is None:
             current_price = ticker.get('last')
         # 1. Structural ATR & SL/TP
-        structural_atr = calculate_structural_atr_d1(signal.symbol, period=14)
+        structural_atr = await asyncio.to_thread(calculate_structural_atr_d1, signal.symbol, period=14)
         if structural_atr is None:
             logger.warning(f"MT5 could not resolve {signal.symbol} ATR. Fetching natively via Binance CCXT.")
             ohlcv = await exchange.fetch_ohlcv(binance_sym, timeframe='1d', limit=15)
