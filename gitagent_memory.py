@@ -2,6 +2,7 @@ import os
 import faiss
 import numpy as np
 import json
+from gitagent_types import MemoryEpisode
 
 class EpisodicMemory:
     """
@@ -73,18 +74,18 @@ class EpisodicMemory:
         if norm == 0: return vector
         return vector / norm
 
-    def store(self, vector, action, pnl, reasoning, lesson="N/A"):
-        """Stores a new normalized memory object."""
-        v_norm = self._normalize(vector)
+    def store(self, episode: MemoryEpisode):
+        """Stores a new normalized memory object encapsulated in MemoryEpisode."""
+        v_norm = self._normalize(episode.vector)
         vec = np.array([v_norm]).astype('float32')
         self.index.add(vec)
         
         idx = str(self.index.ntotal - 1)
         self.metadata[idx] = {
-            "action": action,
-            "pnl": pnl,
-            "reasoning": reasoning,
-            "lesson": lesson,
+            "action": episode.action,
+            "pnl": episode.pnl,
+            "reasoning": episode.reasoning,
+            "lesson": episode.lesson,
             "timestamp": str(np.datetime64('now'))
         }
         self.save()
@@ -118,8 +119,14 @@ class EpisodicMemory:
 if __name__ == "__main__":
     # Test
     mem = EpisodicMemory(dim=93)
-    dummy_state = np.random.randn(93)
-    mem.store(dummy_state, "LONG", 150.0, "Breakout detected on M15")
+    dummy_state = np.random.randn(93).astype('float32')
+    episode = MemoryEpisode(
+        vector=dummy_state,
+        action="LONG",
+        pnl=150.0,
+        reasoning="Breakout detected on M15"
+    )
+    mem.store(episode)
     
     query = dummy_state + 0.01
     results = mem.retrieve(query, k=1)

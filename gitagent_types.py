@@ -1,6 +1,19 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Any, Union
 import datetime
+import numpy as np
+
+@dataclass
+class MemoryEpisode:
+    """
+    Unified container for memory storage.
+    Used by FastMemory, EpisodicMemory, and MilvusMemory.
+    """
+    vector: Union[np.ndarray, list, Any]
+    action: str
+    pnl: float
+    reasoning: str
+    lesson: str = "N/A"
 
 @dataclass
 class ProposedTradePayload:

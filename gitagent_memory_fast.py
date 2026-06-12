@@ -3,6 +3,7 @@ import faiss
 import numpy as np
 import json
 import time
+from gitagent_types import MemoryEpisode
 
 class FastMemory:
     """
@@ -22,15 +23,16 @@ class FastMemory:
         else:
             self.index = faiss.IndexFlatL2(self.dim)
 
-    def store(self, vector, action, pnl, reasoning, lesson="N/A"):
-        vec = np.array([vector]).astype('float32')
+    def store(self, episode: MemoryEpisode):
+        """Stores a new memory object encapsulated in MemoryEpisode."""
+        vec = np.array([episode.vector]).astype('float32')
         self.index.add(vec)
         idx = str(self.index.ntotal - 1)
         self.metadata[idx] = {
-            "action": action,
-            "pnl": pnl,
-            "reasoning": reasoning,
-            "lesson": lesson,
+            "action": episode.action,
+            "pnl": episode.pnl,
+            "reasoning": episode.reasoning,
+            "lesson": episode.lesson,
             "timestamp": int(time.time())
         }
         self.save()

@@ -3,6 +3,7 @@ import numpy as np
 from pymilvus import MilvusClient
 import json
 import time
+from gitagent_types import MemoryEpisode
 
 class MilvusMemory:
     """
@@ -27,15 +28,15 @@ class MilvusMemory:
         else:
             print(f"[MILVUS] Connected to collection '{self.collection_name}'.")
 
-    def store(self, vector, action, pnl, reasoning, lesson="N/A"):
-        """Stores a new memory object directly into Milvus."""
+    def store(self, episode: MemoryEpisode):
+        """Stores a new memory object encapsulated in MemoryEpisode directly into Milvus."""
         # Convert reasoning/lesson to dict metadata
         data = [{
-            "vector": vector.tolist() if isinstance(vector, np.ndarray) else vector,
-            "action": action,
-            "pnl": pnl,
-            "reasoning": reasoning,
-            "lesson": lesson,
+            "vector": episode.vector.tolist() if isinstance(episode.vector, np.ndarray) else episode.vector,
+            "action": episode.action,
+            "pnl": episode.pnl,
+            "reasoning": episode.reasoning,
+            "lesson": episode.lesson,
             "timestamp": int(time.time())
         }]
         res = self.client.insert(collection_name=self.collection_name, data=data)
@@ -65,7 +66,13 @@ if __name__ == "__main__":
     # Test
     mem = MilvusMemory(dim=89)
     dummy_state = np.random.randn(89).astype('float32')
-    mem.store(dummy_state, "SHORT", -25.0, "Bearish divergence on H1")
+    episode = MemoryEpisode(
+        vector=dummy_state,
+        action="SHORT",
+        pnl=-25.0,
+        reasoning="Bearish divergence on H1"
+    )
+    mem.store(episode)
     
     start = time.time()
     results = mem.retrieve(dummy_state, k=1)

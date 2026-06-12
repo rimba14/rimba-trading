@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import MetaTrader5 as mt5
 from gitagent_memory import EpisodicMemory
+from gitagent_types import MemoryEpisode
 import gitagent_synthesis as syn
 import os
 import time
@@ -104,13 +105,14 @@ def ingest_bitmex():
             rep_res = rep_layer.process(perception)
             vector = rep_res['feature_tensor']
             
-            memory.store(
+            episode = MemoryEpisode(
                 vector=vector,
                 action=row['side'],
                 pnl=float(row['realisedPnl']),
                 reasoning=f"BitMEX Institutional Execution | PnL: {row['realisedPnl']:.6f} XBt",
                 lesson="legend_wei"
             )
+            memory.store(episode)
             count += 1
             if count % 20 == 0:
                 print(f" - Embedded {count} templates...")
