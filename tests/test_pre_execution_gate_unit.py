@@ -10,7 +10,7 @@ mock_mt5 = MagicMock()
 sys.modules["MetaTrader5"] = mock_mt5
 
 import pre_execution_gate as peg
-from pre_execution_gate import PreExecutionVerdict, GateResult, BLOCK, ALLOW
+from pre_execution_gate import PreExecutionVerdict, GateResult, GateContext, BLOCK, ALLOW
 
 @pytest.fixture
 def mocked_mt5():
@@ -38,7 +38,12 @@ def test_gate0_correlation_cluster_limit_pass(mocked_mt5):
     mocked_mt5.positions_get.return_value = []
     mocked_mt5.orders_get.return_value = []
 
-    res = peg.gate0_correlation_cluster_limit("EURUSD", "BUY")
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate0_correlation_cluster_limit(ctx)
     assert res.status == ALLOW
     assert res.gate == "GATE-0"
 
@@ -48,7 +53,12 @@ def test_gate0_global_cap_reached(mocked_mt5):
     mocked_mt5.positions_get.return_value = mock_positions
     mocked_mt5.orders_get.return_value = []
 
-    res = peg.gate0_correlation_cluster_limit("GBPUSD", "BUY")
+    ctx = GateContext(
+        symbol="GBPUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate0_correlation_cluster_limit(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-0-GLOBAL-CAP"
 
@@ -61,12 +71,11 @@ def test_run_all_gates_pass(mocked_mt5, mock_cfg):
         (0, 1.1, 1.1001, 1.1, 1.1, 0, 0, 0) for _ in range(20)
     ]
 
-    verdict = peg.run_all_gates(
+    ctx = GateContext(
         symbol="EURUSD",
         direction="BUY",
         asset_class="FOREX",
         regime="BULL",
-        ticket_ref="T1",
         kelly_lots=0.1,
         entry_price=1.1,
         sl_distance=0.05,
@@ -76,6 +85,7 @@ def test_run_all_gates_pass(mocked_mt5, mock_cfg):
         current_heat_usd=0.0,
         embargo_registry={}
     )
+    verdict = peg.run_all_gates(ctx, ticket_ref="T1")
     assert verdict.approved
     assert "All 8 gates passed" in verdict.summary()
 
@@ -85,12 +95,11 @@ def test_run_all_gates_fail_gate0(mocked_mt5, mock_cfg):
     mocked_mt5.positions_get.return_value = mock_positions
     mocked_mt5.orders_get.return_value = []
 
-    verdict = peg.run_all_gates(
+    ctx = GateContext(
         symbol="EURUSD",
         direction="BUY",
         asset_class="FOREX",
         regime="BULL",
-        ticket_ref="T1",
         kelly_lots=0.1,
         entry_price=1.1,
         sl_distance=0.05,
@@ -100,6 +109,7 @@ def test_run_all_gates_fail_gate0(mocked_mt5, mock_cfg):
         current_heat_usd=0.0,
         embargo_registry={}
     )
+    verdict = peg.run_all_gates(ctx, ticket_ref="T1")
     assert not verdict.approved
     assert "Gate GATE-0-GLOBAL-CAP Failed" in verdict.summary()
 
@@ -107,16 +117,24 @@ def test_run_all_gates_fail_gate0(mocked_mt5, mock_cfg):
 
 def test_gate1_ecn_conflict(mock_cfg):
     # Pass
-    res = peg.gate1_ecn_conflict("EURUSD", 0.1, 1000.0)
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=1000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate1_ecn_conflict(ctx)
     assert res.status == ALLOW
 
     # Fail 1A: Equity
-    res = peg.gate1_ecn_conflict("EURUSD", 0.1, 50.0)
+    ctx.equity = 50.0
+    res = peg.gate1_ecn_conflict(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-1A"
 
     # Fail 1B: Lots
-    res = peg.gate1_ecn_conflict("EURUSD", 0.005, 1000.0)
+    ctx.equity = 1000.0
+    ctx.kelly_lots = 0.005
+    res = peg.gate1_ecn_conflict(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-1B"
 
@@ -124,25 +142,39 @@ def test_gate2_leverage_wall(mocked_mt5, mock_cfg):
     mocked_mt5.symbol_info.return_value = MagicMock(trade_contract_size=100000.0)
 
     # Pass
-    res = peg.gate2_leverage_wall("EURUSD", 0.1, 1.1, 10000.0)
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate2_leverage_wall(ctx)
     assert res.status == ALLOW
 
     # Fail
-    res = peg.gate2_leverage_wall("EURUSD", 10.0, 1.1, 1000.0)
+    ctx.kelly_lots = 10.0
+    ctx.equity = 1000.0
+    res = peg.gate2_leverage_wall(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-2"
 
 def test_gate3_rr_ratio():
     # Pass BULL
-    res = peg.gate3_rr_ratio(0.01, 0.02, "BULL")
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.01, tp_distance=0.02,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate3_rr_ratio(ctx)
     assert res.status == ALLOW
 
     # Fail BULL (RR < 2.0)
-    res = peg.gate3_rr_ratio(0.01, 0.015, "BULL")
+    ctx.tp_distance = 0.015
+    res = peg.gate3_rr_ratio(ctx)
     assert res.status == BLOCK
 
     # Pass RANGE
-    res = peg.gate3_rr_ratio(0.01, 0.015, "RANGE")
+    ctx.regime = "RANGE"
+    res = peg.gate3_rr_ratio(ctx)
     assert res.status == ALLOW
 
 def test_gate5_risk_cap_and_atr_floor(mocked_mt5, mock_cfg):
@@ -150,50 +182,77 @@ def test_gate5_risk_cap_and_atr_floor(mocked_mt5, mock_cfg):
     mocked_mt5.copy_rates_from_pos.return_value = [
         (0, 1.1, 1.1001, 1.1, 1.1, 0, 0, 0) for _ in range(20)
     ]
-    res = peg.gate5_risk_cap_and_atr_floor("EURUSD", "BUY", 1.1, 0.05, 10.0, 1000.0)
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=1000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate5_risk_cap_and_atr_floor(ctx)
     assert res.status == ALLOW
 
     # Fail Risk Cap
-    res = peg.gate5_risk_cap_and_atr_floor("EURUSD", "BUY", 1.1, 0.05, 50.0, 1000.0)
+    ctx.risk_usd = 50.0
+    res = peg.gate5_risk_cap_and_atr_floor(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-5-RISK-CAP"
 
     # Fail ATR Floor
+    ctx.risk_usd = 10.0
+    ctx.sl_distance = 0.01
     mocked_mt5.copy_rates_from_pos.return_value = [
         (0, 1.1, 1.2, 1.1, 1.1, 0, 0, 0) for _ in range(20)
     ]
-    res = peg.gate5_risk_cap_and_atr_floor("EURUSD", "BUY", 1.1, 0.01, 10.0, 1000.0)
+    res = peg.gate5_risk_cap_and_atr_floor(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-5-ATR-FLOOR"
 
 def test_gate6_portfolio_heat(mock_cfg):
     # Pass
-    res = peg.gate6_portfolio_heat(10.0, 100.0, 10000.0)
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=100.0, embargo_registry={}
+    )
+    res = peg.gate6_portfolio_heat(ctx)
     assert res.status == ALLOW
 
     # Fail
-    res = peg.gate6_portfolio_heat(100.0, 450.0, 10000.0)
+    ctx.risk_usd = 100.0
+    ctx.current_heat_usd = 450.0
+    res = peg.gate6_portfolio_heat(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-6"
 
 def test_gate7_weekend_blackout(mock_cfg):
     # Crypto passes regardless
-    res = peg.gate7_weekend_blackout("CRYPTO")
+    ctx = GateContext(
+        symbol="BTCUSD", direction="BUY", asset_class="CRYPTO", regime="BULL",
+        kelly_lots=0.1, entry_price=60000.0, sl_distance=1000.0, tp_distance=3000.0,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate7_weekend_blackout(ctx)
     assert res.status == ALLOW
 
     # Mock datetime to a weekend (Saturday)
     with patch("pre_execution_gate.datetime") as mock_dt:
         mock_dt.now.return_value = datetime(2025, 5, 24, 12, 0, 0, tzinfo=pytz.utc) # Saturday
-        res = peg.gate7_weekend_blackout("FOREX")
+        ctx.asset_class = "FOREX"
+        res = peg.gate7_weekend_blackout(ctx)
         assert res.status == BLOCK
         assert "Weekend Blackout" in res.message
 
 def test_gate8_amnesia_lock():
     # Pass
-    res = peg.gate8_amnesia_lock("EURUSD", {})
+    ctx = GateContext(
+        symbol="EURUSD", direction="BUY", asset_class="FOREX", regime="BULL",
+        kelly_lots=0.1, entry_price=1.1, sl_distance=0.05, tp_distance=0.15,
+        risk_usd=10.0, equity=10000.0, current_heat_usd=0.0, embargo_registry={}
+    )
+    res = peg.gate8_amnesia_lock(ctx)
     assert res.status == ALLOW
 
     # Fail
-    res = peg.gate8_amnesia_lock("EURUSD", {"EURUSD": True})
+    ctx.embargo_registry = {"EURUSD": True}
+    res = peg.gate8_amnesia_lock(ctx)
     assert res.status == BLOCK
     assert res.gate == "GATE-8"
