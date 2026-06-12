@@ -2,6 +2,7 @@ import MetaTrader5 as mt5
 import time
 import random
 import gitagent_execute_sor as sor
+from gitagent_types import StandardOrder
 import numpy as np
 import gitagent_utils as utils
 
@@ -18,7 +19,15 @@ def execute_iceberg(symbol, order_type, total_volume, sl_p, tp_p, num_clips=5, w
         print(f"[ALGO_ERR] Failed to get symbol info for {symbol}")
         # Final fallback: direct normalized order
         norm_vol = utils.normalize_volume(symbol, total_volume)
-        return sor.execute_standard_order(symbol, order_type, norm_vol, sl_p, tp_p, "Iceberg_Fallback")
+        order = StandardOrder(
+            symbol=symbol,
+            order_type=order_type,
+            volume=norm_vol,
+            sl=sl_p,
+            tp=tp_p,
+            comment="Iceberg_Fallback"
+        )
+        return sor.execute_standard_order(order)
     
     v_min = info.volume_min
     

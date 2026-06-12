@@ -1,6 +1,7 @@
 import MetaTrader5 as mt5
 from gitagent_sor import get_sor_path
 import gitagent_utils as utils
+from gitagent_types import StandardOrder
 
 def execute_smart_order(symbol, side, volume, sl=0, tp=0, comment="Agent15_SOR", position_ticket=None):
     """
@@ -19,14 +20,32 @@ def execute_smart_order(symbol, side, volume, sl=0, tp=0, comment="Agent15_SOR",
 
     if not is_synth:
         # Just execute direct
-        return execute_standard_order(symbol, side, norm_vol, sl, tp, comment, position_ticket)
+        order = StandardOrder(
+            symbol=symbol,
+            order_type=side,
+            volume=norm_vol,
+            sl=sl,
+            tp=tp,
+            comment=comment,
+            position_ticket=position_ticket
+        )
+        return execute_standard_order(order)
     
     # Execute Synthetic
     print(f"[SOR] Synthetic Path Chosen for {symbol}: {path} (Cost {cost} vs {direct_cost})")
     results = []
     for leg_symbol, leg_side in path:
         # Note: Position ticket generally only applies to direct closures of specific tickets
-        res = execute_standard_order(leg_symbol, leg_side, norm_vol, 0, 0, comment + "_leg", position_ticket)
+        order = StandardOrder(
+            symbol=leg_symbol,
+            order_type=leg_side,
+            volume=norm_vol,
+            sl=0,
+            tp=0,
+            comment=comment + "_leg",
+            position_ticket=position_ticket
+        )
+        res = execute_standard_order(order)
         results.append(res)
     
     return results
@@ -53,46 +72,46 @@ def modify_standard_sltp(symbol, ticket, sl, tp):
         print(f"[SOR_MOD] FAILED {symbol} | Ticket: {ticket} | Msg: {msg}")
     return result
 
-def execute_standard_order(symbol, type, volume, sl, tp, comment, position_ticket=None):
+def execute_standard_order(order: StandardOrder):
 
-    if not utils.is_market_open(symbol):
-        print(f"[SOR_EXEC] Skipping Leg {symbol}: Market Closed")
+    if not utils.is_market_open(order.symbol):
+        print(f"[SOR_EXEC] Skipping Leg {order.symbol}: Market Closed")
         return MockResult(mt5.TRADE_RETCODE_REJECT, "Market Closed")
         
-    tick = utils.mt5.symbol_info_tick(symbol)
+    tick = utils.mt5.symbol_info_tick(order.symbol)
     if not tick:
-        print(f"[SOR_ERR] No tick for {symbol}. Leg execution aborted.")
+        print(f"[SOR_ERR] No tick for {order.symbol}. Leg execution aborted.")
         return MockResult(mt5.TRADE_RETCODE_REJECT, "No Tick")
         
     # Handle Limit Orders
     action_type = mt5.TRADE_ACTION_DEAL
-    order_type = type
+    order_type = order.order_type
     
-    if type in [mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT]:
+    if order_type in [mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT]:
         action_type = mt5.TRADE_ACTION_PENDING
 
-    if price_at_entry is not None:
-        price = price_at_entry
+    if order.price is not None:
+        price = order.price
     else:
-        price = tick.ask if type == mt5.ORDER_TYPE_BUY else tick.bid
+        price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
 
     request = {
         "action": action_type,
-        "symbol": symbol,
-        "volume": float(volume),
+        "symbol": order.symbol,
+        "volume": float(order.volume),
         "type": order_type,
         "price": float(price),
-        "sl": float(sl),
-        "tp": float(tp),
+        "sl": float(order.sl),
+        "tp": float(order.tp),
         "magic": 123456,
-        "comment": str(comment)[:15] if comment else "",
+        "comment": str(order.comment)[:15] if order.comment else "",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC if action_type == mt5.TRADE_ACTION_DEAL else mt5.ORDER_FILLING_RETURN,
     }
     
     # CRITICAL: Include position ticket for Hedging account closures/modifications
-    if position_ticket:
-        request["position"] = int(position_ticket)
+    if order.position_ticket:
+        request["position"] = int(order.position_ticket)
         
     result = mt5.order_send(request)
     if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
