@@ -14,6 +14,7 @@ import asyncio
 import logging
 import sys
 import io
+import subprocess
 
 # Force UTF-8 armor on standard outputs to absolutely prevent charmap encoding errors
 if sys.stdout.encoding != 'utf-8':
@@ -97,7 +98,15 @@ async def get_cached_account_info_async():
     # must typically be called from the main thread.
     return mt5.account_info()
 
-def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float = 0.0, tp: float = 0.0, ticket: int = 0) -> str:
+class GoOrderParams(BaseModel):
+    command: str
+    symbol: str
+    size: float = 0.0
+    sl: float = 0.0
+    tp: float = 0.0
+    ticket: int = 0
+
+def execute_go_cli_order(params: GoOrderParams) -> str:
     """
     Pattern 1: Out-of-GIL Go Order Transaction Layer
     Routes payloads to the compiled Go CLI out-of-band to prevent Python GIL blocking.
@@ -108,12 +117,12 @@ def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float
     
     cmd = [
         GO_CLI_BINARY,
-        command,
-        "--symbol", symbol,
-        "--size", str(size),
-        "--sl", str(sl),
-        "--tp", str(tp),
-        "--ticket", str(ticket)
+        params.command,
+        "--symbol", params.symbol,
+        "--size", str(params.size),
+        "--sl", str(params.sl),
+        "--tp", str(params.tp),
+        "--ticket", str(params.ticket)
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
@@ -129,8 +138,7 @@ def execute_go_cli_order(command: str, symbol: str, size: float = 0.0, sl: float
 
 load_dotenv()
 
-# Configure Logging â€” v27.0: Centralized via logger_config.py
-import io
+# Configure Logging — v27.0: Centralized via logger_config.py
 os.environ["PYTHONIOENCODING"] = "utf-8"
 def _get_utf8_stream():
     if getattr(sys.stdout, 'encoding', '').lower() == 'utf-8':
