@@ -6,7 +6,7 @@ file_path = r"C:\Sentinel_Project\sentinel_slow_loop.py"
 with open(file_path, "r", encoding="utf-8") as f:
     content = f.read()
 
-gate_import = "\nfrom pre_execution_gate import run_all_gates\nimport MetaTrader5 as mt5\n"
+gate_import = "\nfrom pre_execution_gate import run_all_gates, GateContext\nimport MetaTrader5 as mt5\n"
 if "from pre_execution_gate import run_all_gates" not in content:
     content = content.replace("import requests", gate_import + "import requests")
 
@@ -46,15 +46,22 @@ patch_code = """
         current_portfolio_heat = current_equity * 0.05 # Placeholder approximation for the gate
         amnesia_lock_registry = {} # Placeholder
 
-        verdict = run_all_gates(
-            symbol=symbol, direction=direction, asset_class=asset_class,
-            regime=regime_key, ticket_ref=str(ticket_ref),
-            kelly_lots=kelly_lots, entry_price=entry_price,
-            sl_distance=sl_distance, tp_distance=tp_distance,
-            risk_usd=risk_usd, equity=current_equity,
+        context = GateContext(
+            symbol=symbol,
+            direction=direction,
+            asset_class=asset_class,
+            regime=regime_key,
+            ticket_ref=str(ticket_ref),
+            kelly_lots=kelly_lots,
+            entry_price=entry_price,
+            sl_distance=sl_distance,
+            tp_distance=tp_distance,
+            risk_usd=risk_usd,
+            equity=current_equity,
             current_heat_usd=current_portfolio_heat,
             embargo_registry=amnesia_lock_registry,
         )
+        verdict = run_all_gates(context)
 
         if not verdict.approved:
             logging.error(f"[GATE_LAYER] SIGNAL BLOCKED: {verdict.summary()}")

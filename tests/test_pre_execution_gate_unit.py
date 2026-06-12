@@ -10,7 +10,7 @@ mock_mt5 = MagicMock()
 sys.modules["MetaTrader5"] = mock_mt5
 
 import pre_execution_gate as peg
-from pre_execution_gate import PreExecutionVerdict, GateResult, BLOCK, ALLOW
+from pre_execution_gate import PreExecutionVerdict, GateResult, GateContext, BLOCK, ALLOW
 
 @pytest.fixture
 def mocked_mt5():
@@ -61,7 +61,7 @@ def test_run_all_gates_pass(mocked_mt5, mock_cfg):
         (0, 1.1, 1.1001, 1.1, 1.1, 0, 0, 0) for _ in range(20)
     ]
 
-    verdict = peg.run_all_gates(
+    context = GateContext(
         symbol="EURUSD",
         direction="BUY",
         asset_class="FOREX",
@@ -76,6 +76,7 @@ def test_run_all_gates_pass(mocked_mt5, mock_cfg):
         current_heat_usd=0.0,
         embargo_registry={}
     )
+    verdict = peg.run_all_gates(context)
     assert verdict.approved
     assert "All 8 gates passed" in verdict.summary()
 
@@ -85,7 +86,7 @@ def test_run_all_gates_fail_gate0(mocked_mt5, mock_cfg):
     mocked_mt5.positions_get.return_value = mock_positions
     mocked_mt5.orders_get.return_value = []
 
-    verdict = peg.run_all_gates(
+    context = GateContext(
         symbol="EURUSD",
         direction="BUY",
         asset_class="FOREX",
@@ -100,6 +101,7 @@ def test_run_all_gates_fail_gate0(mocked_mt5, mock_cfg):
         current_heat_usd=0.0,
         embargo_registry={}
     )
+    verdict = peg.run_all_gates(context)
     assert not verdict.approved
     assert "Gate GATE-0-GLOBAL-CAP Failed" in verdict.summary()
 
