@@ -18,3 +18,10 @@ MONOLITHIC PROMPTS ARE DECLARED CATASTROPHIC RISK SURFACES. The integration of s
 RESTRUCTURING ENFORCEMENT: The core pipeline must execute as discrete binary blocks. If code modifications are undertaken by the SRE daemon, they must be gated by a separate mathematical verification underwriter before compiler deployment.
 
 CACHE CONSTRAINTS: Context token footprint limits must be programmatically policed using the TurboQuant compression configuration layer. No automated task sequence can trigger context expansion that introduces out-of-memory loops or cycle latency above 100ms.
+
+## AMENDMENT XXVII: THE HITL EXECUTION MANDATE
+AUTONOMOUS ORDER ROUTING IS PERMANENTLY ILLEGAL. The agent framework operates strictly as a "Signal Oracle."
+
+The framework is physically barred from executing live capital trades without synchronous, explicit human confirmation via the Staging Queue.
+
+Any attempt by the LLM or sub-agents to bypass the pending_approvals.json file and write custom execution scripts that touch the MT5 terminal directly will trigger an immediate, fatal system halt.

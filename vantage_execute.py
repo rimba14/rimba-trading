@@ -62,13 +62,16 @@ def execute_order(symbol, direction, volume=0.01):
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
     
-    res = mt5.order_send(request)
-    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"[EXECUTE_SUCCESS] Executed {direction} on {symbol} (Ticket: {res.order})")
-        return True
-    else:
-        print(f"[EXECUTE_FAIL] Failed to execute {direction} on {symbol}: {res.comment if res else 'No Response'}")
-        return False
+    # Severed autonomous trigger for HITL mandate
+    print(f"[HITL_ENFORCED] Autonomous order execution BLOCKED for {symbol} {direction}. Order routing is deprecated.")
+    return False
+    # res = mt5.order_send(request)
+    # if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+    #     print(f"[EXECUTE_SUCCESS] Executed {direction} on {symbol} (Ticket: {res.order})")
+    #     return True
+    # else:
+    #     print(f"[EXECUTE_FAIL] Failed to execute {direction} on {symbol}: {res.comment if res else 'No Response'}")
+    #     return False
 
 def main():
     print("[FAST_LOOP] Starting 1-second Vantage Execution Order Router...")

@@ -157,14 +157,12 @@ async def execute_trade(signal: TradeSignal):
         # Market Order
         main_order = await exchange.create_order(binance_sym, 'market', side, final_lot)
         
-        # SL and TP using closePosition
+        # SL using closePosition
         sl_params = {'closePosition': True, 'stopPrice': float(sl_price)}
-        tp_params = {'closePosition': True, 'stopPrice': float(tp_price)}
         
         try:
             sl_order = await exchange.create_order(binance_sym, 'stop_market', inv_side, final_lot, None, sl_params)
-            tp_order = await exchange.create_order(binance_sym, 'take_profit_market', inv_side, final_lot, None, tp_params)
-            logger.info(f"[{binance_sym}] Attached SL and TP brackets successfully.")
+            logger.info(f"[{binance_sym}] Attached SL bracket successfully. (TP vetoed per Directive Zeta Law 4)")
         except Exception as e:
             logger.error(f"[{binance_sym}] Bracket attachment failed: {e}")
             

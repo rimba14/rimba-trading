@@ -68,3 +68,19 @@ MONOLITHIC PROMPTS ARE DECLARED CATASTROPHIC RISK SURFACES. The integration of s
 RESTRUCTURING ENFORCEMENT: The core pipeline must execute as discrete binary blocks. If code modifications are undertaken by the SRE daemon, they must be gated by a separate mathematical verification underwriter before compiler deployment.
 
 CACHE CONSTRAINTS: Context token footprint limits must be programmatically policed using the TurboQuant compression configuration layer. No automated task sequence can trigger context expansion that introduces out-of-memory loops or cycle latency above 100ms.
+
+================================================================================
+AMENDMENT XXVII: THE HITL EXECUTION MANDATE
+================================================================================
+AUTONOMOUS ORDER ROUTING IS PERMANENTLY ILLEGAL. The agent framework operates strictly as a "Signal Oracle."
+
+The framework is physically barred from executing live capital trades without synchronous, explicit human confirmation via the Staging Queue.
+
+Any attempt by the LLM or sub-agents to bypass the pending_approvals.json file and write custom execution scripts that touch the MT5 terminal directly will trigger an immediate, fatal system halt.
+
+================================================================================
+AMENDMENT XXVIII: THE DIRECTIVE ZETA ABSOLUTE VETO
+================================================================================
+1. PRE-EXECUTION PARITY: The agent is physically barred from executing any trade that has not cleared the complete Directive Zeta mathematical suite.
+2. THE 1.5R MANDATE: The agent shall not compromise on the 1:1.5 Risk-to-Reward minimum ratio under any market regime. "Near-miss" or "tight-stop" optimizations that invert this ratio are classified as fatal system errors.
+3. NO EXEMPTIONS: No sub-agent, oracle (e.g., TimesFM or XGBoost), or temporary volatility regime can override the Institutional ATR Stop-Loss Floor. If the market is too volatile to afford a mathematically compliant stop-loss within the 2% equity risk cap, the system must choose to HOLD (no trade), rather than squeeze the SL into an invalid microscopic boundary.

@@ -960,15 +960,84 @@ def push_to_orchestrator(payload: Dict[str, Any]):
             return   # DO NOT dispatch to Machine B
         # ----------------------------------
 
-        logging.info(f"[COGNITION_ROUTE] Pushing {payload['symbol']} signal to Direct HTTP Bridge...")
-        target_url = f"{endpoint_url.rstrip('/')}/execute_trade"
-        _post_to_sniper(payload, target_url)
-        logging.info(f"[COGNITION_ROUTE] [OK] Signal delivered to Execution Node successfully.")
+        # --- HITL EXECUTION GATE INTERCEPT ---
+        logging.info(f"[COGNITION_ROUTE] Intercepting signal for {payload['symbol']} (HITL Enforcement Active).")
+        
+        pending_path = Path("C:/Sentinel_Project/pending_approvals.json")
+        pending_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        pending_trades = []
+        if pending_path.exists():
+            try:
+                with open(pending_path, "r") as f:
+                    content = f.read().strip()
+                    if content:
+                        pending_trades = json.loads(content)
+            except Exception as e:
+                logging.error(f"[HITL_QUEUE_ERR] Failed to load pending approvals: {e}")
+                
+        # Generate sequential Trade_ID
+        next_id = 1
+        if pending_trades:
+            try:
+                ids = [int(t.get("Trade_ID", "0")) for t in pending_trades if t.get("Trade_ID", "").isdigit()]
+                if ids:
+                    next_id = max(ids) + 1
+            except:
+                pass
+        trade_id_str = f"{next_id:03d}"
+        
+        new_trade = {
+            "Trade_ID": trade_id_str,
+            "Asset": payload.get("symbol", "UNKNOWN"),
+            "Direction": payload.get("direction", "HOLD"),
+            "Entry_Type": "Market",
+            "Stop_Loss": f"{payload.get('sl', 0.0):.5f}",
+            "Take_Profit": f"{payload.get('tp', 0.0):.5f}",
+            "Conviction_Score": f"{payload.get('conviction', 0.5):.2f}",
+            "Status": "PENDING_HUMAN_APPROVAL",
+            "Timestamp": time.time(),
+            "Original_Payload": payload
+        }
+        
+        pending_trades.append(new_trade)
+        
+        # Prune stale trades (>15 mins old) from queue
+        now = time.time()
+        active_trades = []
+        for t in pending_trades:
+            ts = t.get("Timestamp", 0)
+            if now - ts > 900:
+                logging.warning(f"[HITL_STALE] Pruning stale trade {t.get('Trade_ID')} for {t.get('Asset')}.")
+            else:
+                active_trades.append(t)
+                
+        # Write updated approvals back to file
+        try:
+            with open(pending_path, "w") as f:
+                json.dump(active_trades, f, indent=2)
+        except Exception as e:
+            logging.error(f"[HITL_QUEUE_ERR] Failed to write pending approvals: {e}")
+            
+        # Formatted terminal output
+        print("\n" + "="*80)
+        print("🚨🚨🚨 [HUMAN-IN-THE-LOOP GATING] NEW TRADE PENDING APPROVAL 🚨🚨🚨")
+        print("="*80)
+        print(json.dumps({
+            "Trade_ID": new_trade["Trade_ID"],
+            "Asset": new_trade["Asset"],
+            "Direction": new_trade["Direction"],
+            "Entry_Type": new_trade["Entry_Type"],
+            "Stop_Loss": new_trade["Stop_Loss"],
+            "Take_Profit": new_trade["Take_Profit"],
+            "Conviction_Score": new_trade["Conviction_Score"],
+            "Status": new_trade["Status"]
+        }, indent=2))
+        print("="*80)
+        print(f"Action Required: Run 'python hitl_push.py --trade {new_trade['Trade_ID']}' to approve and execute.")
+        print("="*80 + "\n")
     except Exception as e:
-        logging.error(f"[COGNITION_ROUTE] [FAIL] Failed to push signal to HTTP Bridge: {e}")
-        fname = SIGNAL_DIR / f"sig_{payload['symbol']}_{int(time.time())}.json"
-        with open(fname, "w") as fh:
-            json.dump(payload, fh, indent=2)
+        logging.error(f"[COGNITION_ROUTE] [FAIL] Error handling HITL staging logic: {e}")
 
 # -- Main Oracle Update --------------------------------------------------------
 def fetch_and_calculate_raw_features(symbol: str, force_refresh: bool = False) -> Optional[dict]:

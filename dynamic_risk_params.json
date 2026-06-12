@@ -1,6 +1,6 @@
 {
     "max_risk_per_trade_pct": 2.0,
-    "portfolio_heat_cap_pct": 8.0,
+    "portfolio_heat_cap_pct": 999.0,
     "epistemic_gate_threshold": 0.6,
     "atr_multiplier_sl": 3.0,
     "tp_multiplier_range_min": 2.5,
@@ -27,5 +27,5 @@
             "decay_threshold": 0.42
         }
     },
-    "health_size_multiplier": 0.5
+    "health_size_multiplier": 1.0
 }

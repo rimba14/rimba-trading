@@ -276,30 +276,38 @@ def execute_trade(symbol: str, kronos_conviction: float, hmm_regime: str) -> str
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
-        res = mt5.order_send(mkt_request)
-        results.append({"type": "MARKET", "ticket": res.order if res and res.retcode == mt5.TRADE_RETCODE_DONE else 0, "retcode": res.retcode if res else -1})
-
-        # Orders 2-5: Limit Grid
-        for i in range(1, 5):
-            pullback = i * 0.5 * atr
-            limit_price = (base_price - pullback) if direction == mt5.ORDER_TYPE_BUY else (base_price + pullback)
-            # Independent SL for each limit
-            limit_sl = (limit_price - safe_sl_distance) if direction == mt5.ORDER_TYPE_BUY else (limit_price + safe_sl_distance)
-            
-            l_req = {
-                "action": mt5.TRADE_ACTION_PENDING,
-                "symbol": symbol,
-                "volume": float(unit_lots),
-                "type": mt5.ORDER_TYPE_BUY_LIMIT if direction == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_SELL_LIMIT,
-                "price": float(limit_price),
-                "sl": float(limit_sl),
-                "magic": MAGIC_NUMBER,
-                "comment": f"GRID_{i}",
-                "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
-            }
-            l_res = mt5.order_send(l_req)
-            results.append({"type": f"LIMIT_{i}", "ticket": l_res.order if l_res and l_res.retcode == mt5.TRADE_RETCODE_DONE else 0, "retcode": l_res.retcode if l_res else -1})
+        # Severed autonomous trigger for HITL mandate
+        logging.critical(f"[HITL_ENFORCED] Autonomous trade execution BLOCKED for {symbol}. Order routing is deprecated.")
+        return json.dumps({
+            "status": "REJECTED",
+            "reason": "AUTONOMOUS_EXECUTION_BLOCKED_HITL",
+            "symbol": symbol
+        })
+        
+        # res = mt5.order_send(mkt_request)
+        # results.append({"type": "MARKET", "ticket": res.order if res and res.retcode == mt5.TRADE_RETCODE_DONE else 0, "retcode": res.retcode if res else -1})
+        # 
+        # # Orders 2-5: Limit Grid
+        # for i in range(1, 5):
+        #     pullback = i * 0.5 * atr
+        #     limit_price = (base_price - pullback) if direction == mt5.ORDER_TYPE_BUY else (base_price + pullback)
+        #     # Independent SL for each limit
+        #     limit_sl = (limit_price - safe_sl_distance) if direction == mt5.ORDER_TYPE_BUY else (limit_price + safe_sl_distance)
+        #     
+        #     l_req = {
+        #         "action": mt5.TRADE_ACTION_PENDING,
+        #         "symbol": symbol,
+        #         "volume": float(unit_lots),
+        #         "type": mt5.ORDER_TYPE_BUY_LIMIT if direction == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_SELL_LIMIT,
+        #         "price": float(limit_price),
+        #         "sl": float(limit_sl),
+        #         "magic": MAGIC_NUMBER,
+        #         "comment": f"GRID_{i}",
+        #         "type_time": mt5.ORDER_TIME_GTC,
+        #         "type_filling": mt5.ORDER_FILLING_IOC,
+        #     }
+        #     l_res = mt5.order_send(l_req)
+        #     results.append({"type": f"LIMIT_{i}", "ticket": l_res.order if l_res and l_res.retcode == mt5.TRADE_RETCODE_DONE else 0, "retcode": l_res.retcode if l_res else -1})
 
         # 7. Standardized Output
         notifier.send_execution_alert(symbol, direction, lots, base_price, sl_price, hmm_regime)

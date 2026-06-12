@@ -187,37 +187,46 @@ def execute_trade(symbol, conviction, hmm_regime):
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
         
-        res = mt5.order_send(request)
-        results.append({"type": "market", "retcode": res.retcode, "deal": res.deal})
+        # Severed autonomous trigger for HITL mandate
+        logging.critical(f"[HITL_ENFORCED] Autonomous trade execution BLOCKED for {symbol}. Order routing is deprecated.")
+        return {
+            "status": "error",
+            "message": "AUTONOMOUS_EXECUTION_BLOCKED_HITL",
+            "symbol": symbol,
+            "direction": "BUY" if direction == mt5.ORDER_TYPE_BUY else "SELL"
+        }
         
-        # 4 Limit Orders at 0.5x ATR pullbacks
-        for i in range(1, 5):
-            pullback = i * 0.5 * base_atr
-            limit_price = price - pullback if direction == mt5.ORDER_TYPE_BUY else price + pullback
-            limit_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_SELL_LIMIT
-            
-            # Independent SL & TP for each limit
-            limit_sl = limit_price - sl_distance if direction == mt5.ORDER_TYPE_BUY else limit_price + sl_distance
-            limit_tp = 0.0
-            if is_crypto:
-                limit_tp = limit_price + tp_dist if direction == mt5.ORDER_TYPE_BUY else limit_price - tp_dist
-            
-            limit_request = {
-                "action": mt5.TRADE_ACTION_PENDING,
-                "symbol": symbol,
-                "volume": vol_per_order,
-                "type": limit_type,
-                "price": limit_price,
-                "sl": limit_sl,
-                "tp": limit_tp,
-                "magic": MAGIC_NUMBER,
-                "comment": f"Sentinel_v15_Lim{i}_{hmm_regime}",
-                "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
-            }
-            
-            res_lim = mt5.order_send(limit_request)
-            results.append({"type": f"limit_{i}", "retcode": res_lim.retcode, "order": res_lim.order})
+        # res = mt5.order_send(request)
+        # results.append({"type": "market", "retcode": res.retcode, "deal": res.deal})
+        # 
+        # # 4 Limit Orders at 0.5x ATR pullbacks
+        # for i in range(1, 5):
+        #     pullback = i * 0.5 * base_atr
+        #     limit_price = price - pullback if direction == mt5.ORDER_TYPE_BUY else price + pullback
+        #     limit_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_SELL_LIMIT
+        #     
+        #     # Independent SL & TP for each limit
+        #     limit_sl = limit_price - sl_distance if direction == mt5.ORDER_TYPE_BUY else limit_price + sl_distance
+        #     limit_tp = 0.0
+        #     if is_crypto:
+        #         limit_tp = limit_price + tp_dist if direction == mt5.ORDER_TYPE_BUY else limit_price - tp_dist
+        #     
+        #     limit_request = {
+        #         "action": mt5.TRADE_ACTION_PENDING,
+        #         "symbol": symbol,
+        #         "volume": vol_per_order,
+        #         "type": limit_type,
+        #         "price": limit_price,
+        #         "sl": limit_sl,
+        #         "tp": limit_tp,
+        #         "magic": MAGIC_NUMBER,
+        #         "comment": f"Sentinel_v15_Lim{i}_{hmm_regime}",
+        #         "type_time": mt5.ORDER_TIME_GTC,
+        #         "type_filling": mt5.ORDER_FILLING_IOC,
+        #     }
+        #     
+        #     res_lim = mt5.order_send(limit_request)
+        #     results.append({"type": f"limit_{i}", "retcode": res_lim.retcode, "order": res_lim.order})
             
         return {
             "status": "success",

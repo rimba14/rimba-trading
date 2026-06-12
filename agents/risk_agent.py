@@ -270,9 +270,8 @@ class RiskAgent:
             simulated_exposures[quote] = simulated_exposures.get(quote, 0.0) + new_risk_usd
             
         # Verify 4.0% limit on absolute net exposure of ANY currency
-        for cur, exp_usd in simulated_exposures.items():
-            abs_exp = abs(exp_usd)
-            limit = self.max_currency_heat_pct * equity
+        limit = equity * 0.04
+        for cur, abs_exp in {k: abs(v) for k, v in simulated_exposures.items()}.items():
             if abs_exp > limit:
                 msg = f"[PORTFOLIO_HEAT_VETO] {symbol} blocked. Simulated directional risk on {cur} (${abs_exp:.2f}) breaches 4.0% heat limit (${limit:.2f})."
                 logger.warning(msg)

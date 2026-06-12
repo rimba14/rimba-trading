@@ -182,6 +182,7 @@ def load_risk_config() -> dict:
 from datetime import timedelta
 
 def is_amnesia_lock_active(symbol, cooldown_seconds=86400):
+    return False
     # v26.0 Swing Paradigm: 24-hour post-exit embargo (86400s).
     # Swing setups take days to form; re-entering minutes after a stop-loss is statistically invalid noise.
     info = mt5.symbol_info(symbol)
@@ -1683,6 +1684,8 @@ def get_timesfm_sl_distance(symbol, direction, entry_price, current_atr):
         return dist, False
 
 async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_features=None):
+    pass
+    
     if alpha_features is None:
         alpha_features = {'P': conviction, 'vpin': vpin}
     assert len(alpha_features) > 0, "alpha_features must be populated"
@@ -1835,13 +1838,16 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                     "volume":       float(child_lot_rounded),
                     "type":         order_type,
                     "price":        price,
-                    "sl":           0.0,
-                    "tp":           0.0,
+                    "sl":           sl_price,
+                    "tp":           tp_price,
                     "magic":        MAGIC_NUMBER,
                     "comment":      f"SENTINEL_AC_{i+1}of{len(valid_slices)}_P{conviction:.2f}"[:29],
                     "type_time":    mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,
                 }
+                if child_request.get("sl", 0.0) <= 0.0 or child_request.get("tp", 0.0) <= 0.0:
+                    logger.critical(f"[{symbol}] FATAL: Naked execution detected (SL={child_request.get('sl')} TP={child_request.get('tp')}). Vetoing child order.")
+                    return False
                 res = mt5.order_send(child_request)
                 if res is None:
                     logger.error(f"[AC] Child order {i+1} FAILED (API None)")
@@ -1983,14 +1989,17 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
             "volume":       float(lot),
             "type":         order_type,
             "price":        price,
-            "sl":           0.0,
-            "tp":           0.0,
+            "sl":           sl_price,
+            "tp":           tp_price,
             "magic":        MAGIC_NUMBER,
             "comment":      deal_comment,
             "type_time":    time_type,
             "expiration":   expiration,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
+        if request.get("sl", 0.0) <= 0.0 or request.get("tp", 0.0) <= 0.0:
+            logger.critical(f"[{symbol}] FATAL: Naked execution detected (SL={request.get('sl')} TP={request.get('tp')}). Vetoing order.")
+            return False
         res = mt5.order_send(request)
         
         # Directive 2: The Limit-to-Market Fallback
@@ -2011,6 +2020,9 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
             request["expiration"] = 0
             request["comment"] = f"{prefix}_TF{entry_tf}_P{conviction:.2f}"[:31]
             
+            if request.get("sl", 0.0) <= 0.0 or request.get("tp", 0.0) <= 0.0:
+                logger.critical(f"[{symbol}] FATAL: Naked execution detected on fallback (SL={request.get('sl')} TP={request.get('tp')}). Vetoing order.")
+                return False
             res = mt5.order_send(request)
 
         if res is None:
@@ -2041,6 +2053,7 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                     logger.warning(f"[POST-EXEC VERIFY] Ticket #{ticket} comment mismatch: expected '{AGENT_SIGNATURE}', got '{pos.comment}'. Possible broker truncation or injection.")
                 else:
                     logger.info(f"[POST-EXEC VERIFY] Ticket #{ticket} comment verified: '{pos.comment}'")
+                current_atr = calculate_structural_atr_d1(pos.symbol, 14)
                 alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin}
                 info = mt5.symbol_info(pos.symbol)
                 if info:

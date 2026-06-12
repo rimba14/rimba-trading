@@ -228,12 +228,13 @@ def gate3_rr_ratio(sl_distance: float, tp_distance: float, regime: str) -> GateR
         )
         
     rr_ratio = tp_distance / sl_distance
-    min_rr = 2.0 if "BULL" in regime or "BEAR" in regime else 1.5
+    # v38.0 DIRECTIVE ZETA ABSOLUTE VETO: 1.5R minimum regardless of regime
+    min_rr = 1.5
     if rr_ratio < min_rr:
         return GateResult(
             gate="GATE-3",
             status=BLOCK,
-            message=f"RR Ratio {rr_ratio:.2f} < Min {min_rr} for regime {regime}"
+            message=f"RR Ratio {rr_ratio:.2f} < Min {min_rr} (DIRECTIVE ZETA VETO)"
         )
     return GateResult(gate="GATE-3", status=ALLOW, message="Passed RR ratio enforcement.")
 
@@ -280,16 +281,18 @@ def gate5_risk_cap_and_atr_floor(
     except Exception as atr_err:
         logger.error(f"Failed to calculate D1 ATR in PreExecutionGate for {symbol}: {atr_err}")
 
-    if current_ATR > 0.0:
-        minimum_allowed_distance = max(entry_price * 0.002, current_ATR * 3.5)  # Absolute volatility floor on D1 ATR
-        if sl_distance_price < minimum_allowed_distance:
-            logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
-                              f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
-            return GateResult(
-                gate="GATE-5-ATR-FLOOR",
-                status=BLOCK,
-                message=f"Stop Loss position ({stop_loss}) is non-compliant. D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance})."
-            )
+    if current_ATR <= 0.0:
+        current_ATR = entry_price * 0.01  # Safe fallback if ATR calculation fails
+
+    minimum_allowed_distance = max(entry_price * 0.002, current_ATR * 3.5)  # Absolute volatility floor on D1 ATR
+    if sl_distance_price < minimum_allowed_distance:
+        logger.error(f"[{symbol}] Stop Loss position ({stop_loss}) is non-compliant. "
+                          f"D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance}). Vetoing.")
+        return GateResult(
+            gate="GATE-5-ATR-FLOOR",
+            status=BLOCK,
+            message=f"Stop Loss position ({stop_loss}) is non-compliant. D1_ATR Distance {sl_distance_price} falls below ATR Floor ({minimum_allowed_distance})."
+        )
 
     return GateResult(gate="GATE-5", status=ALLOW, message="Passed risk cap and ATR floor.")
 
@@ -318,6 +321,15 @@ def gate8_amnesia_lock(symbol: str, embargo_registry: dict) -> GateResult:
     if symbol in embargo_registry:
         return GateResult(gate="GATE-8", status=BLOCK, message=f"Symbol {symbol} is currently in amnesia lock registry")
     return GateResult(gate="GATE-8", status=ALLOW, message="Passed amnesia lock.")
+
+def gate9_naked_executions(sl_distance: float, tp_distance: float) -> GateResult:
+    if sl_distance <= 0.0 or tp_distance <= 0.0:
+        return GateResult(
+            gate="GATE-9",
+            status=BLOCK,
+            message="Naked executions (SL=0.0 or TP=0.0) are strictly forbidden under Directive Zeta."
+        )
+    return GateResult(gate="GATE-9", status=ALLOW, message="Passed zero naked executions check.")
 
 def run_all_gates(
     symbol: str,
@@ -411,7 +423,8 @@ def run_all_gates(
         lambda: gate5_risk_cap_and_atr_floor(symbol, direction, entry_price, sl_distance, risk_usd, equity),
         lambda: gate6_portfolio_heat(risk_usd, current_heat_usd, equity),
         lambda: gate7_weekend_blackout(asset_class),
-        lambda: gate8_amnesia_lock(symbol, embargo_registry)
+        lambda: gate8_amnesia_lock(symbol, embargo_registry),
+        lambda: gate9_naked_executions(sl_distance, tp_distance)
     ]
 
     for gate_func in gates:
