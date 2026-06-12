@@ -146,22 +146,27 @@ try:
 
     # Extract and exec just the AS function (pure math, no deps)
     import math
-    exec_globals = {"math": math, "logger": logger, "os": os}
+    from dataclasses import dataclass
+    from typing import Tuple
+    exec_globals = {"math": math, "logger": logger, "os": os, "dataclass": dataclass, "Tuple": Tuple}
 
-    # Find and exec calculate_as_quotes
-    start = src.find("def calculate_as_quotes(")
+    # Find and exec ASQuoteParams and calculate_as_quotes
+    start = src.find("@dataclass\nclass ASQuoteParams:")
     end   = src.find("\ndef calculate_ac_trajectory(")
     as_src = src[start:end].strip()
     exec(as_src, exec_globals)
     calculate_as_quotes = exec_globals["calculate_as_quotes"]
+    ASQuoteParams = exec_globals["ASQuoteParams"]
 
     bid, ask = calculate_as_quotes(
-        mid_price=1.0850,
-        inventory=5.0,      # Long 5 lots → reservation skews bid up
-        volatility=0.0012,
-        risk_aversion=0.1,
-        time_remaining=0.5,
-        spread_factor=0.0005,
+        micro_price=1.0850,
+        params=ASQuoteParams(
+            inventory=5.0,      # Long 5 lots → reservation skews bid up
+            volatility=0.0012,
+            risk_aversion=0.1,
+            time_remaining=0.5,
+            spread_factor=0.0005,
+        )
     )
 
     assert bid < ask, f"Bid {bid:.5f} must be < Ask {ask:.5f}"
