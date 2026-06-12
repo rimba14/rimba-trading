@@ -91,16 +91,19 @@ def parse_base_quote(symbol: str) -> Tuple[str, str]:
 
 def get_usd_rate(currency: str) -> float:
     """Fetches real-time USD conversion rate for non-USD quotes from MT5 tick ledger."""
-    if currency == "USD":
-        return 1.0
-    # Try Direct Rate (e.g. GBPUSD)
-    tick = mt5.symbol_info_tick(f"{currency}USD")
-    if tick and tick.bid > 0:
-        return tick.bid
-    # Try Inverse Rate (e.g. USDJPY)
-    tick = mt5.symbol_info_tick(f"USD{currency}")
-    if tick and tick.bid > 0:
-        return 1.0 / tick.bid
+    try:
+        if currency == "USD":
+            return 1.0
+        # Try Direct Rate (e.g. GBPUSD)
+        tick = mt5.symbol_info_tick(f"{currency}USD")
+        if tick and tick.bid > 0:
+            return tick.bid
+        # Try Inverse Rate (e.g. USDJPY)
+        tick = mt5.symbol_info_tick(f"USD{currency}")
+        if tick and tick.bid > 0:
+            return 1.0 / tick.bid
+    except Exception as e:
+        logger.error(f"[RISK_AGENT] Error fetching USD rate for {currency}: {e}")
     # Default fallback
     return 1.0
 
