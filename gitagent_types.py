@@ -31,6 +31,21 @@ class ProposedTradePayload:
         self.anomalies.append(msg)
 
 @dataclass
+class StandardOrder:
+    """
+    Standard Order Request payload.
+    Used to encapsulate order parameters to improve maintainability.
+    """
+    symbol: str
+    order_type: int
+    volume: float
+    sl: float = 0.0
+    tp: float = 0.0
+    comment: str = ""
+    price: Optional[float] = None
+    position_ticket: Optional[int] = None
+
+@dataclass
 class ExecutionPermit:
     """
     Cryptographically sealed (conceptually) permit for live execution.
