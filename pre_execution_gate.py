@@ -37,10 +37,10 @@ class PriceUnit:
             raise TypeError(f"PriceUnit must be a positive float/int, got {type(value)}")
         self.value = float(value)
 
-class PipDistance:
+class PriceDistance:
     def __init__(self, value: float, entry_price: float = None):
         if not isinstance(value, (int, float)) or value <= 0:
-            raise TypeError(f"PipDistance must be a positive float/int, got {type(value)}")
+            raise TypeError(f"PriceDistance must be a positive float/int, got {type(value)}")
         if entry_price is not None and value >= entry_price:
             raise ValueError(f"Unit Confusion Detected: Distance ({value}) is greater than or equal to Entry Price ({entry_price})")
         self.value = float(value)
@@ -395,8 +395,8 @@ def run_all_gates(
     # Enforce strict parameter type-safety and dimension checking
     try:
         PriceUnit(entry_price)
-        PipDistance(sl_distance, entry_price)
-        PipDistance(tp_distance, entry_price)
+        PriceDistance(sl_distance, entry_price)
+        PriceDistance(tp_distance, entry_price)
         LotVolume(kelly_lots)
     except (TypeError, ValueError) as type_err:
         logger.error(f"Type-Safety Gate Violation for {symbol}: {type_err}")

@@ -522,7 +522,7 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
     logger.info(f"[{signal.symbol}] Signal VALID: NormP {norm_p} >= SlowLoop Gate {target_gate}")
 
     # 2b. Native MT5 Ledger Amnesia Lock Check (v27.0: 24-hour Embargo)
-    if False: # is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
+    if is_amnesia_lock_active(signal.symbol, cooldown_seconds=86400):
         logger.warning(f"[{signal.symbol}] Signal REJECTED: Amnesia Lock Active (24-hour Embargo)")
         raise HTTPException(status_code=429, detail="Amnesia Lock Active (24h)")
 
@@ -595,13 +595,8 @@ async def execute_trade_endpoint(signal: TradeSignal, request: Request):
         raise HTTPException(status_code=403, detail=str(e))
 
     # check_risk_gates now handles its own HTTPException raises for specific reasons
-    logger.info(f"DEBUG BYPASS EVAL: signal.override_lot={signal.override_lot}, type={type(signal.override_lot)}")
-    if not signal.override_lot or float(signal.override_lot) <= 0:
-        logger.info("DEBUG BYPASS: Did NOT bypass! Executing check_risk_gates...")
-        if not await check_risk_gates_async(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction, acc=account_info):
-            return {"status": "rejected", "detail": "Risk gate block"}
-    else:
-        logger.info("DEBUG BYPASS: Bypassing check_risk_gates successfully!")
+    if not await check_risk_gates_async(signal.symbol, signal.direction, signal.wasserstein_state, incoming_notional, signal.xgb_p, signal.ddqn_p, signal.conviction, acc=account_info):
+        return {"status": "rejected", "detail": "Risk gate block"}
 
     # v23.15 Directive: Pre-Validation Margin Shield / Atomic Mutual Exclusion Execution
     # Logic flows strictly: Signal Received -> Delta P Gate (Î”P) -> Margin Pre-Validation Gate -> If Pass: Liquidate Old Position -> Execute New Position.
@@ -1157,7 +1152,7 @@ async def run_composite_preflight_checklist(
             logger.info(f"[{symbol}] Point 11 Check: Zero-MFE failed on attempt {attempt+1}. Soft delaying...")
             await asyncio.sleep(0.1)
             
-        if False:
+        if not momentum_confirmed:
             return False, f"Point 11 Fail: [HARD_VETO] [MOMENTUM_VETO] Zero-MFE check failed after {retries} retries."
 
     # Point 12: Spread-to-ATR Ratio (Rule 4.2)
@@ -1713,12 +1708,10 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
         passed = True
         reason = "Skipped"
         logger.info(f"DEBUG MT5_TRADE alpha_features override_lot: {alpha_features.get('override_lot', 0.0)}")
-        if alpha_features.get("override_lot", 0.0) <= 0.0:
-            passed, reason = await run_composite_preflight_checklist(
-                symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
-            )
-        else:
-            logger.info(f"[{symbol}] SRE MANUAL OVERRIDE: Bypassing Composite Pre-Flight Checklist.")
+        # MANDATORY SRE CHECK: Manual lot overrides no longer bypass risk gates.
+        passed, reason = await run_composite_preflight_checklist(
+            symbol, direction, lot, conviction, vpin, hmm_state, xgb_p, ddqn_p, alpha_features
+        )
 
         if not passed:
             is_fuzzing = alpha_features.get("is_fuzzing", False) if alpha_features else False
