@@ -124,3 +124,30 @@ def test_get_market_regime_invalid_json():
 
     parsed_result = json.loads(result_json)
     assert "error" in parsed_result
+
+def test_evaluate_regime_allocation_volatility_boundary():
+    # Test volatility_sigma exactly at 4.0 (should NOT be VOLATILE)
+    fft_data = {"anomaly_detected": False, "volatility_sigma": 4.0}
+    result = evaluate_regime_allocation("BTCUSD", "RANGE", fft_data)
+    assert result["regime"] == "RANGE"
+
+def test_evaluate_regime_allocation_empty_fft_data():
+    # Test empty dictionary for fft_amplitude_data
+    result = evaluate_regime_allocation("BTCUSD", "BULL", {})
+    assert result["regime"] == "TREND"
+    assert result["authorized_strategy"] == "KRONOS_MOMENTUM"
+
+def test_get_market_regime_non_dict_json():
+    # Test JSON that is valid but not a dictionary (e.g., a number)
+    # json.loads("123") returns 123, then evaluate_regime_allocation(..., 123)
+    # which will likely raise an AttributeError when calling .get()
+    result_json = get_market_regime("BTCUSD", "BULL", "123")
+    parsed_result = json.loads(result_json)
+    assert "error" in parsed_result
+
+def test_evaluate_regime_allocation_empty_hmm_state():
+    # Test empty string for hmm_state
+    fft_data = {"anomaly_detected": False, "volatility_sigma": 1.0}
+    result = evaluate_regime_allocation("BTCUSD", "", fft_data)
+    assert result["regime"] == "UNCERTAIN"
+    assert result["authorized_strategy"] == "STEP_ASIDE"
