@@ -10,6 +10,11 @@ from gitagent_types import ProposedTradePayload
 from verification_layer import underwriter
 from broker_client import dispatch_permit
 
+# Performance Cache for Toxic Asset Ban List
+_BAN_LIST_CACHE = []
+_LAST_LOAD_TIME = 0
+_BAN_LIST_TTL = 300  # 5 minutes
+
 
 class ActionLayer:
     """
@@ -22,6 +27,14 @@ class ActionLayer:
         self.ban_list = self._load_ban_list()
 
     def _load_ban_list(self):
+        """Loads and caches the ban list to eliminate redundant sync I/O."""
+        global _BAN_LIST_CACHE, _LAST_LOAD_TIME
+        now = time.time()
+
+        # Check if cache is valid (even if list is empty)
+        if _LAST_LOAD_TIME and (now - _LAST_LOAD_TIME < _BAN_LIST_TTL):
+            return _BAN_LIST_CACHE
+
         ban_list = []
         try:
             wiki_path = "C:\\Sentinel_Project\\TRADING_WIKI.md"
@@ -31,12 +44,22 @@ class ActionLayer:
                         if "⚠️ TOXIC" in line:
                             sym_match = line.split("**")[1] if "**" in line else None
                             if sym_match: ban_list.append(sym_match)
+
+            # Update cache
+            _BAN_LIST_CACHE = ban_list
+            _LAST_LOAD_TIME = now
         except Exception as e:
             print(f"[ACTION_ERR] Failed to load BAN_LIST: {e}")
+            # If we have a stale cache, keep using it instead of returning empty
+            return _BAN_LIST_CACHE if _LAST_LOAD_TIME else []
+
         return ban_list
 
     def check_risk_gate(self, symbol):
         """Mandatory risk audit before any execution."""
+        # Refresh ban list if needed
+        self.ban_list = self._load_ban_list()
+
         if symbol in self.ban_list:
             print(f"[RISK_GATE] {symbol} is BANNED (Toxic Asset)")
             return False, "BANNED"
@@ -248,10 +271,3 @@ class ActionLayer:
 # Singleton Instance
 _ACTION_LAYER = ActionLayer()
 def get_action_layer(): return _ACTION_LAYER
-
-# Singleton Instance
-
-_ACTION_LAYER = ActionLayer()
-
-def get_action_layer():
-    return _ACTION_LAYER
