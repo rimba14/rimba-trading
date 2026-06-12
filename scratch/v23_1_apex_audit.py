@@ -143,6 +143,7 @@ try:
     with open(os.path.join(PROJECT_ROOT, "fastapi_sniper.py"), "r", encoding="utf-8") as f:
         src = f.read()
 
+    from dataclasses import dataclass
     exec_globals = {
         "math": math, 
         "logger": logging.getLogger("SniperMock"), 
@@ -150,9 +151,15 @@ try:
         "Tuple": Tuple, 
         "List": List, 
         "Optional": Optional, 
-        "Dict": Dict
+        "Dict": Dict,
+        "dataclass": dataclass
     }
     
+    # Extract ASQuoteParams
+    as_params_start = src.find("@dataclass\nclass ASQuoteParams:")
+    as_params_end = src.find("\n# ", as_params_start + 1)
+    exec(src[as_params_start:as_params_end].strip(), exec_globals)
+
     # Extract helper functions
     for func in ["calculate_micro_price", "calculate_as_quotes", "calculate_ac_trajectory"]:
         start = src.find(f"def {func}")
@@ -181,13 +188,16 @@ try:
     print(f"  {PASS} Micro-Price: {micro_p:.4f} (Mid: {mid_p:.4f}) | Skew: +{micro_p - mid_p:.4f}")
 
     # B. AS Quote Skew (Long Inventory)
+    ASQuoteParams = exec_globals["ASQuoteParams"]
     bid_q, ask_q = calc_as_quotes(
         micro_price=micro_p,
-        inventory=1.0, # Long 1.0 lot -> skew quotes DOWN to reduce inventory
-        volatility=0.5,
-        risk_aversion=0.1,
-        time_remaining=1.0,
-        spread_factor=0.5
+        params=ASQuoteParams(
+            inventory=1.0, # Long 1.0 lot -> skew quotes DOWN to reduce inventory
+            volatility=0.5,
+            risk_aversion=0.1,
+            time_remaining=1.0,
+            spread_factor=0.5
+        )
     )
     print(f"  {PASS} AS Quotes: Bid={bid_q:.2f} | Ask={ask_q:.2f} (Anchored to Micro-Price)")
 

@@ -14,6 +14,7 @@ import asyncio
 import logging
 import sys
 import io
+from dataclasses import dataclass
 
 # Force UTF-8 armor on standard outputs to absolutely prevent charmap encoding errors
 if sys.stdout.encoding != 'utf-8':
@@ -2225,6 +2226,15 @@ if __name__ == "__main__":
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # DIRECTIVE 3: AVELLANEDA-STOIKOV MARKET MAKING (v23.1)
+
+@dataclass
+class ASQuoteParams:
+    """Parameters for Avellaneda-Stoikov market making model."""
+    inventory: float
+    volatility: float
+    risk_aversion: float = 0.1
+    time_remaining: float = 1.0
+    spread_factor: float = 1.0
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float) -> float:
@@ -2239,11 +2249,7 @@ def calculate_micro_price(bid: float, ask: float, bid_vol: float, ask_vol: float
 
 def calculate_as_quotes(
     micro_price: float,
-    inventory: float,
-    volatility: float,
-    risk_aversion: float = 0.1,
-    time_remaining: float = 1.0,
-    spread_factor: float = 1.0,
+    params: ASQuoteParams,
 ) -> Tuple[float, float]:
     """
     Avellaneda-Stoikov Optimal Market Making Quotes (v23.1 Oxford Apex).
@@ -2269,28 +2275,25 @@ def calculate_as_quotes(
        Simplified here as: delta = gamma * sigma^2 * T + spread_factor
 
     Args:
-        micro_price:    Current volume-weighted Micro-Price (S).
-        inventory:      Current signed inventory in lots (+long, -short).
-        volatility:     Price volatility proxy (e.g., ATR). Units: price.
-        risk_aversion:  Gamma parameter [0.01, 1.0]. Higher = tighter quotes.
-        time_remaining: Normalized time in session [0, 1]. Lower = more urgent.
-        spread_factor:  Minimum half-spread (e.g., 1.5x bid-ask spread).
+        micro_price: Current volume-weighted Micro-Price (S).
+        params:      ASQuoteParams object containing inventory, volatility,
+                     risk_aversion, time_remaining, and spread_factor.
 
     Returns:
         Tuple (bid_price, ask_price) â€” the optimal limit order prices.
     """
     # Reservation price: skew Micro-Price away from inventory direction
-    reservation_price = micro_price - inventory * risk_aversion * (volatility ** 2) * time_remaining
+    reservation_price = micro_price - params.inventory * params.risk_aversion * (params.volatility ** 2) * params.time_remaining
 
     # Optimal half-spread
-    half_spread = 0.5 * (risk_aversion * (volatility ** 2) * time_remaining + spread_factor)
-    half_spread = max(half_spread, spread_factor)  # Floor at minimum spread
+    half_spread = 0.5 * (params.risk_aversion * (params.volatility ** 2) * params.time_remaining + params.spread_factor)
+    half_spread = max(half_spread, params.spread_factor)  # Floor at minimum spread
 
     bid = reservation_price - half_spread
     ask = reservation_price + half_spread
 
     logger.info(
-        f"[AS_QUOTES] MicroPrice={micro_price:.5f} | Inventory={inventory:.2f} lots "
+        f"[AS_QUOTES] MicroPrice={micro_price:.5f} | Inventory={params.inventory:.2f} lots "
         f"| Reservation={reservation_price:.5f} | Bid={bid:.5f} | Ask={ask:.5f} "
         f"| HalfSpread={half_spread:.5f}"
     )
