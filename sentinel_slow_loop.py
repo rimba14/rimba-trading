@@ -2379,6 +2379,104 @@ def should_trigger_evaluation(watchlist: list, last_run_hour: int):
             
     return False, None
 
+def compile_cades_state(watchlist_ignored: list):
+    """
+    Automated JSON compiler routine that merges active conviction states with open position records.
+    Sorts elements by Conviction (Highest to Lowest) across ALL assets.
+    """
+    try:
+        import os
+        import json
+        import time
+        from sentinel_config import WATCHLIST
+        
+        cades_path = r"C:\opt\sentinel\production\cades_state.json"
+        tmp_path = cades_path + ".tmp"
+        
+        state_list = []
+        for symbol in WATCHLIST:
+            # Default to 0.5, but try to pull from active inference first
+            p_score = _CYCLE_P_SCORES.get(symbol, None)
+            cluster_label = _OFFICIAL_REGIME.get(symbol, "UNKNOWN")
+            
+            meta_item = _arctic_read(f"{symbol}_meta")
+            if meta_item is not None:
+                if p_score is None or p_score == 0.5:
+                    try:
+                        p_score = float(meta_item.data.iloc[-1].get("meta_conviction", 0.5))
+                        if p_score == 0.5:
+                            xgb_p = float(meta_item.data.iloc[-1].get("xgboost_prob", 0.5))
+                            kronos_p = float(meta_item.data.iloc[-1].get("kronos_prob", 0.5))
+                            p_score = xgb_p if abs(xgb_p - 0.5) > abs(kronos_p - 0.5) else kronos_p
+                    except Exception:
+                        p_score = 0.5
+                try:
+                    cluster_label = meta_item.data.iloc[-1].get("hmm_state", cluster_label)
+                except Exception:
+                    pass
+            else:
+                if p_score is None:
+                    p_score = 0.5
+                    
+            conviction = max(p_score, 1.0 - p_score)
+            
+            if p_score > 0.55:
+                momentum_dir = "BUY"
+            elif p_score < 0.45:
+                momentum_dir = "SELL"
+            else:
+                momentum_dir = "FLAT"
+                
+            pos_status = "NONE"
+            entry_dir = "NONE"
+            positions = mt5.positions_get(symbol=symbol)
+            if positions:
+                pos_status = "OPEN"
+                entry_dir = "BUY" if positions[0].type == 0 else "SELL"
+            else:
+                orders = mt5.orders_get(symbol=symbol)
+                if orders:
+                    pos_status = "PENDING"
+                    entry_dir = "BUY" if orders[0].type in (0, 2, 4) else "SELL"
+                    
+            # Health Color Logic (Alignment based)
+            color = "YELLOW"
+            if pos_status == "OPEN":
+                if entry_dir == momentum_dir:
+                    color = "GREEN"
+                elif momentum_dir == "FLAT":
+                    color = "YELLOW"
+                else:
+                    color = "RED"
+            elif pos_status == "PENDING":
+                color = "ORANGE"
+            else:
+                if conviction > 0.7:
+                    color = "ORANGE" # High conviction but no position
+                else:
+                    color = "YELLOW"
+                    
+            state_list.append({
+                "symbol": symbol,
+                "conviction": round(conviction, 4),
+                "momentum_dir": momentum_dir,
+                "p_score": round(p_score, 4),
+                "cluster_label": str(cluster_label),
+                "position_status": pos_status,
+                "entry_direction": entry_dir,
+                "health_color": color
+            })
+            
+        # Sort Highest Conviction to Lowest
+        state_list.sort(key=lambda x: x["conviction"], reverse=True)
+            
+        os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+        with open(tmp_path, "w") as f:
+            json.dump({"timestamp": time.time(), "matrix": state_list}, f, indent=4)
+        os.replace(tmp_path, cades_path)
+    except Exception as e:
+        logging.error(f"[CADES_COMPILER] Failed to compile state: {e}")
+
 def _update_cycle_metrics(watchlist: list, error_prefix: str = "UPDATE_PRICE_ERR"):
     """Update global price and ATR metrics for the given watchlist."""
     global _LAST_CYCLE_PRICES, _LAST_CYCLE_ATRs
@@ -2475,6 +2573,9 @@ async def _run_mt5_event_loop(watchlist: list, last_run_hour: int, current_equit
 
                 # --- CONSTRAINT 4: EVENT-DRIVEN PARITY ARCHITECTURE ---
                 _update_cycle_metrics(watchlist)
+                
+                # --- CADES CONVICTION DASHBOARD COMPILER ---
+                compile_cades_state(watchlist)
 
         except Exception as e:
             logging.error(f"[HEARTBEAT_ERROR] {e}")
@@ -2524,6 +2625,7 @@ def main():
     last_run_hour = datetime.now().hour
     _IS_STARTUP_OR_SHOCK = False
     logging.info("[SYSTEM] Cycle 0 execution completed. Entering short-polling event loop.")
+    compile_cades_state(watchlist)
 
     # Directive 2: Information-Driven Awakening (Event-Driven asyncio.Queue)
     asyncio.run(_run_mt5_event_loop(watchlist, last_run_hour, current_equity))

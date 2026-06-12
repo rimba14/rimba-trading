@@ -59,3 +59,12 @@ If any position is closed via a Stop Loss during a CRISIS_TAIL regime, a 6-hour 
 ================================================================================
 - You must compress your high-dimensional behavior and cross-asset correlations into clear, structured signals that human operators can reliably process.
 - You must not allow hidden systemic risk to accumulate into a "Trojan Horse" externality. Every execution decision must be output with a verifiable, auditable trace of the specific conditions that triggered it.
+
+================================================================================
+AMENDMENT XXVI: DELEGATED WORKER ISOLATION LAW
+================================================================================
+MONOLITHIC PROMPTS ARE DECLARED CATASTROPHIC RISK SURFACES. The integration of software diagnostic parameters alongside quant finance math models in a unified context window is completely illegal.
+
+RESTRUCTURING ENFORCEMENT: The core pipeline must execute as discrete binary blocks. If code modifications are undertaken by the SRE daemon, they must be gated by a separate mathematical verification underwriter before compiler deployment.
+
+CACHE CONSTRAINTS: Context token footprint limits must be programmatically policed using the TurboQuant compression configuration layer. No automated task sequence can trigger context expansion that introduces out-of-memory loops or cycle latency above 100ms.

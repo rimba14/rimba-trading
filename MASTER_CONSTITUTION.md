@@ -11,3 +11,10 @@ Governance of all network asset execution agents is hereby moved from a rigid te
 To control system rule expansion and manage model optimization bottlenecks, all future risk gating components, indicator overlays, and protection loops must have explicit, objective deletion rules written straight into their code definitions at implementation:
 1. **The Complexity Penalty:** Any protection layer or system gate that fails to produce a measurable positive difference on your rolling risk-adjusted profit tracking over a pre-set test cycle will be autonomously disabled.
 2. **Archival and Removal Protocol:** When a conditional threshold is breached or an operational age window closes, the system must trigger an automatic fail-closed bypass step and alert Hermes to archive its dependencies.
+
+## AMENDMENT XXVI: DELEGATED WORKER ISOLATION LAW
+MONOLITHIC PROMPTS ARE DECLARED CATASTROPHIC RISK SURFACES. The integration of software diagnostic parameters alongside quant finance math models in a unified context window is completely illegal.
+
+RESTRUCTURING ENFORCEMENT: The core pipeline must execute as discrete binary blocks. If code modifications are undertaken by the SRE daemon, they must be gated by a separate mathematical verification underwriter before compiler deployment.
+
+CACHE CONSTRAINTS: Context token footprint limits must be programmatically policed using the TurboQuant compression configuration layer. No automated task sequence can trigger context expansion that introduces out-of-memory loops or cycle latency above 100ms.

@@ -55,6 +55,7 @@ class WassersteinRegimeCluster:
         Fits the K-means model on historical fractionally differentiated prices.
         Since we are in 1D, L2 distance on sorted arrays is equivalent to 2-Wasserstein distance.
         """
+        series = series.pct_change().dropna()
         if len(series) < self.window_size * 2:
             logging.warning("[Wasserstein] Not enough historical data to fit K-Means. Using stylized bootstraps.")
             return
@@ -82,11 +83,14 @@ class WassersteinRegimeCluster:
         if len(live_window) < 10:
             return "LOW-VOL TREND", 1.0, {"LOW-VOL TREND": 1.0}
             
-        # Ensure we have the exact window size for vectorized distance if possible
-        if len(live_window) > self.window_size:
-            live_window = live_window[-self.window_size:]
+        # Convert raw prices to returns to match the stylized return centroids
+        live_returns = np.diff(live_window) / (live_window[:-1] + 1e-9)
             
-        live_dist = np.sort(live_window)
+        # Ensure we have the exact window size for vectorized distance if possible
+        if len(live_returns) > self.window_size:
+            live_returns = live_returns[-self.window_size:]
+            
+        live_dist = np.sort(live_returns)
         
         centroids_to_use = self.kmeans.cluster_centers_ if self.kmeans else self.bootstrapped_centroids
         label_map = self.regime_labels if self.kmeans else {0: "LOW-VOL TREND", 1: "HIGH-VOL MEAN REVERSION", 2: "CRISIS TAIL"}
