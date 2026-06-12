@@ -47,7 +47,8 @@ def test_apply_sre_patch_file_not_found():
 def test_apply_sre_patch_pattern_not_found():
     with patch("agents.hermes_diagnostics_mcp.os.path.abspath") as mock_abspath, \
          patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists, \
-         patch("builtins.open", mock_open(read_data="some content here")):
+         patch("builtins.open", mock_open(read_data="some content here")), \
+         patch("agents.hermes_diagnostics_mcp.send_sre_webhook") as mock_webhook:
 
         mock_abspath.return_value = "C:\\Sentinel_Project\\file.txt"
         mock_exists.return_value = True
@@ -57,6 +58,24 @@ def test_apply_sre_patch_pattern_not_found():
 
         assert result["status"] == "error"
         assert result["message"] == "PATTERN_NOT_FOUND"
+        mock_webhook.assert_not_called()
+
+def test_apply_sre_patch_empty_pattern():
+    with patch("agents.hermes_diagnostics_mcp.os.path.abspath") as mock_abspath, \
+         patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists, \
+         patch("builtins.open", mock_open(read_data="some content here")), \
+         patch("agents.hermes_diagnostics_mcp.send_sre_webhook") as mock_webhook:
+
+        mock_abspath.return_value = "C:\\Sentinel_Project\\file.txt"
+        mock_exists.return_value = True
+
+        # In Python, '' in 'anything' is True.
+        # replace('', 'rep') will insert 'rep' before every character and at the end.
+        result_json = apply_sre_patch("file.txt", "", "replace")
+        result = json.loads(result_json)
+
+        assert result["status"] == "success"
+        mock_webhook.assert_called_once()
 
 def test_apply_sre_patch_success():
     m_open = mock_open(read_data="def foo():\n    return 42\n")
@@ -76,6 +95,24 @@ def test_apply_sre_patch_success():
 
         m_open.return_value.write.assert_called_once_with("def foo():\n    return 43\n")
         mock_webhook.assert_called_once_with("file.txt", "CODE_PATCH_APPLIED", "Patched pattern: return 42...")
+
+def test_apply_sre_patch_multiple_occurrences():
+    original_content = "x = 1\ny = 1\n"
+    m_open = mock_open(read_data=original_content)
+    with patch("agents.hermes_diagnostics_mcp.os.path.abspath") as mock_abspath, \
+         patch("agents.hermes_diagnostics_mcp.os.path.exists") as mock_exists, \
+         patch("builtins.open", m_open), \
+         patch("agents.hermes_diagnostics_mcp.send_sre_webhook") as mock_webhook:
+
+        mock_abspath.return_value = "C:\\Sentinel_Project\\file.txt"
+        mock_exists.return_value = True
+
+        result_json = apply_sre_patch("file.txt", "1", "2")
+        result = json.loads(result_json)
+
+        assert result["status"] == "success"
+        # .replace(search_pattern, replacement_text) replaces ALL occurrences by default
+        m_open.return_value.write.assert_called_once_with("x = 2\ny = 2\n")
 
 def test_apply_sre_patch_exception():
     with patch("agents.hermes_diagnostics_mcp.os.path.abspath") as mock_abspath, \
