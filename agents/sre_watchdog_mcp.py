@@ -5,7 +5,9 @@ import subprocess
 import logging
 import sys
 import time
+import requests
 from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from mcp.server.fastmcp import FastMCP
 
 # Initialize the FastMCP server for SRE Watchdog
@@ -27,20 +29,30 @@ SERVICE_LOGS = {
 class SRENotifier:
     def __init__(self, webhook_url=DISCORD_WEBHOOK):
         self.webhook_url = webhook_url
+        # Background executor for non-blocking webhooks
+        self.executor = ThreadPoolExecutor(max_workers=4)
 
     def send_intervention_alert(self, message: str):
+        """
+        Sends an alert to Discord in a background thread to prevent blocking the main loop.
+        """
         if not self.webhook_url: return
+
+        payload = {
+            "content": "⚠️ **SENTINEL SRE WATCHDOG INTERVENTION**",
+            "embeds": [{
+                "title": "System Self-Healing Event",
+                "description": message,
+                "color": 16776960, # Yellow/Warning
+                "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }]
+        }
+
+        # Dispatch the actual network I/O to the thread pool
+        self.executor.submit(self._post_webhook, payload)
+
+    def _post_webhook(self, payload: dict):
         try:
-            import requests
-            payload = {
-                "content": "⚠️ **SENTINEL SRE WATCHDOG INTERVENTION**",
-                "embeds": [{
-                    "title": "System Self-Healing Event",
-                    "description": message,
-                    "color": 16776960, # Yellow/Warning
-                    "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-                }]
-            }
             requests.post(self.webhook_url, json=payload, timeout=10)
         except Exception as e:
             logging.error(f"SRE Webhook Exception: {e}")
