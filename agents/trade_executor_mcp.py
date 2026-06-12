@@ -70,11 +70,14 @@ def get_dynamic_risk_params():
         pass
     return params
 
+_GLOBAL_HP_LIB = None
+
 def get_asset_multiplier(symbol):
     """
     Returns ATR multiplier based on asset class.
     Directive: Pulls from global_hyperparameters ArcticDB Feature Store if available.
     """
+    global _GLOBAL_HP_LIB
     params = get_dynamic_risk_params()
     if params["virtual_sl_multiplier"] is not None:
         return params["virtual_sl_multiplier"]
@@ -82,14 +85,20 @@ def get_asset_multiplier(symbol):
     regime = utils.get_symbol_regime(symbol)
     try:
         import git_arctic
-        store = git_arctic.get_arctic()
-        if 'global_hyperparameters' in store.list_libraries():
-            lib = store['global_hyperparameters']
+        if _GLOBAL_HP_LIB is None:
+            store = git_arctic.get_arctic()
+            if 'global_hyperparameters' in store.list_libraries():
+                _GLOBAL_HP_LIB = store['global_hyperparameters']
+
+        if _GLOBAL_HP_LIB is not None:
             # Try to read the most recent multiplier for this regime
             symbol_key = f"atr_mult_{regime}"
-            if symbol_key in lib.list_symbols():
-                data = lib.read(symbol_key).data
-                return float(data.iloc[-1]['atr_multiplier'])
+            try:
+                res = _GLOBAL_HP_LIB.read(symbol_key)
+                if res is not None and not res.data.empty:
+                    return float(res.data.iloc[-1]['atr_multiplier'])
+            except Exception:
+                pass
     except Exception as e:
         logging.error(f"Failed to pull hyperparameters from ArcticDB: {e}")
 
