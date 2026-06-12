@@ -68,8 +68,17 @@ def execute_iceberg(symbol, order_type, total_volume, sl_p, tp_p, num_clips=5, w
         # Execute clip
         comment = f"Iceberg_Clip_{i+1}"
         from gitagent_action_layer import get_action_layer
+        from gitagent_types import SmartTradeRequest
         action_layer = get_action_layer()
-        res = action_layer.execute_smart_trade(symbol, order_type, clip_vol, sl_p, tp_p, comment=comment)
+        req = SmartTradeRequest(
+            symbol=symbol,
+            side=order_type,
+            volume=clip_vol,
+            current_price=0.0, # Will be fetched by execute_smart_trade
+            atr=abs(tp_p - sl_p) / 5.0, # Estimating ATR
+            comment=comment
+        )
+        res = action_layer.execute_smart_trade(req)
         if res:
             # result might be a list (from synth SOR) or a single MockResult/Order
             main_res = res[0] if isinstance(res, list) and len(res) > 0 else res
@@ -103,8 +112,16 @@ def execute_twap(symbol, order_type, total_volume, sl_p, tp_p, duration_sec=60, 
         if current_clip <= 0: continue
         
         from gitagent_action_layer import get_action_layer
+        from gitagent_types import SmartTradeRequest
         action_layer = get_action_layer()
-        res = action_layer.execute_smart_trade(symbol, order_type, current_clip, sl_p, tp_p, comment=f"TWAP_Clip_{i+1}")
+        req = SmartTradeRequest(
+            symbol=symbol,
+            side=order_type,
+            volume=current_clip,
+            atr=abs(tp_p - sl_p) / 5.0,
+            comment=f"TWAP_Clip_{i+1}"
+        )
+        res = action_layer.execute_smart_trade(req)
         if res:
             main_res = res[0] if isinstance(res, list) and len(res) > 0 else res
             results.append(main_res)
@@ -132,12 +149,19 @@ def route_algorithmic_order(symbol, order_type, volume, sl_p, tp_p, **kwargs):
     if norm_vol <= 0: return None
     
     from gitagent_action_layer import get_action_layer
+    from gitagent_types import SmartTradeRequest
     action_layer = get_action_layer()
     
     if norm_vol >= 0.5:
         return execute_iceberg(symbol, order_type, norm_vol, sl_p, tp_p, num_clips=5, window_sec=15)
     else:
-        return action_layer.execute_smart_trade(symbol, order_type, norm_vol, sl_p, tp_p)
+        req = SmartTradeRequest(
+            symbol=symbol,
+            side=order_type,
+            volume=norm_vol,
+            atr=abs(tp_p - sl_p) / 5.0
+        )
+        return action_layer.execute_smart_trade(req)
 
 if __name__ == "__main__":
     if mt5.initialize():

@@ -6,7 +6,7 @@ import pandas as pd
 import os
 import time
 from profit_manager_v28_34 import get_safe_atr
-from gitagent_types import ProposedTradePayload
+from gitagent_types import ProposedTradePayload, SmartTradeRequest
 from verification_layer import underwriter
 from broker_client import dispatch_permit
 
@@ -60,13 +60,33 @@ class ActionLayer:
 
         return True, "NOMINAL"
 
-    def execute_smart_trade(self, symbol, side, total_volume, current_price, atr, tps, equity, position_ticket=None):
+    def execute_smart_trade(self, request: SmartTradeRequest):
         """
         Phase 3: Action Layer Execution & 5-Sub-Order Split
         Phase 5: Forensic Metadata Injection
         """
+        symbol = request.symbol
+        side = request.side
+        total_volume = request.volume
+        current_price = request.current_price
+        atr = request.atr
+        tps = request.tps
+        position_ticket = request.position_ticket
+
         allowed, reason = self.check_risk_gate(symbol)
         if not allowed: return None
+
+        # Normalize side
+        if isinstance(side, int):
+            side = "BUY" if side == mt5.ORDER_TYPE_BUY else "SELL"
+
+        # If current_price is not provided, fetch it
+        if current_price <= 0:
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                current_price = tick.ask if side == "BUY" else tick.bid
+            else:
+                return None
 
         # FORCE INSTITUTIONAL ATR FLOOR ON ENTRY
         atr = get_safe_atr(symbol, atr, current_price)
@@ -76,7 +96,11 @@ class ActionLayer:
 
         # Forensic Metadata: v142 {Direction} S:{TPS} A:{Entry_ATR}
         direction_flag = "BUY" if side == "BUY" else "SELL"
-        metadata_comment = f"v142 {direction_flag} S:{int(tps*100)} A:{round(atr, 5)}"
+
+        if request.comment:
+            metadata_comment = f"{request.comment[:15]} | v142 {direction_flag} S:{int(tps*100)} A:{round(atr, 5)}"
+        else:
+            metadata_comment = f"v142 {direction_flag} S:{int(tps*100)} A:{round(atr, 5)}"
         
         # Sub-order split (1 Market, 4 Limit at 0.5x ATR pullbacks)
         vol_step = info.volume_step
