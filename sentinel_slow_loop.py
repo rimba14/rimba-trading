@@ -771,10 +771,17 @@ def _moe_reason(symbol: str, features: dict, direction: int) -> dict:
 # -- SHAP Diagnostics (Phase 2) ------------------------------------------------
 CONCEPT_DRIFT_THRESHOLD = 0.65
 
-def _run_shap(symbol: str, x_vec: list, f_keys: list, direction: int, p_final: float, reasoning: str):
+def _run_shap(symbol: str, feature_data: dict, prediction_data: dict):
     """Compute SHAP values, detect concept drift, write JSON to shap_diagnostics/."""
     if _SHAP_EXPLAINER is None:
         return
+
+    x_vec = feature_data["x_vec"]
+    f_keys = feature_data["f_keys"]
+    direction = prediction_data["direction"]
+    p_final = prediction_data["p_final"]
+    reasoning = prediction_data["reasoning"]
+
     try:
         # Directive 2: Force 2D Matrix Reshaping for SHAP (SRE Patch)
         safe_features = np.array(x_vec, dtype=float).reshape(1, -1)
@@ -864,7 +871,13 @@ def get_meta_conviction(symbol: str, features: dict, direction: int, base_p: flo
         strength = max(0.6, reasoning_conf)
         p_final = 0.5 + (base_p - 0.5) * strength
 
-    drift_override = _run_shap(symbol, x_vec, f_keys, direction, p_final, reasoning_text)
+    feature_data = {"x_vec": x_vec, "f_keys": f_keys}
+    prediction_data = {
+        "direction": direction,
+        "p_final": p_final,
+        "reasoning": reasoning_text
+    }
+    drift_override = _run_shap(symbol, feature_data, prediction_data)
     if drift_override is not None:
         p_final = drift_override
 
