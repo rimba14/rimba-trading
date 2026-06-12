@@ -1,5 +1,5 @@
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 # Mock MetaTrader5 module before importing from risk_agent
@@ -35,19 +35,36 @@ def test_parse_base_quote_indices_and_fallbacks():
     assert parse_base_quote("US30") == ("US30", "USD")
     assert parse_base_quote("SPX500") == ("SPX500", "USD")
 
-def test_calculate_currency_exposure_error_path(mocker):
+def test_parse_base_quote_crypto_and_extra():
+    """Test crypto symbols and case sensitivity."""
+    # 6-char crypto (no digits) should work like forex
+    assert parse_base_quote("BTCUSD") == ("BTC", "USD")
+    assert parse_base_quote("btcusd") == ("BTC", "USD")
+
+    # 7-char or longer crypto should fall back
+    assert parse_base_quote("DOGEUSD") == ("DOGEUSD", "USD")
+    assert parse_base_quote("SHIBUSD") == ("SHIBUSD", "USD")
+
+def test_parse_base_quote_edge_cases():
+    """Test unusual symbols and edge cases."""
+    assert parse_base_quote("") == ("", "USD")
+    assert parse_base_quote("A") == ("A", "USD")
+    assert parse_base_quote("ABCDEF") == ("ABC", "DEF")
+    assert parse_base_quote("ABC-DEF") == ("ABC", "USD")
+    assert parse_base_quote("EURUSD.X") == ("EURUSD.X", "USD") # .X is not cleaned
+
+def test_calculate_currency_exposure_error_path():
     """Test that calculate_currency_exposure handles parsing exceptions gracefully."""
     class MockPositionWithException:
         @property
         def symbol(self):
             raise ValueError("Simulated parsing error")
 
-    mock_logger = mocker.patch("agents.risk_agent.logger")
+    with patch("agents.risk_agent.logger") as mock_logger:
+        positions = [MockPositionWithException()]
+        exposures = calculate_currency_exposure(positions)
 
-    positions = [MockPositionWithException()]
-    exposures = calculate_currency_exposure(positions)
-
-    assert exposures == {}
-    mock_logger.warning.assert_called_once()
-    call_arg = mock_logger.warning.call_args[0][0]
-    assert "[RISK_EXPOSURE_ERR] Failed parsing position" in call_arg
+        assert exposures == {}
+        mock_logger.warning.assert_called_once()
+        call_arg = mock_logger.warning.call_args[0][0]
+        assert "[RISK_EXPOSURE_ERR] Failed parsing position" in call_arg
