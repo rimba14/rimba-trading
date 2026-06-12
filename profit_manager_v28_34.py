@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Optional
 import threading
 import signal
-from gitagent_types import TelemetryState
+from gitagent_types import TelemetryState, EntryCognitiveStatePayload, RuntimeTelemetryPayload
 import gitagent_utils as utils
 
 import numpy as np
@@ -1172,7 +1172,7 @@ class SentinelProfitManager:
                         else:
                             wasserstein_idx = 1
                             
-                sl.capture_entry_cognitive_state(
+                sl.capture_entry_cognitive_state(EntryCognitiveStatePayload(
                     raw_probability_vector=[xgb_p, kronos_p],
                     adjusted_conviction=conviction,
                     activity_ratio=vol_ratio,
@@ -1180,7 +1180,7 @@ class SentinelProfitManager:
                     wasserstein_idx=wasserstein_idx,
                     volatility_ratio=vol_ratio,
                     ofi_velocity=ofi_vel
-                )
+                ))
             except Exception as logger_err:
                 logger.error(f"[LOGGER_ERR] Failed to capture cognitive state for ticket {pos.ticket}: {logger_err}")
             
@@ -1595,7 +1595,7 @@ class SentinelProfitManager:
             sl_mult, tp_mult = get_atr_multipliers(symbol, hmm_state)
 
             if hasattr(ps, 'telemetry_logger') and ps.telemetry_logger:
-                ps.telemetry_logger.capture_runtime_telemetry(
+                ps.telemetry_logger.capture_runtime_telemetry(RuntimeTelemetryPayload(
                     bar_step=int(now - ps.entry_time) // 60,
                     current_pnl=pos.profit,
                     condition_number=float(oracle.get("matrix_condition", 0.0)),
@@ -1605,7 +1605,7 @@ class SentinelProfitManager:
                     tp=pos.tp,
                     hmm_state=hmm_state,
                     conviction=ps.current_conviction
-                )
+                ))
 
             # v28.35: Fetch/Cache symbol info, tick, and D1 ATR
             if symbol not in symbol_cache:
