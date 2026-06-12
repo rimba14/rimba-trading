@@ -2,6 +2,18 @@ import MetaTrader5 as mt5
 from arcticdb import Arctic
 import math
 import sys
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class TradeContext:
+    """Encapsulates data required for trade parameter calculations."""
+    symbol: str
+    direction: str
+    tick: Any
+    info: Any
+    acc: Any
+    rates: Any
 
 def get_candidate_trades(lib):
     """Iterates over Arctic library and extracts candidate trades sorted by conviction."""
@@ -38,35 +50,35 @@ def calculate_atr_manual(rates):
     atr = sum(tr_list) / len(tr_list)
     return atr
 
-def calculate_sl_tp_lot(sym, direction, tick, info, acc, rates):
+def calculate_sl_tp_lot(ctx: TradeContext):
     """Calculates Stop Loss, Take Profit, and Lot size for a trade."""
-    atr = calculate_atr_manual(rates)
+    atr = calculate_atr_manual(ctx.rates)
     if atr is None:
         return None, None, None
 
     multiplier = 6.0
-    if "BTC" in sym or "ETH" in sym: multiplier = 4.0
-    elif any(idx in sym for idx in ["US30", "NAS100", "US2000", "SPX500"]): multiplier = 4.0
-    elif "XAU" in sym or "XAG" in sym: multiplier = 4.0
+    if "BTC" in ctx.symbol or "ETH" in ctx.symbol: multiplier = 4.0
+    elif any(idx in ctx.symbol for idx in ["US30", "NAS100", "US2000", "SPX500"]): multiplier = 4.0
+    elif "XAU" in ctx.symbol or "XAG" in ctx.symbol: multiplier = 4.0
 
     sl_dist = atr * multiplier
     tp_dist = sl_dist * 1.5
 
-    price = tick.ask if direction == "BUY" else tick.bid
-    digits = info.digits
+    price = ctx.tick.ask if ctx.direction == "BUY" else ctx.tick.bid
+    digits = ctx.info.digits
 
     # Calculate base SL and TP
-    sl = price - sl_dist if direction == "BUY" else price + sl_dist
-    tp = price + tp_dist if direction == "BUY" else price - tp_dist
+    sl = price - sl_dist if ctx.direction == "BUY" else price + sl_dist
+    tp = price + tp_dist if ctx.direction == "BUY" else price - tp_dist
 
     # Dynamic spread-based protection
-    spread = tick.ask - tick.bid
+    spread = ctx.tick.ask - ctx.tick.bid
     min_sl_dist = spread * 1.5
 
     actual_sl_dist = abs(price - sl)
     if actual_sl_dist < min_sl_dist:
         print(f" -> Warning: Calculated SL dist ({actual_sl_dist:.5f}) is less than 1.5x spread ({min_sl_dist:.5f}). Padding SL.")
-        if direction == "BUY":
+        if ctx.direction == "BUY":
             sl = price - min_sl_dist
             tp = price + (min_sl_dist * 1.5)
         else:
@@ -79,17 +91,17 @@ def calculate_sl_tp_lot(sym, direction, tick, info, acc, rates):
     tp = round(tp, digits)
 
     # Position sizing
-    sl_dist_points = abs(price - sl) / (info.point + 1e-12)
-    point_val = info.trade_tick_value / (info.trade_tick_size / info.point)
+    sl_dist_points = abs(price - sl) / (ctx.info.point + 1e-12)
+    point_val = ctx.info.trade_tick_value / (ctx.info.trade_tick_size / ctx.info.point)
 
-    risk_usd = acc.balance * 0.02 * 0.5  # 2% risk with 0.5 multiplier -> 1% total risk
+    risk_usd = ctx.acc.balance * 0.02 * 0.5  # 2% risk with 0.5 multiplier -> 1% total risk
     raw_lot = risk_usd / (sl_dist_points * point_val + 1e-12)
-    lot = math.floor(raw_lot / info.volume_step) * info.volume_step
+    lot = math.floor(raw_lot / ctx.info.volume_step) * ctx.info.volume_step
     if lot <= 0:
-        lot = info.volume_min
+        lot = ctx.info.volume_min
 
-    if lot > info.volume_max:
-        lot = info.volume_max
+    if lot > ctx.info.volume_max:
+        lot = ctx.info.volume_max
 
     return sl, tp, lot
 
@@ -185,7 +197,15 @@ def main():
             print(f" -> Failed to get hourly rates for ATR calculation on {sym}. Skipping.")
             continue
             
-        sl, tp, lot = calculate_sl_tp_lot(sym, direction, tick, info, acc, rates)
+        ctx = TradeContext(
+            symbol=sym,
+            direction=direction,
+            tick=tick,
+            info=info,
+            acc=acc,
+            rates=rates
+        )
+        sl, tp, lot = calculate_sl_tp_lot(ctx)
         if sl is None:
             print(f" -> Failed to calculate trade parameters for {sym}. Skipping.")
             continue
