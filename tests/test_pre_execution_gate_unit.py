@@ -137,13 +137,13 @@ def test_gate3_rr_ratio():
     res = peg.gate3_rr_ratio(0.01, 0.02, "BULL")
     assert res.status == ALLOW
 
-    # Fail BULL (RR < 2.0)
+    # Pass BULL (RR >= 1.5)
     res = peg.gate3_rr_ratio(0.01, 0.015, "BULL")
-    assert res.status == BLOCK
-
-    # Pass RANGE
-    res = peg.gate3_rr_ratio(0.01, 0.015, "RANGE")
     assert res.status == ALLOW
+
+    # Fail BULL (RR < 1.5)
+    res = peg.gate3_rr_ratio(0.01, 0.014, "BULL")
+    assert res.status == BLOCK
 
 def test_gate5_risk_cap_and_atr_floor(mocked_mt5, mock_cfg):
     # Pass

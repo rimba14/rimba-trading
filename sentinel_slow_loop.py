@@ -949,6 +949,7 @@ def push_to_orchestrator(payload: Dict[str, Any]):
             risk_usd=risk_usd, equity=current_equity,
             current_heat_usd=current_portfolio_heat,
             embargo_registry=amnesia_lock_registry,
+            atr=payload.get('atr', 0.0)
         )
 
         if not verdict.approved:

@@ -248,7 +248,8 @@ def gate5_risk_cap_and_atr_floor(
     entry_price: float,
     sl_distance: float,
     risk_usd: float,
-    equity: float
+    equity: float,
+    atr: float = 0.0
 ) -> GateResult:
     # GATE-5: Hard Risk Cap
     risk_pct = risk_usd / equity if equity > 0 else 1.0
@@ -263,23 +264,24 @@ def gate5_risk_cap_and_atr_floor(
     stop_loss = entry_price - sl_distance if str(direction).upper() in ["BUY", "1", "LONG"] else entry_price + sl_distance
     sl_distance_price = abs(entry_price - stop_loss)
     
-    current_ATR = 0.0
-    try:
-        if not mt5.initialize():
-            mt5.initialize()
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 16)
-        if rates is not None and len(rates) >= 2:
-            highs  = [r[2] for r in rates]
-            lows   = [r[3] for r in rates]
-            closes = [r[4] for r in rates]
-            current_ATR = sum([
-                max(highs[i] - lows[i],
-                    abs(highs[i]  - closes[i-1]),
-                    abs(lows[i]   - closes[i-1]))
-                for i in range(1, len(rates))
-            ]) / (len(rates) - 1)
-    except Exception as atr_err:
-        logger.error(f"Failed to calculate D1 ATR in PreExecutionGate for {symbol}: {atr_err}")
+    current_ATR = atr
+    if current_ATR <= 0.0:
+        try:
+            if not mt5.initialize():
+                mt5.initialize()
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 16)
+            if rates is not None and len(rates) >= 2:
+                highs  = [r[2] for r in rates]
+                lows   = [r[3] for r in rates]
+                closes = [r[4] for r in rates]
+                current_ATR = sum([
+                    max(highs[i] - lows[i],
+                        abs(highs[i]  - closes[i-1]),
+                        abs(lows[i]   - closes[i-1]))
+                    for i in range(1, len(rates))
+                ]) / (len(rates) - 1)
+        except Exception as atr_err:
+            logger.error(f"Failed to calculate D1 ATR in PreExecutionGate for {symbol}: {atr_err}")
 
     if current_ATR <= 0.0:
         current_ATR = entry_price * 0.01  # Safe fallback if ATR calculation fails
@@ -344,7 +346,8 @@ def run_all_gates(
     risk_usd: float,
     equity: float,
     current_heat_usd: float,
-    embargo_registry: dict
+    embargo_registry: dict,
+    atr: float = 0.0
 ) -> PreExecutionVerdict:
 
     # SRE Edge Decay Sentinel Hard Breach Veto check (v31.2)
@@ -420,7 +423,7 @@ def run_all_gates(
         lambda: gate2_leverage_wall(symbol, kelly_lots, entry_price, equity),
         lambda: gate3_rr_ratio(sl_distance, tp_distance, regime),
         lambda: gate4_contamination_check(symbol),
-        lambda: gate5_risk_cap_and_atr_floor(symbol, direction, entry_price, sl_distance, risk_usd, equity),
+        lambda: gate5_risk_cap_and_atr_floor(symbol, direction, entry_price, sl_distance, risk_usd, equity, atr=atr),
         lambda: gate6_portfolio_heat(risk_usd, current_heat_usd, equity),
         lambda: gate7_weekend_blackout(asset_class),
         lambda: gate8_amnesia_lock(symbol, embargo_registry),

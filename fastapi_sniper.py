@@ -182,7 +182,6 @@ def load_risk_config() -> dict:
 from datetime import timedelta
 
 def is_amnesia_lock_active(symbol, cooldown_seconds=86400):
-    return False
     # v26.0 Swing Paradigm: 24-hour post-exit embargo (86400s).
     # Swing setups take days to form; re-entering minutes after a stop-loss is statistically invalid noise.
     info = mt5.symbol_info(symbol)
@@ -1861,11 +1860,11 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                         positions = mt5.positions_get(ticket=ticket)
                         if positions:
                             pos = positions[0]
-                            alpha_features = {'P': conviction, 'atr': current_atr, 'vpin': vpin}
+                            alpha_features = {'P': conviction, 'atr': structural_atr, 'vpin': vpin}
                             info = mt5.symbol_info(pos.symbol)
                             if info:
                                 # Directive 1: Implement the Dynamic ATR Floor (v25.0)
-                                raw_atr = current_atr
+                                raw_atr = structural_atr
                                 # Fallback to 0.25% of the open price if raw_atr is dangerously small
                                 price_based_min = pos.price_open * 0.0025 
                                 # Check against the broker's legally required minimum stop level
@@ -2140,10 +2139,9 @@ async def perform_mt5_trade(symbol, direction, lot, conviction, vpin=0.0, alpha_
                             direction=1 if is_buy else -1
                         )
                         if not gate_res.is_valid:
-                            logger.error(f"[TP_GATE_REJECT] #{ticket} {pos.symbol}: {gate_res.rejection_reason} (MANUAL OVERRIDE: Liquidations Disabled)")
-                            # execute_exit(ticket, pos.symbol, "ZETA_GATE_REJECT")
-                            # return False
-                            gate_res.is_valid = True # Force pass
+                            logger.error(f"[TP_GATE_REJECT] #{ticket} {pos.symbol}: {gate_res.rejection_reason}")
+                            execute_exit(ticket, pos.symbol, "ZETA_GATE_REJECT")
+                            return False
                         if gate_res.adjusted:
                             logger.warning(f"[TP_GATE_ADJUST] #{ticket} {pos.symbol} TP moved from {target_tp:.5f} to {gate_res.final_tp:.5f}")
                             target_tp = gate_res.final_tp
