@@ -2,6 +2,7 @@ import json
 import os
 import logging
 from typing import Dict, Any
+from gitagent_types import EntryCognitiveStatePayload, RuntimeTelemetryPayload
 
 logger = logging.getLogger("StrategyLogger")
 
@@ -15,30 +16,30 @@ class StrategyExecutionLogger:
         self.output_file = os.path.join(diagnostics_path, f"trade_anatomy_{ticket_id}.json")
         self.trade_state_log: Dict[str, Any] = {}
 
-    def capture_entry_cognitive_state(self, raw_probability_vector: list, adjusted_conviction: float, activity_ratio: float, bocpd_prob: float, wasserstein_idx: int, volatility_ratio: float = 0.0, ofi_velocity: float = 0.0) -> None:
+    def capture_entry_cognitive_state(self, payload: EntryCognitiveStatePayload) -> None:
         self.trade_state_log["entry_metrics"] = {
-            "probability_vector": raw_probability_vector,
-            "adjusted_conviction": adjusted_conviction,
-            "information_activity_ratio": activity_ratio,
-            "order_flow_bocpd_probability": bocpd_prob,
-            "wasserstein_cluster_index": wasserstein_idx,
-            "volatility_ratio": volatility_ratio,
-            "ofi_velocity": ofi_velocity
+            "probability_vector": payload.raw_probability_vector,
+            "adjusted_conviction": payload.adjusted_conviction,
+            "information_activity_ratio": payload.activity_ratio,
+            "order_flow_bocpd_probability": payload.bocpd_prob,
+            "wasserstein_cluster_index": payload.wasserstein_idx,
+            "volatility_ratio": payload.volatility_ratio,
+            "ofi_velocity": payload.ofi_velocity
         }
 
-    def capture_runtime_telemetry(self, bar_step: int, current_pnl: float, condition_number: float, shaps: Dict[str, float], price: float = 0.0, sl: float = 0.0, tp: float = 0.0, hmm_state: str = "UNKNOWN", conviction: float = 0.0) -> None:
+    def capture_runtime_telemetry(self, payload: RuntimeTelemetryPayload) -> None:
         if "trajectory" not in self.trade_state_log:
             self.trade_state_log["trajectory"] = []
         self.trade_state_log["trajectory"].append({
-            "step_bar_idx": bar_step,
-            "floating_unrealized_pnl": current_pnl,
-            "matrix_condition_number": condition_number,
-            "feature_shap_importance": shaps,
-            "price": price,
-            "sl": sl,
-            "tp": tp,
-            "hmm_state": hmm_state,
-            "conviction": conviction
+            "step_bar_idx": payload.bar_step,
+            "floating_unrealized_pnl": payload.current_pnl,
+            "matrix_condition_number": payload.condition_number,
+            "feature_shap_importance": payload.shaps,
+            "price": payload.price,
+            "sl": payload.sl,
+            "tp": payload.tp,
+            "hmm_state": payload.hmm_state,
+            "conviction": payload.conviction
         })
 
     def write_atomic_anatomy_report(self, definitive_exit_mechanism: str, mt5_retcode: int) -> bool:

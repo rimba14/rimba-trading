@@ -1,6 +1,30 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Dict, List
 import datetime
+
+@dataclass
+class EntryCognitiveStatePayload:
+    """Payload for capturing initial cognitive state at trade entry."""
+    raw_probability_vector: List[float]
+    adjusted_conviction: float
+    activity_ratio: float
+    bocpd_prob: float
+    wasserstein_idx: int
+    volatility_ratio: float = 0.0
+    ofi_velocity: float = 0.0
+
+@dataclass
+class RuntimeTelemetryPayload:
+    """Payload for capturing continuous runtime telemetry during a trade."""
+    bar_step: int
+    current_pnl: float
+    condition_number: float
+    shaps: Dict[str, float]
+    price: float = 0.0
+    sl: float = 0.0
+    tp: float = 0.0
+    hmm_state: str = "UNKNOWN"
+    conviction: float = 0.0
 
 @dataclass
 class ProposedTradePayload:
