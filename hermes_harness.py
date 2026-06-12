@@ -5,6 +5,7 @@ import logging
 from enum import Enum
 from typing import Optional, List, Tuple
 from datetime import datetime, timezone
+from dataclasses import dataclass
 
 # -------------------------------------------------------------------------
 # 1. DYNAMIC RUNTIME PROFILING (Harness Scaling)
@@ -116,37 +117,40 @@ class LogPruner:
 # 4. PORTABLE STATUS SERIALIZATION (TRADING_STATUS.MD)
 # -------------------------------------------------------------------------
 
+@dataclass
+class StatusReport:
+    hmm_regime: str
+    variance: float
+    kalman_residual: float
+    active_tickets: int
+    sre_status: str
+    memory_mb: float
+    active_profile: EngineProfile
+
 class StatusEngine:
     def __init__(self, filepath: str = "C:/Sentinel_Project/TRADING_STATUS.md"):
         self.filepath = filepath
 
-    def update_status(self, 
-                      hmm_regime: str, 
-                      variance: float, 
-                      kalman_residual: float, 
-                      active_tickets: int,
-                      sre_status: str,
-                      memory_mb: float,
-                      active_profile: EngineProfile):
+    def update_status(self, report: StatusReport):
         """Programmatically overwrites the centralized readiness board."""
         
         status_md = f"""# Sentinel Trading Matrix Status
 **Last Updated:** {datetime.now(timezone.utc).isoformat()} UTC
-**Engine Profile:** `{active_profile.name}`
+**Engine Profile:** `{report.active_profile.name}`
 
 ## 1. Market Regime State
-- **HMM Oracle Status:** `{hmm_regime}`
-- **Portfolio Variance Metric:** `{variance:.4f}`
+- **HMM Oracle Status:** `{report.hmm_regime}`
+- **Portfolio Variance Metric:** `{report.variance:.4f}`
 
 ## 2. Tracking Alignment
-- **Kalman Filter Residual Error:** `{kalman_residual:.5f}`
+- **Kalman Filter Residual Error:** `{report.kalman_residual:.5f}`
 
 ## 3. SRE Loop Diagnostics
-- **Agent Status:** `{sre_status}`
-- **Active Open Tickets:** `{active_tickets}`
+- **Agent Status:** `{report.sre_status}`
+- **Active Open Tickets:** `{report.active_tickets}`
 
 ## 4. Harness Health
-- **Memory Footprint:** `{memory_mb:.1f} MB`
+- **Memory Footprint:** `{report.memory_mb:.1f} MB`
 - **Circuit Breaker Status:** `[CLEAN]`
 """
         with open(self.filepath, "w", encoding='utf-8') as f:
