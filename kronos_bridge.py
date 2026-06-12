@@ -8,6 +8,7 @@ import logging
 import traceback
 import torch
 import safetensors
+from dataclasses import dataclass
 
 # Inject Kronos Repo Path
 KRONOS_REPO_PATH = r"C:\Sentinel_Project\kronos_repo"
@@ -92,6 +93,15 @@ def calc_time_stamps(x_timestamp):
     time_df['month'] = x_timestamp.dt.month
     return time_df
 
+@dataclass
+class KronosCachePayload:
+    """Encapsulates inference metadata for cache commits."""
+    prob: float
+    xgboost_prob: float = 0.50
+    base_atr: float = 0.0
+    vol_pct: float = 0.5
+    is_bypass: bool = False
+
 class KronosBridge:
     def __init__(self):
         self.model = None
@@ -151,7 +161,14 @@ class KronosBridge:
                 vol_pct = k_item.data.iloc[-1].get('vol_pct', 0.5)
                 
                 # Update timestamp to prevent staleness in Fast Loop
-                self.commit_to_cache(symbol, xgboost_prob, base_atr=base_atr, vol_pct=vol_pct, is_bypass=True)
+                payload = KronosCachePayload(
+                    prob=xgboost_prob,
+                    xgboost_prob=xgboost_prob,
+                    base_atr=base_atr,
+                    vol_pct=vol_pct,
+                    is_bypass=True
+                )
+                self.commit_to_cache(symbol, payload)
                 return False
             
             logging.info(f"[{symbol}] Wake-Up Gate: ACTIVE (Regime={hmm_state}, XGB={xgboost_prob:.3f})")
@@ -162,25 +179,25 @@ class KronosBridge:
             logging.error(traceback.format_exc())
             return True # Fallback to active to ensure we don't silently die, but logged loudly
 
-    def commit_to_cache(self, symbol: str, prob: float, xgboost_prob: float = 0.50, base_atr: float = 0.0, vol_pct: float = 0.5, is_bypass: bool = False):
+    def commit_to_cache(self, symbol: str, payload: KronosCachePayload):
         """Writes probability to ArcticDB with auxiliary gate data."""
         try:
             # Directive 1: Remove redundant double-stretching. 
             # We now trust the scaling performed in the inference stage.
-            scaled_prob = prob
+            scaled_prob = payload.prob
 
             lib = self.store[CACHE_LIB]
             df_cache = pd.DataFrame([{
                 "kronos_prob": float(scaled_prob),
-                "xgboost_prob": float(xgboost_prob), # Restore consensus pipeline
-                "base_atr": float(base_atr),
-                "vol_pct": float(vol_pct),
+                "xgboost_prob": float(payload.xgboost_prob), # Restore consensus pipeline
+                "base_atr": float(payload.base_atr),
+                "vol_pct": float(payload.vol_pct),
                 "timestamp": utils.get_utc_epoch(),
-                "status": "bypassed" if is_bypass else "inferred"
+                "status": "bypassed" if payload.is_bypass else "inferred"
             }])
             
             lib.write(f"{symbol}_kronos", df_cache)
-            logging.info(f"[{symbol}] Cache Commit: Kronos={scaled_prob:.3f}, XGB={xgboost_prob:.3f} | ATR={base_atr:.5f} | Vol%={vol_pct:.2f}")
+            logging.info(f"[{symbol}] Cache Commit: Kronos={scaled_prob:.3f}, XGB={payload.xgboost_prob:.3f} | ATR={payload.base_atr:.5f} | Vol%={payload.vol_pct:.2f}")
         except Exception as e:
             logging.error(f"Failed to commit cache for {symbol}: {e}")
 
@@ -318,7 +335,14 @@ class KronosBridge:
             vol_pct, existing_xgb = self._get_aux_metrics(symbol, df)
 
             print(f"[SLOW LOOP RAW] {symbol} | Kronos: {kronos_raw:.4f} | Mu: {mu:.6f} | Sig: {signal:.2f} | ATR: {base_atr:.5f} | Vol%: {vol_pct:.2f}")
-            self.commit_to_cache(symbol, kronos_raw, xgboost_prob=existing_xgb, base_atr=base_atr, vol_pct=vol_pct, is_bypass=False)
+            payload = KronosCachePayload(
+                prob=kronos_raw,
+                xgboost_prob=existing_xgb,
+                base_atr=base_atr,
+                vol_pct=vol_pct,
+                is_bypass=False
+            )
+            self.commit_to_cache(symbol, payload)
             
         except Exception as e:
             logging.error(f"CRITICAL INFERENCE FAILURE: {e}")
@@ -334,12 +358,12 @@ def update_cognition_cache(symbol: str, ohlcv_df: pd.DataFrame):
         _BRIDGE = KronosBridge()
     _BRIDGE.run_inference(symbol, ohlcv_df)
 
-def commit_to_cache(symbol: str, prob: float, xgboost_prob: float = 0.50, base_atr: float = 0.0, vol_pct: float = 0.5):
+def commit_to_cache(symbol: str, payload: KronosCachePayload):
     """Bridge function for manual cache updates."""
     global _BRIDGE
     if _BRIDGE is None:
         _BRIDGE = KronosBridge()
-    _BRIDGE.commit_to_cache(symbol, prob, xgboost_prob, base_atr, vol_pct)
+    _BRIDGE.commit_to_cache(symbol, payload)
 
 if __name__ == "__main__":
     # Test with realistic mock data
@@ -354,3 +378,7 @@ if __name__ == "__main__":
         'real_volume': np.random.randint(100, 1000, n)
     })
     update_cognition_cache("TEST_ASSET", mock_df)
+
+    # Manual cache commit test
+    payload = KronosCachePayload(prob=0.55, xgboost_prob=0.50, base_atr=0.001, vol_pct=0.4)
+    commit_to_cache("TEST_ASSET_MANUAL", payload)
